@@ -1,5 +1,5 @@
 import { ArrowRight, Cpu, BookOpen, Bot, Layers, ShieldCheck, Workflow } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 const categories = [
   { slug: "compute-engines", title: "Compute Engines", icon: Cpu, items: ["Apache Spark", "Apache Flink", "DataFusion"] },
@@ -11,7 +11,9 @@ const categories = [
 ];
 
 
-export const Technologies = () => (
+export const Technologies = () => {
+  const isHome = useLocation().pathname === "/";
+  return (
   <section id="technologies" className="container py-20 md:py-28">
     <div className="max-w-2xl mb-12">
       <p className="text-sm font-medium text-primary uppercase tracking-widest">The stack</p>
@@ -48,5 +50,17 @@ export const Technologies = () => (
         </Link>
       ))}
     </div>
+
+    {isHome && (
+      <div className="mt-10 flex justify-center">
+        <Link
+          to="/technologies"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
+        >
+          Explore all technologies <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    )}
   </section>
-);
+  );
+};

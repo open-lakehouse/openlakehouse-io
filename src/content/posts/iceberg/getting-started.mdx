@@ -1,0 +1,23 @@
+---
+title: Getting started with Apache Iceberg
+date: 2026-05-20
+author: jane-doe
+excerpt: A quick tour of Iceberg tables, snapshots, and why open formats matter.
+tags: [iceberg, tables, basics]
+---
+
+## Why Iceberg?
+
+Apache Iceberg gives your data lake **ACID guarantees**, **time travel**, and
+**schema evolution** — without locking you into a single engine.
+
+```sql
+CREATE TABLE sales (
+  order_id BIGINT,
+  amount DECIMAL(12, 2),
+  ts TIMESTAMP
+) USING iceberg
+PARTITIONED BY (days(ts));
+```
+
+That's it — query it from Spark, Trino, DuckDB, or DataFusion.
