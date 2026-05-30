@@ -22,6 +22,12 @@ export const SiteHeader = () => (
         >
           Technologies
         </a>
+        <Link
+          to="/blog"
+          className="hidden md:inline-block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Blog
+        </Link>
         <a
           href="#learn"
           className="hidden md:inline-block px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
