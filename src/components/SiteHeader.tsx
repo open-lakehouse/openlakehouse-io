@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import logo from "@/assets/logo.png";
+import logoUrl from "@/assets/bundled/olai-logo-white.png";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
@@ -49,15 +49,12 @@ export const SiteHeader = () => {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-3 group">
+        <Link to="/" className="flex items-center group">
           <img
-            src={logo}
+            src={logoUrl}
             alt="Open Lakehouse + AI"
-            className="h-9 w-auto transition-transform group-hover:scale-105"
+            className="h-8 md:h-9 w-auto transition-transform group-hover:scale-105 invert dark:invert-0"
           />
-          <span className="hidden sm:inline text-sm font-semibold tracking-wide text-foreground">
-            openlakehouse.io
-          </span>
         </Link>
 
         {/* Desktop nav */}
@@ -65,6 +62,7 @@ export const SiteHeader = () => {
           <TechLink className={desktopLinkClass} />
           <Link to="/blog" className={desktopLinkClass}>Blog</Link>
           <LearnLink className={desktopLinkClass} />
+          <Link to="/community" className={desktopLinkClass}>Community</Link>
           <ThemeToggle />
         </nav>
 
@@ -109,6 +107,9 @@ export const SiteHeader = () => {
             Blog
           </Link>
           <LearnLink className={mobileLinkClass} mobile />
+          <Link to="/community" className={mobileLinkClass} onClick={() => setOpen(false)}>
+            Community
+          </Link>
         </nav>
       </div>
     </header>

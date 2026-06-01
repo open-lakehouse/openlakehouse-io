@@ -9,6 +9,7 @@ import Index from "./pages/Index.tsx";
 import TechnologyCategory from "./pages/TechnologyCategory.tsx";
 import TechnologiesPage from "./pages/Technologies.tsx";
 import Learn from "./pages/Learn.tsx";
+import Community from "./pages/Community.tsx";
 import Blog from "./pages/Blog.tsx";
 import BlogCategory from "./pages/BlogCategory.tsx";
 import BlogPost from "./pages/BlogPost.tsx";
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/technologies" element={<TechnologiesPage />} />
             <Route path="/technologies/:slug" element={<TechnologyCategory />} />
             <Route path="/learn" element={<Learn />} />
+            <Route path="/community" element={<Community />} />
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/category/:category" element={<BlogCategory />} />
             <Route path="/blog/:category/:slug" element={<BlogPost />} />

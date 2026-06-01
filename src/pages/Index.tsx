@@ -1,6 +1,7 @@
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Hero } from "@/components/Hero";
+import { LogoMarquee } from "@/components/LogoMarquee";
 import { Technologies } from "@/components/Technologies";
 import { VideosCarousel } from "@/components/VideosCarousel";
 
@@ -9,6 +10,7 @@ const Index = () => (
     <SiteHeader />
     <main className="flex-1">
       <Hero />
+      <LogoMarquee />
       <Technologies />
       <VideosCarousel />
     </main>
