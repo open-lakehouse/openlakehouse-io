@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import logoAsset from "@/assets/olai-logo-white.png.asset.json";
+import logoUrl from "@/assets/bundled/olai-logo-white.png";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
@@ -51,7 +51,7 @@ export const SiteHeader = () => {
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center group">
           <img
-            src={logoAsset.url}
+            src={logoUrl}
             alt="Open Lakehouse + AI"
             className="h-8 md:h-9 w-auto transition-transform group-hover:scale-105 invert dark:invert-0"
           />

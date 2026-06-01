@@ -1,4 +1,4 @@
-import heroWaves from "@/assets/hero-waves.png.asset.json";
+import heroWavesUrl from "@/assets/bundled/hero-waves.png";
 
 export const Hero = () => {
   return (
@@ -27,7 +27,7 @@ export const Hero = () => {
           <div
             className="absolute inset-y-0 left-0 w-[200%] opacity-90"
             style={{
-              backgroundImage: `url(${heroWaves.url})`,
+              backgroundImage: `url(${heroWavesUrl})`,
               backgroundRepeat: "repeat-x",
               backgroundSize: "50% 100%",
               backgroundPosition: "left center",
@@ -37,7 +37,7 @@ export const Hero = () => {
           <div
             className="absolute inset-y-0 left-0 w-[200%] mix-blend-screen opacity-40"
             style={{
-              backgroundImage: `url(${heroWaves.url})`,
+              backgroundImage: `url(${heroWavesUrl})`,
               backgroundRepeat: "repeat-x",
               backgroundSize: "60% 110%",
               backgroundPosition: "left center",

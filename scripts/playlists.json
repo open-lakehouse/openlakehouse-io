@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Channel -> list of YouTube playlist IDs to mirror into src/content/videos/<channel-slug>/. Edit this file to add or remove sources, then run `bun run sync:videos`.",
+  "channels": [
+    {
+      "name": "Delta Lake",
+      "hueBase": 270,
+      "playlists": [
+        "PLzxP01GQMpjdt7ZUlJkdmUgnFSpgQEfU7"
+      ]
+    },
+    {
+      "name": "Open Lakehouse + AI",
+      "hueBase": 290,
+      "playlists": [
+        "PLzxP01GQMpjdC3H1lrH6j7KlOdfb_TmQz"
+      ]
+    },
+    {
+      "name": "Apache Spark",
+      "hueBase": 248,
+      "playlists": [
+        "PLfx_5c0MeG0_td-eaw2YjRhAtzho5LPC8",
+        "PLfx_5c0MeG08tB-aRqlEs2T4D2UXa2IQa",
+        "PLfx_5c0MeG0-_jhc2h1pUgcaOEva-3IIm"
+      ]
+    },
+    {
+      "name": "Apache Iceberg",
+      "hueBase": 262,
+      "playlists": [
+        "PL3IALGSANhzWxlZpyGgwZiRYjhIStmBdq"
+      ]
+    },
+    {
+      "name": "MLflow",
+      "hueBase": 235,
+      "playlists": [
+        "PLaoPu6xpLk9HptoHJ6P1ZvoMbuvynogbG",
+        "PLaoPu6xpLk9GcoEL8bEAdV76mNVwlA7-k",
+        "PLaoPu6xpLk9EI99TuOjSgy-UuDWowJ_mR"
+      ]
+    }
+  ]
+}

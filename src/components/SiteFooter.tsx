@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Github, Linkedin, Twitter, Youtube, MessageCircle, ExternalLink, Calendar } from "lucide-react";
-import logoAsset from "@/assets/olai-logo-white.png.asset.json";
+import logoUrl from "@/assets/bundled/olai-logo-white.png";
 
 const projects = [
   { name: "Delta Lake", url: "https://delta.io" },
@@ -122,7 +122,7 @@ export const SiteFooter = () => {
 
         <div className="pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={logoAsset.url} alt="Open Lakehouse + AI" className="h-7 w-auto invert dark:invert-0" />
+            <img src={logoUrl} alt="Open Lakehouse + AI" className="h-7 w-auto invert dark:invert-0" />
             <span className="text-sm text-muted-foreground">© {new Date().getFullYear()} openlakehouse.io · Open by design.</span>
           </div>
           <p className="text-xs text-muted-foreground">Vendor-neutral · Open standards · Community-driven</p>
