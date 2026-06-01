@@ -3,7 +3,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { VideosCarousel } from "@/components/VideosCarousel";
 import { Link } from "react-router-dom";
 import { BookOpen, Play, Newspaper } from "lucide-react";
-import learnHeroBg from "@/assets/learn-hero-bg.png.asset.json";
+import learnHeroBgUrl from "@/assets/bundled/learn-hero-bg.png";
 
 
 const resources = [
@@ -33,7 +33,7 @@ const Learn = () => (
     <main className="flex-1">
       <section
         className="relative border-b border-border overflow-hidden bg-cover bg-center"
-        style={{ backgroundImage: `url(${learnHeroBg.url})` }}
+        style={{ backgroundImage: `url(${learnHeroBgUrl})` }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/30 to-background/80" aria-hidden />
         <div className="container relative py-20 md:py-28">
