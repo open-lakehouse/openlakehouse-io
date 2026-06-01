@@ -40,7 +40,17 @@ export const Hero = () => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
-    const ro = new ResizeObserver(resize);
+    // Debounce buffer resync — during an active resize the browser
+    // CSS-stretches the existing bitmap (waves stay visible). Once the
+    // user stops dragging we resync the backing buffer at native res.
+    let resizeTimer: number | null = null;
+    const ro = new ResizeObserver(() => {
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        resizeTimer = null;
+        resize();
+      }, 120);
+    });
     ro.observe(canvas);
 
     // Apply a localized impulse (gaussian) to the velocity field of all layers.
@@ -102,8 +112,10 @@ export const Hero = () => {
     let raf = 0;
     const step = () => {
       const now = performance.now();
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
+      // Draw at the backing-buffer's logical size (not clientWidth/Height).
+      // During a window resize the buffer is debounced and CSS stretches it.
+      const w = canvas.width / dpr;
+      const h = canvas.height / dpr;
       ctx.clearRect(0, 0, w, h);
 
       // Ambient ripples — soft, wide impulses at random spots
@@ -162,6 +174,7 @@ export const Hero = () => {
 
     return () => {
       cancelAnimationFrame(raf);
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
       ro.disconnect();
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerdown", onPointerDown);
