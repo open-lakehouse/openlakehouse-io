@@ -35,6 +35,15 @@ const data: Record<string, { title: string; blurb: string; items: { name: string
     items: [
       { name: "Apache Iceberg", desc: "A high-performance open table format.", url: "https://iceberg.apache.org" },
       { name: "Delta Lake", desc: "The first lakehouse storage format, now fully open.", url: "https://delta.io" },
+      { name: "Apache Hudi", desc: "Streaming-first lakehouse format with upserts and incremental processing.", url: "https://hudi.apache.org" },
+    ],
+  },
+  "orchestration": {
+    title: "Orchestration",
+    blurb: "Workflow engines that schedule, coordinate, and observe data and AI pipelines across the lakehouse.",
+    items: [
+      { name: "Apache Airflow", desc: "The most widely adopted open-source workflow orchestrator.", url: "https://airflow.apache.org" },
+      { name: "Temporal", desc: "Durable execution platform for reliable, long-running workflows.", url: "https://temporal.io" },
     ],
   },
   "open-governance": {
