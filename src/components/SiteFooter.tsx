@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Github, Linkedin, Twitter, Youtube, MessageCircle, ExternalLink } from "lucide-react";
-import logo from "@/assets/logo.png";
+import { Github, Linkedin, Twitter, Youtube, MessageCircle, ExternalLink, Calendar } from "lucide-react";
+import logoAsset from "@/assets/olai-logo-white.png.asset.json";
 
 const projects = [
   { name: "Delta Lake", url: "https://delta.io" },
@@ -104,13 +104,25 @@ export const SiteFooter = () => {
                   </li>
                 );
               })}
+              <li>
+                <a
+                  href="https://luma.com/openlakehouseai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Luma
+                  <ExternalLink className="h-3 w-3 opacity-60" />
+                </a>
+              </li>
             </ul>
           </div>
         </div>
 
         <div className="pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Open Lakehouse + AI" className="h-8 w-auto rounded" />
+            <img src={logoAsset.url} alt="Open Lakehouse + AI" className="h-7 w-auto invert dark:invert-0" />
             <span className="text-sm text-muted-foreground">© {new Date().getFullYear()} openlakehouse.io · Open by design.</span>
           </div>
           <p className="text-xs text-muted-foreground">Vendor-neutral · Open standards · Community-driven</p>
