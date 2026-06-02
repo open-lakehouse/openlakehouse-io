@@ -52,7 +52,7 @@ export const SiteHeader = () => {
         <Link to="/" className="flex items-center group">
           <img
             src={logoUrl}
-            alt="Open Lakehouse + AI"
+            alt="Open Lakehouse Guide Hub — open data and AI architecture on Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark"
             className="h-8 md:h-9 w-auto transition-transform group-hover:scale-105 invert dark:invert-0"
           />
         </Link>

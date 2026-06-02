@@ -2,6 +2,9 @@ import { useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { Seo } from "@/components/Seo";
+import { PolicastFlow } from "@/components/PolicastFlow";
+import { OpenLineageFlow } from "@/components/OpenLineageFlow";
 
 const data: Record<string, { title: string; blurb: string; items: { name: string; desc: string; url: string }[] }> = {
   "compute-engines": {
@@ -50,8 +53,8 @@ const data: Record<string, { title: string; blurb: string; items: { name: string
     title: "Open Governance",
     blurb: "Vendor-neutral standards for lineage, policy, and access control across the stack.",
     items: [
-      { name: "OpenLineage", desc: "Open standard for data lineage collection.", url: "https://openlineage.io" },
-      { name: "Policies", desc: "Declarative, portable data policies.", url: "#" },
+      { name: "OpenLineage", desc: "Open standard for data lineage collection.", url: "#open-lineage" },
+      { name: "Policies", desc: "Declarative, portable data policies.", url: "#open-policies" },
       { name: "ABAC", desc: "Attribute-based access control for fine-grained governance.", url: "#" },
     ],
   },
@@ -76,6 +79,11 @@ const TechnologyCategory = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <Seo
+        title={`${cat.title} — Open Lakehouse Technologies`}
+        description={cat.blurb}
+        path={`/technologies/${slug}`}
+      />
       <SiteHeader />
       <main className="flex-1">
         <section className="bg-brand-gradient text-primary-foreground">
@@ -90,15 +98,40 @@ const TechnologyCategory = () => {
 
         <section className="container py-20">
           <div className="grid sm:grid-cols-2 gap-6">
-            {cat.items.map((it) => (
-              <a key={it.name} href={it.url} target="_blank" rel="noopener noreferrer"
-                 className="group rounded-2xl border border-border bg-card p-6 shadow-card hover:shadow-glow hover:-translate-y-0.5 transition-all">
-                <h3 className="text-xl font-semibold tracking-tight group-hover:text-primary transition-colors">{it.name}</h3>
-                <p className="mt-2 text-muted-foreground">{it.desc}</p>
-              </a>
-            ))}
+            {cat.items.map((it) => {
+              const isAnchor = it.url.startsWith("#");
+              const handleClick = isAnchor
+                ? (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    document
+                      .querySelector(it.url)
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                : undefined;
+              return (
+                <a
+                  key={it.name}
+                  href={it.url}
+                  onClick={handleClick}
+                  target={isAnchor ? undefined : "_blank"}
+                  rel={isAnchor ? undefined : "noopener noreferrer"}
+                  className="group rounded-2xl border border-border bg-card p-6 shadow-card hover:shadow-glow hover:-translate-y-0.5 transition-all"
+                >
+                  <h3 className="text-xl font-semibold tracking-tight group-hover:text-primary transition-colors">{it.name}</h3>
+                  <p className="mt-2 text-muted-foreground">{it.desc}</p>
+                </a>
+              );
+            })}
           </div>
         </section>
+
+        {slug === "open-governance" && (
+          <>
+            <OpenLineageFlow />
+            <PolicastFlow videoId="WMhaqR5pgYU" />
+          </>
+        )}
+
       </main>
       <SiteFooter />
     </div>

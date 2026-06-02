@@ -7,7 +7,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import Index from "./pages/Index.tsx";
+import FaqPage from "./pages/FaqPage.tsx";
 import TechnologyCategory from "./pages/TechnologyCategory.tsx";
+import DeltaLakePillar from "./pages/tech/DeltaLakePillar.tsx";
 import TechnologiesPage from "./pages/Technologies.tsx";
 import Learn from "./pages/Learn.tsx";
 import Community from "./pages/Community.tsx";
@@ -29,7 +31,9 @@ const App = () => (
           <ScrollToTop />
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/faq" element={<FaqPage />} />
             <Route path="/technologies" element={<TechnologiesPage />} />
+            <Route path="/technologies/delta-lake" element={<DeltaLakePillar />} />
             <Route path="/technologies/:slug" element={<TechnologyCategory />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/community" element={<Community />} />

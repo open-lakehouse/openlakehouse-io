@@ -27,6 +27,36 @@ const useVisibleCount = () => {
   return n;
 };
 
+const VideoCardInner = ({ v }: { v: Video }) => (
+  <>
+    <div
+      className="relative aspect-video flex items-center justify-center overflow-hidden"
+      style={{
+        background: v.videoId ? undefined : `linear-gradient(135deg, hsl(${v.hue} 60% 25%), hsl(${v.hue + 20} 80% 55%))`,
+      }}
+    >
+      {v.videoId && (
+        <img
+          src={`https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`}
+          alt={`YouTube video thumbnail: ${v.title} — Open Lakehouse talk`}
+          loading="lazy"
+          draggable={false}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      <div className="absolute inset-0 opacity-30" style={{ background: "radial-gradient(circle at 30% 30%, white, transparent 50%)" }} />
+      <span className="relative z-10 h-16 w-16 rounded-full bg-white/95 text-primary flex items-center justify-center shadow-glow group-hover:scale-110 transition-transform">
+        <Play className="h-7 w-7 ml-1" fill="currentColor" />
+      </span>
+      <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2 py-1 rounded">{v.duration}</span>
+    </div>
+    <div className="p-5">
+      <p className="text-xs font-medium text-primary uppercase tracking-wider">{v.channel}</p>
+      <h3 className="mt-2 font-semibold leading-snug line-clamp-2">{v.title}</h3>
+    </div>
+  </>
+);
+
 export const VideosCarousel = () => {
   const isHome = useLocation().pathname === "/";
   const [filter, setFilter] = useState<Filter>("All");
@@ -122,161 +152,173 @@ export const VideosCarousel = () => {
           ))}
         </div>
 
-        <div
-          className="overflow-hidden touch-pan-y select-none"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          style={{ cursor: isDragging ? "grabbing" : "grab" }}
-        >
-          <div
-            ref={trackRef}
-            className={`flex gap-6 ${isDragging ? "" : "transition-transform duration-700 ease-out"}`}
-            style={{ transform: `translate3d(calc(-${idx} * (${cardWidth} + 1.5rem) + ${dragPx}px), 0, 0)` }}
-          >
-            {[...filteredVideos, ...filteredVideos.slice(0, Math.min(visible, filteredVideos.length))].map((v, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={(e) => {
-                  if (draggedRef.current) { e.preventDefault(); return; }
-                  if (v.videoId) setActive(v);
-                }}
-                draggable={false}
-                className="group flex-shrink-0 text-left rounded-2xl overflow-hidden border border-border bg-card shadow-card hover:shadow-glow transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                style={{ width: cardWidth }}
+        {isHome && (filteredVideos.length <= 20 || visible === 1) ? (
+          <>
+            <div
+              className="overflow-hidden touch-pan-y select-none"
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+              style={{ cursor: isDragging ? "grabbing" : "grab" }}
+            >
+              <div
+                ref={trackRef}
+                className={`flex gap-6 ${isDragging ? "" : "transition-transform duration-700 ease-out"}`}
+                style={{ transform: `translate3d(calc(-${idx} * (${cardWidth} + 1.5rem) + ${dragPx}px), 0, 0)` }}
               >
-                <div
-                  className="relative aspect-video flex items-center justify-center overflow-hidden"
-                  style={{
-                    background: v.videoId ? undefined : `linear-gradient(135deg, hsl(${v.hue} 60% 25%), hsl(${v.hue + 20} 80% 55%))`,
-                  }}
-                >
-                  {v.videoId && (
-                    <img
-                      src={`https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`}
-                      alt={v.title}
-                      loading="lazy"
-                      draggable={false}
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  )}
-                  <div className="absolute inset-0 opacity-30" style={{ background: "radial-gradient(circle at 30% 30%, white, transparent 50%)" }} />
-                  <span className="relative z-10 h-16 w-16 rounded-full bg-white/95 text-primary flex items-center justify-center shadow-glow group-hover:scale-110 transition-transform">
-                    <Play className="h-7 w-7 ml-1" fill="currentColor" />
-                  </span>
-                  <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2 py-1 rounded">{v.duration}</span>
-                </div>
-                <div className="p-5">
-                  <p className="text-xs font-medium text-primary uppercase tracking-wider">{v.channel}</p>
-                  <h3 className="mt-2 font-semibold leading-snug line-clamp-2">{v.title}</h3>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-
-        {filteredVideos.length > 0 && (() => {
-          const total = filteredVideos.length;
-          const compact = total > 20;
-          const pageSize = compact ? visible : 1;
-          const pageCount = Math.max(1, Math.ceil(total / pageSize));
-          const currentPage = Math.min(Math.floor(idx / pageSize), pageCount - 1);
-          const goPage = (p: number) => {
-            const clamped = Math.max(0, Math.min(pageCount - 1, p));
-            setIdx(Math.min(clamped * pageSize, Math.max(0, total - 1)));
-            pausedRef.current = true;
-            setTimeout(() => { pausedRef.current = false; }, 4000);
-          };
-
-          if (!compact) {
-            return (
-              <div className="flex justify-center gap-2 mt-8">
-                {filteredVideos.map((_, i) => (
+                {[...filteredVideos, ...filteredVideos.slice(0, Math.min(visible, filteredVideos.length))].map((v, i) => (
                   <button
                     key={i}
-                    aria-label={`Go to video ${i + 1}`}
-                    onClick={() => setIdx(i)}
-                    className={`h-1.5 rounded-full transition-all ${i === idx ? "w-8 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground"}`}
-                  />
-                ))}
-              </div>
-            );
-          }
-
-          // Compact pager: arrows + windowed page dots + readout
-          const windowSize = 7;
-          let start = Math.max(0, currentPage - Math.floor(windowSize / 2));
-          let end = Math.min(pageCount, start + windowSize);
-          start = Math.max(0, end - windowSize);
-          const pages: number[] = [];
-          for (let p = start; p < end; p++) pages.push(p);
-
-          return (
-            <div className="mt-8 flex flex-col items-center gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  aria-label="Previous page"
-                  onClick={() => goPage(currentPage - 1)}
-                  disabled={currentPage === 0}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {start > 0 && (
-                  <>
-                    <button
-                      onClick={() => goPage(0)}
-                      className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                    >
-                      1
-                    </button>
-                    <span className="text-muted-foreground text-xs px-0.5">…</span>
-                  </>
-                )}
-                {pages.map((p) => (
-                  <button
-                    key={p}
-                    aria-label={`Go to page ${p + 1}`}
-                    aria-current={p === currentPage ? "page" : undefined}
-                    onClick={() => goPage(p)}
-                    className={`h-8 min-w-8 px-2 rounded-full text-xs font-medium border transition-colors ${
-                      p === currentPage
-                        ? "bg-primary text-primary-foreground border-primary shadow-glow"
-                        : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40"
-                    }`}
+                    type="button"
+                    onClick={(e) => {
+                      if (draggedRef.current) { e.preventDefault(); return; }
+                      if (v.videoId) setActive(v);
+                    }}
+                    draggable={false}
+                    className="group flex-shrink-0 text-left rounded-2xl overflow-hidden border border-border bg-card shadow-card hover:shadow-glow transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    style={{ width: cardWidth }}
                   >
-                    {p + 1}
+                    <VideoCardInner v={v} />
                   </button>
                 ))}
-                {end < pageCount && (
-                  <>
-                    <span className="text-muted-foreground text-xs px-0.5">…</span>
-                    <button
-                      onClick={() => goPage(pageCount - 1)}
-                      className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                    >
-                      {pageCount}
-                    </button>
-                  </>
-                )}
-                <button
-                  aria-label="Next page"
-                  onClick={() => goPage(currentPage + 1)}
-                  disabled={currentPage === pageCount - 1}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
               </div>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                Video {Math.min(idx + 1, total)}–{Math.min(idx + visible, total)} of {total}
-              </p>
             </div>
-          );
-        })()}
+
+            {filteredVideos.length > 0 && (
+              filteredVideos.length > 20 ? (
+                <div className="mt-8 flex items-center justify-center gap-3">
+                  <button
+                    aria-label="Previous video"
+                    onClick={() => setIdx((i) => (i - 1 + filteredVideos.length) % filteredVideos.length)}
+                    className="h-9 w-9 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs font-medium tabular-nums text-muted-foreground min-w-[4rem] text-center">
+                    {idx + 1} / {filteredVideos.length}
+                  </span>
+                  <button
+                    aria-label="Next video"
+                    onClick={() => setIdx((i) => (i + 1) % filteredVideos.length)}
+                    className="h-9 w-9 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex justify-center gap-2 mt-8">
+                  {filteredVideos.map((_, i) => (
+                    <button
+                      key={i}
+                      aria-label={`Go to video ${i + 1}`}
+                      onClick={() => setIdx(i)}
+                      className={`h-1.5 rounded-full transition-all ${i === idx ? "w-8 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground"}`}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+          </>
+        ) : (
+          (() => {
+            const PAGE = 6;
+            const pageCount = Math.max(1, Math.ceil(filteredVideos.length / PAGE));
+            const currentPage = Math.min(Math.floor(idx / PAGE), pageCount - 1);
+            const pageVideos = filteredVideos.slice(currentPage * PAGE, currentPage * PAGE + PAGE);
+            const goPage = (p: number) => {
+              const clamped = Math.max(0, Math.min(pageCount - 1, p));
+              setIdx(clamped * PAGE);
+            };
+            const windowSize = 7;
+            let start = Math.max(0, currentPage - Math.floor(windowSize / 2));
+            let end = Math.min(pageCount, start + windowSize);
+            start = Math.max(0, end - windowSize);
+            const pages: number[] = [];
+            for (let p = start; p < end; p++) pages.push(p);
+
+            return (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {pageVideos.map((v, i) => (
+                    <button
+                      key={`${currentPage}-${i}`}
+                      type="button"
+                      onClick={() => { if (v.videoId) setActive(v); }}
+                      className="group text-left rounded-2xl overflow-hidden border border-border bg-card shadow-card hover:shadow-glow transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <VideoCardInner v={v} />
+                    </button>
+                  ))}
+                </div>
+
+                {pageCount > 1 && (
+                  <div className="mt-10 flex flex-col items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        aria-label="Previous page"
+                        onClick={() => goPage(currentPage - 1)}
+                        disabled={currentPage === 0}
+                        className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      {start > 0 && (
+                        <>
+                          <button
+                            onClick={() => goPage(0)}
+                            className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                          >
+                            1
+                          </button>
+                          <span className="text-muted-foreground text-xs px-0.5">…</span>
+                        </>
+                      )}
+                      {pages.map((p) => (
+                        <button
+                          key={p}
+                          aria-label={`Go to page ${p + 1}`}
+                          aria-current={p === currentPage ? "page" : undefined}
+                          onClick={() => goPage(p)}
+                          className={`h-8 min-w-8 px-2 rounded-full text-xs font-medium border transition-colors ${
+                            p === currentPage
+                              ? "bg-primary text-primary-foreground border-primary shadow-glow"
+                              : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40"
+                          }`}
+                        >
+                          {p + 1}
+                        </button>
+                      ))}
+                      {end < pageCount && (
+                        <>
+                          <span className="text-muted-foreground text-xs px-0.5">…</span>
+                          <button
+                            onClick={() => goPage(pageCount - 1)}
+                            className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                          >
+                            {pageCount}
+                          </button>
+                        </>
+                      )}
+                      <button
+                        aria-label="Next page"
+                        onClick={() => goPage(currentPage + 1)}
+                        disabled={currentPage === pageCount - 1}
+                        className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      Showing {currentPage * PAGE + 1}–{Math.min((currentPage + 1) * PAGE, filteredVideos.length)} of {filteredVideos.length}
+                    </p>
+                  </div>
+                )}
+              </>
+            );
+          })()
+        )}
+
 
         {isHome && (
           <div className="mt-10 flex justify-center">

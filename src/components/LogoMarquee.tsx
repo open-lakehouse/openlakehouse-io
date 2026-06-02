@@ -6,21 +6,21 @@ import polarisLogo from "@/assets/logos/apache-polaris.svg";
 import openLineageLogo from "@/assets/logos/openlineage.svg";
 import lakekeeperLogo from "@/assets/logos/lakekeeper.svg";
 
-type Logo = { name: string; slug?: string; src?: string; mono?: boolean; hideName?: boolean; widthClass?: string };
+type Logo = { name: string; slug?: string; src?: string; mono?: boolean; hideName?: boolean; widthClass?: string; url: string };
 
 const logos: Logo[] = [
-  { name: "Apache Spark", slug: "apachespark" },
-  { name: "Apache Flink", slug: "apacheflink" },
-  { name: "DataFusion", slug: "apachearrow" },
-  { name: "Unity Catalog", src: unityCatalogLogo },
-  { name: "Apache Polaris", src: polarisLogo, mono: true, hideName: true, widthClass: "w-32" },
-  { name: "Lakekeeper", src: lakekeeperLogo, mono: true, widthClass: "w-8" },
-  { name: "MLflow", slug: "mlflow" },
-  { name: "Apache Iceberg", src: icebergLogo, hideName: true, widthClass: "w-36" },
-  { name: "Delta Lake", src: deltaLakeLogo, mono: true, hideName: true, widthClass: "w-32" },
-  { name: "Apache Airflow", slug: "apacheairflow" },
-  { name: "Temporal", slug: "temporal" },
-  { name: "OpenLineage", src: openLineageLogo, hideName: true, widthClass: "w-36" },
+  { name: "Apache Spark", slug: "apachespark", url: "https://spark.apache.org/" },
+  { name: "Apache Flink", slug: "apacheflink", url: "https://flink.apache.org/" },
+  { name: "DataFusion", slug: "apachearrow", url: "https://datafusion.apache.org/" },
+  { name: "Unity Catalog", src: unityCatalogLogo, url: "https://www.unitycatalog.io/" },
+  { name: "Apache Polaris", src: polarisLogo, mono: true, hideName: true, widthClass: "w-32", url: "https://polaris.apache.org/" },
+  { name: "Lakekeeper", src: lakekeeperLogo, widthClass: "w-8", url: "https://lakekeeper.io/" },
+  { name: "MLflow", slug: "mlflow", url: "https://mlflow.org/" },
+  { name: "Apache Iceberg", src: icebergLogo, hideName: true, widthClass: "w-36", url: "https://iceberg.apache.org/" },
+  { name: "Delta Lake", src: deltaLakeLogo, mono: true, hideName: true, widthClass: "w-32", url: "https://delta.io/" },
+  { name: "Apache Airflow", slug: "apacheairflow", url: "https://airflow.apache.org/" },
+  { name: "Temporal", slug: "temporal", url: "https://temporal.io/" },
+  { name: "OpenLineage", src: openLineageLogo, hideName: true, widthClass: "w-36", url: "https://openlineage.io/" },
 ];
 
 const LogoItem = ({ logo }: { logo: Logo }) => {
@@ -28,11 +28,17 @@ const LogoItem = ({ logo }: { logo: Logo }) => {
   const imgSrc = logo.src ?? (logo.slug ? `https://cdn.simpleicons.org/${logo.slug}/ffffff` : undefined);
   const showImg = imgSrc && !failed;
   return (
-    <div className="mx-8 md:mx-12 flex items-center gap-3 shrink-0 opacity-70 hover:opacity-100 transition-opacity">
+    <a
+      href={logo.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${logo.name} (opens in a new tab)`}
+      className="mx-8 md:mx-12 flex items-center gap-3 shrink-0 opacity-70 hover:opacity-100 transition-opacity cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded"
+    >
       {showImg && (
         logo.mono ? (
           <span
-            aria-label={logo.name}
+            aria-hidden="true"
             role="img"
             className={`h-7 ${logo.widthClass ?? "w-auto"} bg-white dark:bg-white`}
             style={{
@@ -49,7 +55,7 @@ const LogoItem = ({ logo }: { logo: Logo }) => {
         ) : (
           <img
             src={imgSrc}
-            alt={logo.name}
+            alt={`${logo.name} logo — open-source project in the Open Lakehouse stack`}
             className={`h-7 ${logo.widthClass ?? "w-auto max-w-[2.5rem]"} object-contain`}
             loading="lazy"
             onError={() => setFailed(true)}
@@ -61,7 +67,7 @@ const LogoItem = ({ logo }: { logo: Logo }) => {
           {logo.name}
         </span>
       )}
-    </div>
+    </a>
   );
 };
 
