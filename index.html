@@ -10,8 +10,30 @@
     <meta property="og:title" content="Open Lakehouse — Open formats, open engines, your storage" />
     <meta property="og:description" content="Your data, in open formats, on storage you control — readable by any engine you choose." />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Open Lakehouse" />
 
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Sitewide Organization graph. Encodes the open-source projects that
+         make up the lakehouse so search engines and LLMs can resolve
+         provenance. Per-route Article / TechArticle / FAQPage blocks are
+         injected by react-helmet-async. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Open Lakehouse",
+        "url": "https://openlakehouse-guide-hub.lovable.app",
+        "description": "The Open Lakehouse: your data in open formats on storage you control, readable by any engine.",
+        "sameAs": [
+          "https://delta.io",
+          "https://iceberg.apache.org",
+          "https://unitycatalog.io",
+          "https://mlflow.org",
+          "https://spark.apache.org"
+        ]
+      }
+    </script>
   </head>
 
   <body>

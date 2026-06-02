@@ -7,6 +7,8 @@ type Props = {
   title?: string;
   /** Render as a clickable poster (lazy iframe). Default true for performance. */
   lite?: boolean;
+  /** Custom poster image URL. Defaults to YouTube's hqdefault. */
+  poster?: string;
 };
 
 /**
@@ -15,11 +17,12 @@ type Props = {
  *   <YouTubeEmbed videoId="dQw4w9WgXcQ" />
  *   <YouTubeEmbed videoId="..." playlist="PL..." title="Talk title" />
  */
-export const YouTubeEmbed = ({ videoId, playlist, title, lite = true }: Props) => {
+export const YouTubeEmbed = ({ videoId, playlist, title, lite = true, poster }: Props) => {
   const [active, setActive] = useState(!lite);
   const src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0${
     playlist ? `&list=${playlist}` : ""
   }`;
+  const posterSrc = poster ?? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
   return (
     <div className="my-6 relative w-full aspect-video overflow-hidden rounded-xl border border-border bg-black shadow-card">
@@ -41,8 +44,8 @@ export const YouTubeEmbed = ({ videoId, playlist, title, lite = true }: Props) =
           className="group absolute inset-0 h-full w-full"
         >
           <img
-            src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`}
-            alt={title ?? ""}
+            src={posterSrc}
+            alt={title ? `YouTube video thumbnail: ${title}` : ""}
             loading="lazy"
             className="absolute inset-0 h-full w-full object-cover"
           />

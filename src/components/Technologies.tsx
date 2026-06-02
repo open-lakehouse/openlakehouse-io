@@ -20,7 +20,13 @@ const CategoryCard = ({ slug, title, icon: Icon, items }: Category) => (
     className="group relative bg-card hover:bg-secondary/60 transition-colors p-6 flex flex-col min-h-[220px]"
   >
     <div className="flex items-center gap-3">
-      <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-brand-gradient text-primary-foreground shadow-glow">
+      <span
+        className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-primary-foreground shadow-glow"
+        style={{
+          background:
+            "linear-gradient(180deg, hsl(296 60% 32%) 0%, hsl(296 72% 60%) 33%, hsl(330 85% 70%) 66%, hsl(330 70% 42%) 100%)",
+        }}
+      >
         <Icon className="h-5 w-5" />
       </span>
       <h3 className="font-semibold tracking-tight">{title}</h3>

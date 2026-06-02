@@ -1,0 +1,338 @@
+---
+title: "Integrating the Rust Delta Kernel into ClickHouse"
+date: 2026-05-18
+authors: [melvyn-peignon, kseniia-sumarokova, raul-marin]
+excerpt: How the ClickHouse team adopted delta-kernel-rs to offload Delta protocol handling, unlock writes, schema evolution, time travel, CDF, and pruning — and what it took to ship a Rust library inside a C++ database.
+tags: [delta-lake, clickhouse, rust, delta-kernel, query-engine]
+thumbnail: https://delta.io/_astro/thumbnail.Y1MsmfWQ_Z1fdMvP.webp
+---
+
+Unless you've spent the last few years in a cave without internet access,
+you've probably heard of open table formats like Delta Lake and Iceberg.
+
+The goal is simple: define a data format that any query engine can read and
+write, as long as it follows the protocol. Over time, these formats have
+evolved beyond simple interoperability, introducing richer table semantics
+such as transactional support, schema evolution, and versioned data
+management directly on top of the underlying data.
+
+Recently, we announced that [ClickHouse is data lake ready](https://clickhouse.com/blog/clickhouse-is-data-lake-ready),
+with it supporting these table formats as a query engine. As part of that
+journey, we've been working more closely with these formats and, like many
+others, have run into some of the same challenges.
+
+Adopting these table formats is not trivial. Supporting them requires keeping
+up with complex and evolving protocols, whether through external libraries or
+custom implementations. Each query engine remains responsible for maintaining
+its own integration, often leading to fragmented feature support and
+increasing maintenance overhead.
+
+In this post, we explore how we addressed this by integrating the Rust Delta
+Kernel into ClickHouse. This provides a maintained and consistent interface
+between the table format and ClickHouse's query engine, enabling us to expose
+more features while significantly reducing integration complexity.
+
+## What is ClickHouse?
+
+ClickHouse is a high-performance, column-oriented SQL database management
+system (DBMS) for online analytical processing (OLAP). OLAP refers to SQL
+queries with complex calculations (e.g., aggregations, string processing,
+arithmetic) over massive datasets, processing billions and trillions of rows
+in milliseconds.
+
+For an introduction to ClickHouse, including why it exists and how it
+delivers its performance, we recommend the
+[Getting Started Guides](https://clickhouse.com/docs/get-started/quick-start).
+For a deeper look at the architectural decisions behind its speed, see the
+["Why ClickHouse is Fast"](https://clickhouse.com/docs/concepts/why-clickhouse-is-so-fast) series.
+
+For the rest of this post, we'll focus specifically on ClickHouse's
+integration with Delta Lake, exploring how we integrated with the Delta
+Kernel.
+
+## Working with Delta Lake
+
+One of the key goals in making ClickHouse data lake ready was enabling users
+to query data directly from open table formats like Delta Lake. Our initial
+approach involved implementing native support by working directly with the
+[Delta protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md).
+While this gave us full control, it also exposed the complexity of the format
+and the ongoing cost of keeping up with an evolving specification.
+
+```sql
+SELECT
+    cityHash64(URL),
+    count() AS cnt
+FROM deltaLake('https://datasets-documentation.s3.amazonaws.com/lake_formats/delta_lake/')
+GROUP BY cityHash64(URL)
+ORDER BY cnt DESC
+LIMIT 5
+```
+
+Results in the following:
+
+```
+   ┌──────cityHash64(URL)─┬─────cnt─┐
+1. │  8128408125044552281 │ 3288173 │
+2. │ 17146718649009901992 │ 1625250 │
+3. │   935030221159485792 │  791465 │
+4. │  6972355099133249997 │  582400 │
+5. │ 13961208022208327194 │  514984 │
+   └──────────────────────┴─────────┘
+
+5 rows in set. Elapsed: 3.878 sec. Processed 100.00 million rows, 14.82 GB.
+```
+
+As support expanded, it became clear that achieving full feature coverage
+while keeping the integration maintainable would be increasingly difficult.
+This led us to adopt the Delta Kernel, allowing us to offload protocol
+handling and focus on what ClickHouse does best: high-performance query
+execution.
+
+## Introducing the Delta Kernel
+
+The Delta Lake kernel abstracts away much of the complexity of the underlying
+format, providing a clear boundary between the query engine and the protocol.
+It handles the processing of Delta files and exposes well-defined interfaces
+to the engine, allowing ClickHouse to operate on "black box" objects without
+managing the underlying mechanics.
+
+In contrast to our original approach, where ClickHouse directly implemented
+the protocol, this reduces both implementation complexity and maintenance
+overhead while making it easier to keep pace with new features.
+
+The Delta Kernel provides a set of guarantees that make it an attractive
+foundation for supporting Delta Lake, without requiring the engine to
+implement the protocol itself. In particular, it takes responsibility for:
+
+- Parsing transaction logs stored as JSON
+- Reading and interpreting Delta metadata
+- Resolving snapshots and determining the correct set of data files
+- Applying data skipping based on metadata
+
+By centralizing this logic, the Kernel removes the need for each query
+engine to independently implement and maintain support for an evolving
+protocol.
+
+At the same time, query engines like ClickHouse still need to retain control
+over performance-critical components, particularly file reading. Significant
+engineering effort goes into optimizing Parquet readers, and these
+optimizations are essential to overall query performance.
+
+The Delta Kernel is designed with this balance in mind. Through its Engine
+APIs, it allows engines to plug in their own optimized implementations for
+components such as file access and data reading, providing metadata about
+data files including statistics and deletion vectors to allow ClickHouse to
+do efficient downstream filtering and processing. It also informs the query
+engine of any transformations that need to be applied to the on-disk data to
+make it match the table's logical format, in addition to higher-level
+interfaces for interacting with snapshots.
+
+## What the Delta Kernel adds
+
+Beyond abstracting the complexity of the Delta protocol, the Delta Kernel
+unlocks a number of capabilities that would have been more challenging to
+implement and maintain ourselves. Instead of building and evolving support
+for each feature independently, we inherit a consistent and well-defined
+implementation that allows us to expose these features directly in
+ClickHouse.
+
+### Writes
+
+The Delta Kernel provides full support for managing writes to Delta tables
+at the transactional level, including handling transaction logs and ensuring
+consistency. Delta Lake guarantees ACID semantics for these operations,
+preventing partial or conflicting updates and enabling safe concurrent
+access patterns that are difficult to implement correctly from scratch. The
+underlying Parquet data files are written by ClickHouse, while the Delta
+Kernel is responsible solely for coordinating and recording the associated
+transactional metadata.
+
+### Schema evolution
+
+Delta tables can evolve over time without requiring full rewrites. Columns
+can be added or modified in a controlled way, with all changes tracked in
+the transaction log. This allows ClickHouse to interact with datasets whose
+structure changes over time without breaking queries or pipelines.
+
+To achieve this, the Delta Kernel exposes both the logical schema, which
+reflects how the table is presented to users, and the physical schema used
+by the underlying Parquet files. For each data file, it also provides schema
+transformation metadata, enabling ClickHouse to reconcile differences
+between file-level schemas and the current table definition.
+
+### Time travel
+
+Every change to a Delta table is versioned, allowing queries against
+previous snapshots of the data. This enables reproducibility, auditing, and
+debugging workflows, as users can query historical versions of a dataset
+without maintaining separate copies.
+
+The Delta Kernel supports flexible, versioned access patterns, allowing
+users to read a table at a specific snapshot. It also provides row-level
+change visibility through Change Data Feed (CDF), exposing inserts, updates,
+and deletes as a stream of events. In ClickHouse 25.12, we
+[exposed Delta Lake's CDF](https://github.com/ClickHouse/ClickHouse/pull/90431)
+through the [`deltaLake` table function](https://clickhouse.com/docs/sql-reference/table-functions/deltalake),
+allowing users to query row-level changes between table versions:
+
+```sql
+SELECT *
+FROM deltaLake('s3://path/to/table')
+SETTINGS
+    delta_lake_snapshot_start_version = 5,
+    delta_lake_snapshot_end_version = 10;
+```
+
+Results include metadata columns such as `_change_type`, `_commit_version`,
+and `_commit_timestamp`, allowing users to reason about how data has
+evolved over time.
+
+### Partition pruning
+
+Delta metadata includes partition information that allows engines to skip
+entire subsets of data during query execution. By exposing this through the
+Kernel, ClickHouse can avoid scanning irrelevant files and reduce I/O,
+improving query performance.
+
+### Statistics-based pruning
+
+In addition to partitions, Delta tracks file-level statistics such as min
+and max values. These can be used for data skipping, allowing queries to
+ignore files that cannot satisfy a given predicate. This is a key
+optimization for large datasets, significantly reducing the amount of data
+that needs to be read.
+
+## Using the Delta Kernel in ClickHouse: a Rust library in a C++ database
+
+To see how this integration fits into ClickHouse, it's important to first
+understand the design of its build system.
+
+### The ClickHouse build system
+
+The resulting binary has no external dependencies, with the sole exception
+of libc. The default Linux build depends only on a relatively old glibc
+version — 2.4 for x86\_64 (nearly 20 years old) or 2.18 (around 11 years
+old) for ARM. It does not rely on libstdc++ or any other external libraries.
+
+Since dynamic loading is not possible, all dependencies must be built into
+the binary. We vendor them as submodules within the repository under
+`contrib/`. External dependencies are built using the same compiler options
+and flags as the core codebase, and we maintain our own simplified CMake
+configurations for each dependency.
+
+### Rust inside ClickHouse
+
+Rust [was introduced to ClickHouse](https://github.com/ClickHouse/ClickHouse/pull/33435)
+as a way to add minor functionality. The initial demonstration introduced
+the [BLAKE3](https://github.com/BLAKE3-team/BLAKE3) crate using hand-written
+C wrappers and [Corrosion](https://github.com/corrosion-rs/corrosion) to
+handle the `cmake` targets. Other libraries followed, including
+[prql](https://github.com/PRQL/prql), [skim](https://github.com/skim-rs/skim),
+and ClickHouse's own
+[chcache](https://github.com/ClickHouse/ClickHouse/tree/4baea3af01456dfd4c64c87f07657836c55014e7/rust/chcache).
+
+To meet ClickHouse's sanitizer requirements (ASAN, MSAN, TSAN, UBSAN), we
+needed Rust's sanitizer support, which depends on unstable features only
+available on nightly. To eliminate flaky network failures during builds, we
+[vendored all crates](https://github.com/ClickHouse/ClickHouse/pull/62297)
+using [cargo-local-registry](https://github.com/dhovart/cargo-local-registry)
+and disabled online fetching.
+
+### Integrating delta-kernel-rs
+
+[delta-kernel-rs](https://github.com/delta-io/delta-kernel-rs/) did not fit
+the previous "copy sources into the build directory" approach. The crate we
+care about (`ffi`) uses path-based links to parent directories and
+references other crates within the same repository. Copying sources breaks
+those assumptions.
+
+Instead, we now build the project in place, preserving its original
+workspace structure. We generate a single `Cargo.toml` per build
+configuration and pass it via
+[Cargo's `--config` flag](https://github.com/ClickHouse/ClickHouse/blob/d05a951295ed8e86187c421ca2c912b872de77e6/contrib/delta-kernel-rs-cmake/CMakeLists.txt#L78-L95).
+To avoid cross-workspace cache conflicts, we
+[fixed Corrosion](https://github.com/corrosion-rs/corrosion/pull/609) to
+isolate build artifacts per workspace or configuration.
+
+#### OpenSSL dependency
+
+Deep in its dependency graph, `delta-kernel-rs` pulls in the
+[`openssl` crate](https://crates.io/crates/openssl), which links against the
+system-installed OpenSSL dynamic library — conflicting with our no-system-
+dependencies rule. After iterating on Cargo flags, we configured this
+through Corrosion to link against our own
+[statically built OpenSSL library](https://github.com/ClickHouse/ClickHouse/blob/d05a951295ed8e86187c421ca2c912b872de77e6/contrib/delta-kernel-rs-cmake/CMakeLists.txt#L71-L76).
+
+#### Broken cross-compilation
+
+After integration, cross-compilation was failing because Cargo was
+attempting to
+[build dynamic libraries](https://github.com/ClickHouse/ClickHouse/issues/76807)
+that referenced system libraries unavailable in the target environment. The
+fix was to restrict the build to `staticlib` only. In the process, we
+uncovered [a Cargo bug](https://github.com/rust-lang/cargo/issues/15312),
+now fixed, where specifying `--crate-type=staticlib` multiple times broke
+incremental builds.
+
+#### Random CI failures due to missing sanitizer symbols
+
+After integration, we began seeing inexplicable linker errors about missing
+[ASAN symbols](https://github.com/ClickHouse/ClickHouse/pull/76921#issuecomment-2688688637)
+in non-sanitizer builds. We traced the issue to sccache; upgrading from
+0.7.7 to 0.10.0 initially appeared to resolve it, but the problem
+resurfaced and we have since disabled sccache for Rust builds.
+
+## Contributing back to the ecosystem
+
+Operating at ClickHouse-scale surfaces edge cases and performance
+bottlenecks that rarely appear in smaller environments. Rather than
+maintaining long-lived forks, we have prioritized contributing improvements
+upstream:
+
+- **[Improved logging flexibility for debugging performance issues](https://github.com/delta-io/delta-kernel-rs/pull/1111)**:
+  enabling logging to be configured dynamically at runtime, improving
+  operational introspection for tables with large numbers of metadata files.
+
+- **[Asynchronous metadata processing for improved scalability](https://github.com/delta-io/delta-kernel-rs/pull/1827)**:
+  modifying the FFI interface to pass handles instead of references, so
+  metadata operations (including object storage reads) can be parallelized
+  outside a single-threaded callback.
+
+## Looking forward
+
+One immediate limitation is the inability to create empty Delta Lake tables
+through the Rust kernel. Today, ClickHouse can attach to existing Delta
+tables and infer their schema:
+
+```sql
+CREATE TABLE hits_delta
+    ENGINE = DeltaLake('https://datasets-documentation.s3.amazonaws.com/lake_formats/delta_lake/')
+```
+
+But it cannot initialize a new table and materialize the corresponding
+Delta log and metadata on object storage. Addressing this would let users
+define tables directly from ClickHouse backed by Delta Lake from the outset.
+
+The Change Data Feed (CDF) support described earlier will also provide the
+foundation for CDC-oriented workflows on top of Delta Lake data in
+ClickPipes. Exposing table history, commit timelines, and version metadata
+as native system tables in ClickHouse would make it significantly easier to
+understand data evolution and operate incremental workloads.
+
+## Conclusion
+
+Integrating the Rust Delta Kernel into ClickHouse represents a shift in how
+we approach open table formats, moving from bespoke implementations toward
+shared, well-defined abstractions. This has allowed us to accelerate feature
+development, reduce maintenance overhead, and focus on delivering
+high-performance analytics at scale. By contributing improvements upstream
+and continuing to close the remaining gaps, we hope to shape a more robust
+and interoperable data lake ecosystem.
+
+---
+
+*This post was originally published on the
+[Delta Lake blog](https://delta.io/blog/2026-05-18-integrating-the-rust-delta-kernel-into-clickhouse/)
+by Melvyn Peignon, Kseniia Sumarokova, and Raul Marin. Republished here with
+attribution to the original authors.*

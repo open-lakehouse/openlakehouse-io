@@ -1,6 +1,43 @@
+import { useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Calendar, Github, MessageCircle, Users, ExternalLink } from "lucide-react";
+import { Seo } from "@/components/Seo";
+import meetup1 from "@/assets/meetups/meetup-1.jpg.asset.json";
+import meetup2 from "@/assets/meetups/meetup-2.jpg.asset.json";
+import meetup3 from "@/assets/meetups/meetup-3.jpg.asset.json";
+import meetup4 from "@/assets/meetups/meetup-4.jpg.asset.json";
+import meetup5 from "@/assets/meetups/meetup-5.jpg.asset.json";
+import meetup6 from "@/assets/meetups/meetup-6.jpg.asset.json";
+import meetup7 from "@/assets/meetups/meetup-7.jpg.asset.json";
+import meetup8 from "@/assets/meetups/meetup-8.jpg.asset.json";
+import meetup9 from "@/assets/meetups/meetup-9.jpg.asset.json";
+import meetup10 from "@/assets/meetups/meetup-10.jpg.asset.json";
+import meetup11 from "@/assets/meetups/meetup-11.jpg.asset.json";
+import meetup12 from "@/assets/meetups/meetup-12.jpg.asset.json";
+import meetup13 from "@/assets/meetups/meetup-13.jpg.asset.json";
+import meetup14 from "@/assets/meetups/meetup-14.jpg.asset.json";
+
+
+
+// Hand-tuned order: alternate audience, atmosphere, portraits, detail shots
+const gallery = [
+  { src: meetup3.url, alt: "Open Lakehouse + AI Amsterdam — speakers with mascots" },
+  { src: meetup8.url, alt: "Packed audience watching a Spark talk" },
+  { src: meetup14.url, alt: "Open Lakehouse Mini Summit attendees smiling for a group photo" },
+  { src: meetup9.url, alt: "Open Lakehouse Meetup stickers — Iceberg, Delta Lake, and more" },
+  { src: meetup10.url, alt: "Evening dinner under string lights at an Open Lakehouse meetup" },
+  { src: meetup1.url, alt: "Packed room at an Open Lakehouse meetup" },
+  { src: meetup13.url, alt: "Daft talk: Your Lakehouse Has Everything You Need" },
+  { src: meetup11.url, alt: "Speaker presenting Delta Lake kernel architecture" },
+  { src: meetup4.url, alt: "Attendees during a session at Open Lakehouse Amsterdam" },
+  { src: meetup12.url, alt: "Outdoor reception tent at night during an Open Lakehouse meetup" },
+  { src: meetup2.url, alt: "Speaker presenting at an Open Lakehouse meetup" },
+  { src: meetup5.url, alt: "Open Lakehouse meetup moment" },
+  { src: meetup7.url, alt: "Open Lakehouse meetup moment" },
+  { src: meetup6.url, alt: "Open Lakehouse meetup moment" },
+];
 
 const channels = [
   {
@@ -33,8 +70,15 @@ const channels = [
   },
 ];
 
-const Community = () => (
+const Community = () => {
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  return (
   <div className="min-h-screen flex flex-col">
+    <Seo
+      title="Open Lakehouse Community — Meetups, Slack, GitHub"
+      description="Meetups, Slack channels, GitHub orgs, and gatherings of practitioners building the open lakehouse: Delta Lake, Iceberg, Unity Catalog, MLflow, and Apache Spark."
+      path="/community"
+    />
     <SiteHeader />
     <main className="flex-1">
       {/* Hero */}
@@ -77,6 +121,39 @@ const Community = () => (
         </div>
       </section>
 
+      {/* Past meetups gallery */}
+      <section className="container pb-20 md:pb-28">
+        <div className="max-w-3xl mb-10 md:mb-14">
+          <p className="text-sm font-medium uppercase tracking-widest text-primary">Past meetups</p>
+          <h2 className="mt-3 text-3xl md:text-5xl font-semibold tracking-tight">
+            Moments from the community.
+          </h2>
+          <p className="mt-4 text-muted-foreground text-lg leading-relaxed">
+            Snapshots from Open Lakehouse meetups around the world — talks, hallway tracks, and the
+            people building open data and AI in the open.
+          </p>
+        </div>
+        <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 md:gap-5 [column-fill:_balance]">
+          {gallery.map((img, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setLightbox(img)}
+              className="group relative mb-4 md:mb-5 block w-full overflow-hidden rounded-xl bg-secondary shadow-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary break-inside-avoid"
+              aria-label={`Open photo: ${img.alt}`}
+            >
+              <img
+                src={img.src}
+                alt={img.alt}
+                loading="lazy"
+                className="block w-full h-auto transition-transform duration-500 group-hover:scale-[1.03]"
+              />
+              <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          ))}
+        </div>
+      </section>
+
       {/* CTA banner */}
       <section className="container pb-24">
         <div className="rounded-2xl bg-brand-gradient p-10 md:p-14 text-center shadow-glow">
@@ -94,13 +171,22 @@ const Community = () => (
             className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm md:text-base font-bold text-[hsl(var(--brand-grape))] hover:text-[hsl(var(--brand-blueberry))] shadow-lg hover:scale-105 transition-all"
           >
             <Calendar className="h-4 w-4" />
-            Grab your spot on Luma →
+            Grab your spot →
           </a>
         </div>
       </section>
     </main>
     <SiteFooter />
+
+    <Dialog open={!!lightbox} onOpenChange={(o) => !o && setLightbox(null)}>
+      <DialogContent className="max-w-5xl p-0 bg-transparent border-0 shadow-none">
+        {lightbox && (
+          <img src={lightbox.src} alt={lightbox.alt} className="w-full h-auto rounded-lg" />
+        )}
+      </DialogContent>
+    </Dialog>
   </div>
-);
+  );
+};
 
 export default Community;

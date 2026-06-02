@@ -1,4 +1,13 @@
 import type { ComponentType } from "react";
+import thumbIceberg from "@/assets/blog-iceberg.jpg";
+import thumbDelta from "@/assets/blog-delta.jpg";
+import thumbAgentic from "@/assets/blog-agentic.jpg";
+
+const categoryThumbnails: Record<string, string> = {
+  iceberg: thumbIceberg,
+  "delta-lake": thumbDelta,
+  agentic: thumbAgentic,
+};
 
 type MdxModule = {
   default: ComponentType<any>;
@@ -15,6 +24,7 @@ export type Author = {
   role?: string;
   twitter?: string;
   github?: string;
+  linkedin?: string;
   Component: ComponentType<any>;
 };
 
@@ -24,8 +34,10 @@ export type Post = {
   title: string;
   date: string;
   authorSlug: string;
+  authorSlugs: string[];
   excerpt?: string;
   tags: string[];
+  thumbnail?: string;
   Component: ComponentType<any>;
 };
 
@@ -41,6 +53,7 @@ function parseAuthors(): Record<string, Author> {
       role: data.role,
       twitter: data.twitter,
       github: data.github,
+      linkedin: data.linkedin,
       Component: authorMods[path].default,
     };
   }
@@ -52,16 +65,26 @@ function parsePosts(): Post[] {
   for (const path of Object.keys(postMods)) {
     const parts = path.replace(/^\.\/posts\//, "").split("/");
     const category = parts[0];
-    const slug = parts[parts.length - 1].replace(/\.mdx$/, "");
+    const file = parts[parts.length - 1].replace(/\.mdx$/, "");
+    // Directory-based posts: posts/<category>/<slug>/index.mdx
+    // Legacy flat posts: posts/<category>/<slug>.mdx
+    const slug = file === "index" && parts.length >= 3 ? parts[parts.length - 2] : file;
     const data = postMods[path].frontmatter ?? {};
+    const authorList: string[] = Array.isArray(data.authors)
+      ? data.authors
+      : data.author
+        ? [data.author]
+        : [];
     posts.push({
       slug,
       category,
       title: data.title ?? slug,
       date: data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
-      authorSlug: data.author ?? "",
+      authorSlug: authorList[0] ?? "",
+      authorSlugs: authorList,
       excerpt: data.excerpt,
       tags: data.tags ?? [],
+      thumbnail: data.thumbnail ?? categoryThumbnails[category],
       Component: postMods[path].default,
     });
   }
@@ -78,7 +101,7 @@ export const getPost = (category: string, slug: string) =>
 
 export const getAuthor = (slug: string) => authors[slug];
 
-export const postsByAuthor = (slug: string) => posts.filter((p) => p.authorSlug === slug);
+export const postsByAuthor = (slug: string) => posts.filter((p) => p.authorSlugs.includes(slug));
 
 export const postsByCategory = (category: string) => posts.filter((p) => p.category === category);
 

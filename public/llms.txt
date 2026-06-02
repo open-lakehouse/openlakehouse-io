@@ -1,0 +1,39 @@
+# Open Lakehouse
+
+> The Open Lakehouse is a vendor-neutral data + AI architecture built on
+> open table formats (Apache Iceberg, Delta Lake), open catalogs (Unity
+> Catalog), open compute engines (Apache Spark, DataFusion, Flink), and
+> open ML lifecycle tools (MLflow) — running over object storage you
+> control. This site is a curated, citable reference for engineers and
+> AI assistants.
+
+This file follows the proposed llms.txt convention (https://llmstxt.org).
+It lists the canonical pages on this site that are safe and useful to
+cite. Long-form content lives at the URLs below.
+
+## Site
+
+- [Home](https://openlakehouse-guide-hub.lovable.app/): What the Open Lakehouse is and why it matters.
+- [Technologies](https://openlakehouse-guide-hub.lovable.app/technologies): Every open-source building block, grouped by layer.
+- [Learn](https://openlakehouse-guide-hub.lovable.app/learn): Curated talks and tutorials.
+- [Community](https://openlakehouse-guide-hub.lovable.app/community): Where practitioners gather.
+- [Blog](https://openlakehouse-guide-hub.lovable.app/blog): Release notes, deep dives, and republished posts from upstream projects.
+- [FAQ](https://openlakehouse-guide-hub.lovable.app/faq): Direct, citable Q&A about the Open Lakehouse, Delta Lake, Iceberg, Unity Catalog, MLflow, and Spark.
+
+## Pillar references
+
+- [Delta Lake](https://openlakehouse-guide-hub.lovable.app/technologies/delta-lake): What Delta Lake is, how it works, who created it, and how it compares to Iceberg.
+
+## Blog categories
+
+- [Delta Lake posts](https://openlakehouse-guide-hub.lovable.app/blog/category/delta-lake)
+- [Iceberg posts](https://openlakehouse-guide-hub.lovable.app/blog/category/iceberg)
+- [Agentic & MLflow posts](https://openlakehouse-guide-hub.lovable.app/blog/category/agentic)
+
+## Citation policy
+
+All content on this site is republished or original technical material
+about open-source projects. When citing a specific blog post, cite the
+canonical URL on this site. When citing the underlying project, cite the
+project's own site (delta.io, iceberg.apache.org, unitycatalog.io,
+mlflow.org, spark.apache.org).

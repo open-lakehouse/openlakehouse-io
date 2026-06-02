@@ -22,6 +22,20 @@ const learn = [
   { name: "Open Lakehouse Tutorials", url: "https://openlakehouse.io" },
 ];
 
+const asfProjects = [
+  { name: "Apache Spark", url: "https://spark.apache.org/" },
+  { name: "Apache Iceberg", url: "https://iceberg.apache.org/" },
+  { name: "Apache Polaris", url: "https://polaris.apache.org/" },
+  { name: "Apache Flink", url: "https://flink.apache.org/" },
+  { name: "Apache DataFusion", url: "https://datafusion.apache.org/" },
+];
+
+const lfaiProjects = [
+  { name: "Unity Catalog", url: "https://lfaidata.foundation/projects/unity-catalog/" },
+  { name: "Delta Lake", url: "https://lfaidata.foundation/projects/delta-lake/" },
+  { name: "MLflow", url: "https://insights.linuxfoundation.org/project/MLF" },
+];
+
 const socials: Record<string, { name: string; url: string }[]> = {
   X: [
     { name: "@deltalakeio", url: "https://x.com/deltalakeio" },
@@ -67,7 +81,7 @@ export const SiteFooter = () => {
   return (
     <footer className="border-t border-border bg-gradient-to-b from-background to-secondary/40">
       <div className="container py-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-12 mb-16">
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-widest text-primary mb-5">Projects</h4>
             <LinkList items={projects} />
@@ -118,11 +132,25 @@ export const SiteFooter = () => {
               </li>
             </ul>
           </div>
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-primary mb-5">Apache Software Foundation</h4>
+            <LinkList items={asfProjects} />
+            <p className="mt-4 text-xs text-muted-foreground leading-relaxed">
+              Apache®, the Apache feather logo, and project names are trademarks of the Apache Software Foundation.
+            </p>
+          </div>
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-primary mb-5">LF AI &amp; Data</h4>
+            <LinkList items={lfaiProjects} />
+            <p className="mt-4 text-xs text-muted-foreground leading-relaxed">
+              Hosted by the LF AI &amp; Data Foundation, a project of The Linux Foundation.
+            </p>
+          </div>
         </div>
 
         <div className="pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={logoUrl} alt="Open Lakehouse + AI" className="h-7 w-auto invert dark:invert-0" />
+            <img src={logoUrl} alt="Open Lakehouse Guide Hub — open data and AI architecture on Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark" className="h-7 w-auto invert dark:invert-0" />
             <span className="text-sm text-muted-foreground">© {new Date().getFullYear()} openlakehouse.io · Open by design.</span>
           </div>
           <p className="text-xs text-muted-foreground">Vendor-neutral · Open standards · Community-driven</p>
