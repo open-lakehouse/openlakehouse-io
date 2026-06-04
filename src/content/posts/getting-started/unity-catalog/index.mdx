@@ -1,0 +1,83 @@
+---
+title: "Getting started with Unity Catalog"
+date: 2026-06-03
+authors: [scott-haines]
+excerpt: "Five minutes from zero to a working Unity Catalog mental model — the open catalog for data and AI."
+tags: [unity-catalog, governance, catalog]
+include: [learn]
+status: published
+kind: getting-started
+readingTime: 5
+video: "NUuZ2n_ZkqI"
+---
+
+Unity Catalog is the open-source catalog for **every** asset in your lakehouse — tables, files,
+functions, and AI models — with one shared permission model that travels across engines.
+
+## Why catalogs matter
+
+Without a catalog, every engine reinvents discovery and permissions. With one, your tables
+become first-class, shareable assets that any compatible engine — Spark, Trino, DuckDB,
+Daft — can read with the same identity and the same governance rules.
+
+<Callout type="tip" title="Mental model">
+Catalog → Schema → Asset. Three levels, one namespace. Anything you can register fits
+into that hierarchy: Delta tables, Iceberg tables, volumes (files), functions, AI models.
+</Callout>
+
+## Spin it up locally
+
+<Steps>
+  <Step title="Clone and start the server">
+    The reference server is a single Java process. Clone the repo and start it — no external
+    database required for local dev.
+
+    ```bash
+    git clone https://github.com/unitycatalog/unitycatalog
+    cd unitycatalog
+    bin/start-uc-server
+    ```
+  </Step>
+  <Step title="List the seed assets">
+    The server boots with a sample catalog so you can poke at it before creating your own.
+
+    ```bash
+    bin/uc table list --catalog unity --schema default
+    ```
+  </Step>
+  <Step title="Create your first table">
+    Register a Delta table that lives on local disk — the same API works against S3 / GCS / ADLS.
+
+    ```bash
+    bin/uc table create \
+      --full_name unity.default.my_first_table \
+      --columns "id INT, name STRING" \
+      --storage_location file:///tmp/my_first_table
+    ```
+  </Step>
+</Steps>
+
+## Use it from your favorite LLM
+
+Want to explore Unity Catalog further with Claude or ChatGPT? Copy this prompt:
+
+<PromptBlock label="Prompt for your LLM">
+You are helping me learn Unity Catalog. Given the following primitives:
+
+- Catalogs, Schemas, Tables (Delta + Iceberg), Volumes, Functions, Models
+- Grants on each level
+- A REST API + CLI
+
+Walk me through:
+1. The minimal set of `uc` CLI commands to register a Delta table and grant SELECT
+   to another user.
+2. How those commands map to the underlying REST endpoints.
+3. How an engine like Spark uses the catalog to resolve a table reference at
+   query time.
+</PromptBlock>
+
+## What's next
+
+- **Deep dive:** how the three-level namespace maps to storage.
+- **Tutorial:** federate Unity Catalog with an Iceberg REST catalog.
+- **Concepts:** lineage and audit trails via OpenLineage.

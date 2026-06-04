@@ -11,6 +11,8 @@ type SeoProps = {
   jsonLd?: Record<string, unknown> | Record<string, unknown>[];
   /** When true, append " — Open Lakehouse" to <title>. Default true. */
   suffix?: boolean;
+  /** Emit <meta name="robots" content="noindex,nofollow"> — use for preview content. */
+  noindex?: boolean;
 };
 
 /**
@@ -28,6 +30,7 @@ export const Seo = ({
   image,
   jsonLd,
   suffix = true,
+  noindex = false,
 }: SeoProps) => {
   const url = canonicalUrl(path);
   const fullTitle = suffix && !title.includes(SITE_NAME) ? `${title} — ${SITE_NAME}` : title;
@@ -37,6 +40,7 @@ export const Seo = ({
     <Helmet>
       <title>{fullTitle}</title>
       <meta name="description" content={description} />
+      {noindex && <meta name="robots" content="noindex,nofollow" />}
       <link rel="canonical" href={url} />
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={description} />

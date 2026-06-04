@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { CarouselApi } from "@/components/ui/carousel";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { Calendar, Github, MessageCircle, Users, ExternalLink } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import meetup1 from "@/assets/meetups/meetup-1.jpg.asset.json";
@@ -70,8 +72,29 @@ const channels = [
   },
 ];
 
+const PRELOAD_BATCH = 5;
+
 const Community = () => {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [api, setApi] = useState<CarouselApi | null>(null);
+  const [loadedCount, setLoadedCount] = useState(PRELOAD_BATCH);
+
+  useEffect(() => {
+    if (!api) return;
+    const onSelect = () => {
+      const idx = api.selectedScrollSnap();
+      // Reveal the next batch when the user reaches within 2 slides of the last loaded image
+      const needed = Math.ceil((idx + 3) / PRELOAD_BATCH) * PRELOAD_BATCH;
+      setLoadedCount((c) => Math.min(gallery.length, Math.max(c, needed)));
+    };
+    api.on("select", onSelect);
+    api.on("scroll", onSelect);
+    return () => {
+      api.off("select", onSelect);
+      api.off("scroll", onSelect);
+    };
+  }, [api]);
+
   return (
   <div className="min-h-screen flex flex-col">
     <Seo
@@ -133,7 +156,42 @@ const Community = () => {
             people building open data and AI in the open.
           </p>
         </div>
-        <div className="columns-1 sm:columns-2 lg:columns-3 gap-4 md:gap-5 [column-fill:_balance]">
+        {/* Mobile: swipeable carousel for lazy-load friendliness */}
+        <div className="sm:hidden -mx-4 px-4">
+          <Carousel setApi={setApi} opts={{ align: "start", loop: false }} className="w-full">
+            <CarouselContent>
+              {gallery.map((img, i) => {
+                const shouldLoad = i < loadedCount;
+                return (
+                  <CarouselItem key={i} className="basis-[85%]">
+                    <button
+                      type="button"
+                      onClick={() => setLightbox(img)}
+                      className="group relative block w-full aspect-[4/3] overflow-hidden rounded-xl bg-secondary shadow-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-label={`Open photo: ${img.alt}`}
+                    >
+                      {shouldLoad ? (
+                        <img
+                          src={img.src}
+                          alt={img.alt}
+                          loading={i < PRELOAD_BATCH ? "eager" : "lazy"}
+                          decoding={i < PRELOAD_BATCH ? "sync" : "async"}
+                          fetchPriority={i < PRELOAD_BATCH ? "high" : "auto"}
+                          className="block w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-secondary animate-pulse" aria-hidden />
+                      )}
+                    </button>
+                  </CarouselItem>
+                );
+              })}
+            </CarouselContent>
+          </Carousel>
+        </div>
+
+        {/* Tablet+ : masonry grid */}
+        <div className="hidden sm:block columns-2 lg:columns-3 gap-4 md:gap-5 [column-fill:_balance]">
           {gallery.map((img, i) => (
             <button
               key={i}
