@@ -22,7 +22,7 @@ const data: Record<string, { title: string; blurb: string; items: { name: string
     items: [
       { name: "Unity Catalog", desc: "Open-source unified governance for data and AI.", url: "https://unitycatalog.io" },
       { name: "Apache Polaris", desc: "An open Iceberg REST catalog implementation.", url: "https://polaris.apache.org" },
-      { name: "Lakekeeper", desc: "Lightweight Rust-based Iceberg REST catalog.", url: "https://lakekeeper.io" },
+      { name: "Lakekeeper", desc: "Lightweight Rust-based Iceberg REST catalog.", url: "https://docs.lakekeeper.io/" },
     ],
   },
   "agentic": {

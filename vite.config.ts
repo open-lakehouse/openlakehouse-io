@@ -9,6 +9,7 @@ import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypePrettyCode from "rehype-pretty-code";
 import { componentTagger } from "lovable-tagger";
+import { postMarkdownPlugin } from "./scripts/vite-post-markdown";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -21,6 +22,8 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     { enforce: "pre", ...mdx({
+      jsxRuntime: "automatic",
+      development: mode === "development",
       providerImportSource: "@mdx-js/react",
       remarkPlugins: [remarkGfm, remarkFrontmatter, [remarkMdxFrontmatter, { name: "frontmatter" }]],
       rehypePlugins: [
@@ -30,6 +33,7 @@ export default defineConfig(({ mode }) => ({
       ],
     }) } as any,
     react(),
+    postMarkdownPlugin(),
     mode === "development" && componentTagger(),
   ].filter(Boolean),
   resolve: {

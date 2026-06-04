@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Github, Linkedin, Twitter, Youtube, MessageCircle, ExternalLink, Calendar } from "lucide-react";
 import logoUrl from "@/assets/bundled/olai-logo-white.png";
+import databricksLogo from "@/assets/logos/databricks.svg";
 
 const projects = [
   { name: "Delta Lake", url: "https://delta.io" },
@@ -19,7 +20,7 @@ const learn = [
   { name: "Databricks Blog", url: "https://www.databricks.com/blog" },
   { name: "Tabular Substack", url: "https://tabular.substack.com" },
   { name: "DataFusion Tutorials", url: "https://datafusion.apache.org/user-guide" },
-  { name: "Open Lakehouse Tutorials", url: "https://openlakehouse.io" },
+  { name: "Open Lakehouse Tutorials", url: "/learn/getting-started/" },
 ];
 
 const asfProjects = [
@@ -38,7 +39,7 @@ const lfaiProjects = [
 
 const socials: Record<string, { name: string; url: string }[]> = {
   X: [
-    { name: "@deltalakeio", url: "https://x.com/deltalakeio" },
+    { name: "@DeltaLakeOSS", url: "https://x.com/DeltaLakeOSS" },
     { name: "@ApacheIceberg", url: "https://x.com/apacheiceberg" },
     { name: "@ApacheSpark", url: "https://x.com/ApacheSpark" },
     { name: "@MLflow", url: "https://x.com/MLflow" },
@@ -50,6 +51,7 @@ const socials: Record<string, { name: string; url: string }[]> = {
   Reddit: [
     { name: "r/dataengineering", url: "https://reddit.com/r/dataengineering" },
     { name: "r/apachespark", url: "https://reddit.com/r/apachespark" },
+    { name: "r/open_lakehouse", url: "https://www.reddit.com/r/open_lakehouse/" },
   ],
   YouTube: [
     { name: "Delta Lake", url: "https://www.youtube.com/@DeltaLake" },
@@ -153,7 +155,19 @@ export const SiteFooter = () => {
             <img src={logoUrl} alt="Open Lakehouse Guide Hub — open data and AI architecture on Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark" className="h-7 w-auto invert dark:invert-0" />
             <span className="text-sm text-muted-foreground">© {new Date().getFullYear()} openlakehouse.io · Open by design.</span>
           </div>
-          <p className="text-xs text-muted-foreground">Vendor-neutral · Open standards · Community-driven</p>
+          <div className="flex flex-col md:items-end gap-2">
+            <p className="text-xs text-muted-foreground">Vendor-neutral · Open standards · Community-driven</p>
+            <a
+              href="https://en.wikipedia.org/wiki/Databricks"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <span>Sponsored by</span>
+              <img src={databricksLogo} alt="Databricks" className="h-5 w-auto invert dark:invert-0" />
+              <span className="font-semibold text-foreground/80">Databricks</span>
+            </a>
+          </div>
         </div>
       </div>
     </footer>

@@ -2,17 +2,86 @@ import { useEffect, useState } from "react";
 import logoUrl from "@/assets/bundled/olai-logo-white.png";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ChevronDown, Cpu, BookOpen, Bot, Layers, ShieldCheck, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type TechItem = { name: string; url: string };
+type TechCategory = {
+  slug: string;
+  title: string;
+  icon: typeof Cpu;
+  items: TechItem[];
+};
+
+const techCategories: TechCategory[] = [
+  {
+    slug: "compute-engines",
+    title: "Compute Engines",
+    icon: Cpu,
+    items: [
+      { name: "Apache Spark", url: "https://spark.apache.org" },
+      { name: "Apache Flink", url: "https://flink.apache.org" },
+      { name: "DataFusion", url: "https://datafusion.apache.org" },
+    ],
+  },
+  {
+    slug: "catalogs",
+    title: "Catalogs",
+    icon: BookOpen,
+    items: [
+      { name: "Unity Catalog", url: "https://unitycatalog.io" },
+      { name: "Apache Polaris", url: "https://polaris.apache.org" },
+      { name: "Lakekeeper", url: "https://docs.lakekeeper.io/" },
+    ],
+  },
+  {
+    slug: "agentic",
+    title: "Agentic",
+    icon: Bot,
+    items: [{ name: "MLflow", url: "https://mlflow.org" }],
+  },
+  {
+    slug: "lakehouse-formats",
+    title: "Lakehouse Table Formats",
+    icon: Layers,
+    items: [
+      { name: "Apache Iceberg", url: "https://iceberg.apache.org" },
+      { name: "Delta Lake", url: "https://delta.io" },
+      { name: "Apache Hudi", url: "https://hudi.apache.org" },
+    ],
+  },
+  {
+    slug: "orchestration",
+    title: "Orchestration",
+    icon: Workflow,
+    items: [
+      { name: "Apache Airflow", url: "https://airflow.apache.org" },
+      { name: "Temporal", url: "https://temporal.io" },
+    ],
+  },
+  {
+    slug: "open-governance",
+    title: "Open Governance",
+    icon: ShieldCheck,
+    items: [
+      { name: "OpenLineage", url: "/technologies/open-governance#open-lineage" },
+      { name: "Policies", url: "/technologies/open-governance#open-policies" },
+      { name: "ABAC", url: "/technologies/open-governance" },
+    ],
+  },
+];
 
 export const SiteHeader = () => {
   const { pathname } = useLocation();
-  const isHome = pathname === "/";
   const [open, setOpen] = useState(false);
+  const [techOpen, setTechOpen] = useState(false);
+  const [mobileTechOpen, setMobileTechOpen] = useState(false);
 
   // Close on route change
   useEffect(() => {
     setOpen(false);
+    setTechOpen(false);
+    setMobileTechOpen(false);
   }, [pathname]);
 
   // Lock body scroll when menu open
@@ -28,26 +97,17 @@ export const SiteHeader = () => {
   const mobileLinkClass =
     "block w-full px-4 py-4 text-lg font-medium text-foreground/90 hover:text-foreground hover:bg-accent/50 rounded-md transition-colors";
 
-  const TechLink = ({ className, mobile }: { className: string; mobile?: boolean }) =>
-    isHome ? (
-      <a href="#technologies" className={className} onClick={() => mobile && setOpen(false)}>
-        Technologies
-      </a>
-    ) : (
-      <Link to="/technologies" className={className}>Technologies</Link>
-    );
-
-  const LearnLink = ({ className, mobile }: { className: string; mobile?: boolean }) =>
-    isHome ? (
-      <a href="#learn" className={className} onClick={() => mobile && setOpen(false)}>
-        Learn
-      </a>
-    ) : (
-      <Link to="/learn" className={className}>Learn</Link>
-    );
+  const LearnLink = ({ className, mobile }: { className: string; mobile?: boolean }) => (
+    <Link to="/learn" className={className} onClick={() => mobile && setOpen(false)}>
+      Learn
+    </Link>
+  );
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 backdrop-blur-xl">
+    <header
+      className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 backdrop-blur-xl"
+      onMouseLeave={() => setTechOpen(false)}
+    >
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center group">
           <img
@@ -59,7 +119,22 @@ export const SiteHeader = () => {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1">
-          <TechLink className={desktopLinkClass} />
+          <div
+            className="relative"
+            onMouseEnter={() => setTechOpen(true)}
+          >
+            <Link
+              to="/technologies"
+              className={cn(desktopLinkClass, "inline-flex items-center gap-1")}
+              aria-haspopup="true"
+              aria-expanded={techOpen}
+            >
+              Technologies
+              <ChevronDown
+                className={cn("h-3.5 w-3.5 transition-transform", techOpen && "rotate-180")}
+              />
+            </Link>
+          </div>
           <Link to="/blog" className={desktopLinkClass}>Blog</Link>
           <LearnLink className={desktopLinkClass} />
           <Link to="/community" className={desktopLinkClass}>Community</Link>
@@ -93,16 +168,85 @@ export const SiteHeader = () => {
         </div>
       </div>
 
+      {/* Desktop mega menu — extends the header's overlay/blur */}
+      <div
+        className={cn(
+          "hidden md:block overflow-hidden border-border/40 transition-[max-height,opacity,border-color] duration-300 ease-out",
+          techOpen ? "max-h-[600px] opacity-100 border-t" : "max-h-0 opacity-0 border-t-0",
+        )}
+        onMouseEnter={() => setTechOpen(true)}
+      >
+        <div className="container py-8">
+          <div className="grid grid-cols-3 gap-x-8 gap-y-6">
+            {techCategories.map((cat) => (
+              <Link
+                key={cat.slug}
+                to={`/technologies/${cat.slug}`}
+                onClick={() => setTechOpen(false)}
+                className="inline-flex w-fit rounded-md px-2 py-1 text-sm font-semibold tracking-tight text-foreground transition-all hover:text-primary hover:bg-primary/10 hover:shadow-[0_0_20px_hsl(var(--primary)/0.35)]"
+              >
+                {cat.title}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+      </div>
+
       {/* Mobile nav panel */}
       <div
         id="mobile-nav"
         className={cn(
-          "md:hidden overflow-hidden border-t border-border/40 bg-background/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 ease-out",
-          open ? "max-h-96 opacity-100" : "max-h-0 opacity-0",
+          "md:hidden overflow-y-auto border-t border-border/40 bg-background/95 backdrop-blur-xl transition-[max-height,opacity] duration-300 ease-out",
+          open ? "max-h-[calc(100vh-4rem)] opacity-100" : "max-h-0 opacity-0",
         )}
       >
         <nav className="container flex flex-col gap-1 py-4">
-          <TechLink className={mobileLinkClass} mobile />
+          {/* Compound Technologies item */}
+          <div>
+            <div className="flex items-stretch rounded-md overflow-hidden">
+              <Link
+                to="/technologies"
+                onClick={() => setOpen(false)}
+                className="flex-1 px-4 py-4 text-lg font-medium text-foreground/90 hover:text-foreground hover:bg-accent/50 transition-colors"
+              >
+                Technologies
+              </Link>
+              <button
+                type="button"
+                aria-label={mobileTechOpen ? "Collapse technologies" : "Expand technologies"}
+                aria-expanded={mobileTechOpen}
+                onClick={() => setMobileTechOpen((v) => !v)}
+                className="px-4 inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+              >
+                <ChevronDown
+                  className={cn("h-5 w-5 transition-transform", mobileTechOpen && "rotate-180")}
+                />
+              </button>
+            </div>
+            <div
+              className={cn(
+                "overflow-hidden transition-[max-height,opacity] duration-300 ease-out",
+                mobileTechOpen ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0",
+              )}
+            >
+              <div className="pl-3 pr-1 pb-2 space-y-1">
+                {techCategories.map((cat) => (
+                  <Link
+                    key={cat.slug}
+                    to={`/technologies/${cat.slug}`}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-foreground/90 hover:text-foreground hover:bg-accent/40 rounded-md"
+                  >
+                    <cat.icon className="h-4 w-4 text-primary" />
+                    {cat.title}
+                  </Link>
+                ))}
+              </div>
+
+            </div>
+          </div>
+
           <Link to="/blog" className={mobileLinkClass} onClick={() => setOpen(false)}>
             Blog
           </Link>
