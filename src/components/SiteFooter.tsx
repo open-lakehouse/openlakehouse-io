@@ -18,7 +18,7 @@ const learn = [
   { name: "Delta Lake Blog", url: "https://delta.io/blog" },
   { name: "Iceberg Blog", url: "https://iceberg.apache.org/blog" },
   { name: "Databricks Blog", url: "https://www.databricks.com/blog" },
-  { name: "Tabular Substack", url: "https://tabular.substack.com" },
+  
   { name: "DataFusion Tutorials", url: "https://datafusion.apache.org/user-guide" },
   { name: "Open Lakehouse Tutorials", url: "/learn/getting-started/" },
 ];
@@ -51,7 +51,11 @@ const socials: Record<string, { name: string; url: string }[]> = {
   Reddit: [
     { name: "r/dataengineering", url: "https://reddit.com/r/dataengineering" },
     { name: "r/apachespark", url: "https://reddit.com/r/apachespark" },
+    { name: "r/apacheflink", url: "https://www.reddit.com/r/apacheflink/" },
+    { name: "r/ApacheIceberg", url: "https://www.reddit.com/r/ApacheIceberg/" },
+    { name: "r/mlflow", url: "https://www.reddit.com/r/mlflow/" },
     { name: "r/open_lakehouse", url: "https://www.reddit.com/r/open_lakehouse/" },
+    { name: "r/DeltaLake", url: "https://www.reddit.com/r/DeltaLake/" },
   ],
   YouTube: [
     { name: "Delta Lake", url: "https://www.youtube.com/@DeltaLake" },

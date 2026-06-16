@@ -1,0 +1,169 @@
+---
+title: "Apache Iceberg 1.11.0 Release"
+date: 2026-06-16
+authors: [apache-iceberg-pmc]
+excerpt: "Iceberg 1.11.0 lands the biggest REST catalog upgrade since the protocol was introduced, plus encryption, geospatial types, SQL UDFs, Spark 4.1 and Flink 2.1 support, and the first foundations of Format V4."
+tags: [apache-iceberg, release, rest-catalog, spark, flink]
+include: [blog]
+kind: post
+---
+
+The Apache Iceberg community is pleased to announce the release of Apache Iceberg 1.11.0. This release is the result of over **1,000 commits** from **200+ contributors**. See the [release notes](https://iceberg.apache.org/releases/#1110-release) for the complete list of changes.
+
+## Release Highlights
+
+### REST Catalog: A More Complete Protocol
+
+1.11.0 represents the most significant step forward for the REST catalog protocol since it was introduced.
+
+[Remote scan planning](https://github.com/apache/iceberg/pull/13400) allows catalog servers to plan table scans and stream back file scan tasks directly. Previously, every client had to fetch manifest lists and manifests itself to determine which files to read. With server-side planning, clients receive only the relevant scan tasks, reducing driver memory pressure and enabling server-side optimizations that are transparent to the query engine. This release extends remote scan planning to cover [incremental scans](https://github.com/apache/iceberg/pull/14661) for Structured Streaming workloads and [metadata tables](https://github.com/apache/iceberg/pull/14881) such as `history` and `snapshots`. A [per-table override](https://github.com/apache/iceberg/pull/15572) allows individual tables to opt out of catalog-level scan planning mode when needed.
+
+[Freshness-aware table loading](https://github.com/apache/iceberg/pull/14398) adds ETag-based caching to table metadata. When a client loads a table it already has metadata for, the server can return a `304 Not Modified` response instead of re-sending the full metadata payload, cutting unnecessary round-trips in tight read loops and interactive workloads.
+
+[Idempotency key support](https://github.com/apache/iceberg/pull/14740) introduces a standard `Idempotency-Key` header for mutating catalog operations. Retried writes — commits, creates, and drops — are now guaranteed not to execute twice, preventing duplicate snapshots and corrupted state from network timeouts.
+
+[Register View](https://github.com/apache/iceberg/pull/14868) completes the view lifecycle in the REST catalog. Just as tables can be registered from their metadata location, views can now be [registered via the REST API](https://github.com/apache/iceberg/pull/14870) too — enabling cross-catalog migrations and re-attaching orphaned view metadata.
+
+[Custom Table and View Operations](https://github.com/apache/iceberg/pull/14465) can now be injected into the REST catalog, allowing users to extend or override default `TableOperations` and `ViewOperations` behavior without forking the catalog implementation.
+
+### OpenAPI Specification Updates
+
+Several protocol-level additions land in the OpenAPI spec this release, tightening the contract between clients and catalog servers.
+
+- **Namespace separator configurable by server**: [The server can now advertise a custom namespace separator](https://github.com/apache/iceberg/pull/14448) in the config endpoint, allowing catalogs that use separators other than `.` to communicate this to clients without out-of-band configuration.
+- **Register view endpoint**: [A new `/register-view` REST endpoint](https://github.com/apache/iceberg/pull/14869) is added to the OpenAPI spec, enabling view registration as an independently authorized catalog capability.
+- **ETag for `CommitTableResponse`**: [ETag support on commit responses](https://github.com/apache/iceberg/pull/14760) enables clients to detect whether a concurrent write changed the table between their load and commit.
+- **S3 signing endpoint promoted to main spec**: [The S3 signing endpoint](https://github.com/apache/iceberg/pull/15450) moves from an extension into the main OpenAPI spec, making it an official part of the REST catalog protocol.
+- **Partition statistics in `TableUpdate`**: [`SetPartitionStatisticsUpdate` and `RemovePartitionStatisticsUpdate`](https://github.com/apache/iceberg/pull/14957) are now included in the `TableUpdate` union type.
+- **Storage credentials in scan planning responses**: [Storage credentials are now returned](https://github.com/apache/iceberg/pull/15524) in `PlanTableScanResponse` and `FetchPlanningResultResponse` when the `include-credentials` flag is set.
+
+### Spec: SQL UDFs and Geospatial Types
+
+The [SQL UDF Specification](https://github.com/apache/iceberg/pull/14117) introduces a new spec for storing SQL user-defined functions in Iceberg catalogs. UDFs are versioned, support multiple SQL dialects, and are portable across engines, bringing function management into the catalog layer for the first time.
+
+[Geospatial bounding box types](https://github.com/apache/iceberg/pull/12667) add native bounding box types and an `INTERSECTS` predicate to Iceberg's type system, enabling spatial partition pruning and file skipping for geospatial workloads directly on Iceberg tables. [Restrictions for geometry types in V3](https://github.com/apache/iceberg/pull/14250) are also clarified in this release.
+
+Several smaller but meaningful spec additions round out the release:
+
+- **`added-rows` in snapshot fields**: The [`added-rows` field is restored to snapshot metadata](https://github.com/apache/iceberg/pull/14048).
+- **`referenced-by` in `loadTable` response**: [`loadTable` now returns a `referenced-by` field](https://github.com/apache/iceberg/pull/13810) listing views and other objects that depend on the table.
+- **`scan-planning-mode` in `LoadTableResult`**: [The server can now advertise its preferred scan planning mode](https://github.com/apache/iceberg/pull/14867).
+- **404 for missing warehouse on config endpoint**: [The `/v1/config` endpoint now returns 404](https://github.com/apache/iceberg/pull/15746) when the requested warehouse does not exist.
+
+### Performance and Reliability
+
+[LIMIT pushdown to scan](https://github.com/apache/iceberg/pull/14615) stops scanning after enough rows are found when a query includes a `LIMIT` clause, rather than reading all matching files. For exploratory queries, this can reduce I/O by orders of magnitude.
+
+Vectorized reads now cover additional Parquet encodings, eliminating the row-at-a-time fallback for [BYTE_STREAM_SPLIT](https://github.com/apache/iceberg/pull/15373), [DELTA_LENGTH_BYTE_ARRAY, and DELTA_BYTE_ARRAY](https://github.com/apache/iceberg/pull/15362).
+
+[Snapshot expiration cleanup modes](https://github.com/apache/iceberg/pull/14287) introduce a new `cleanupMode` API that gives finer control over what gets cleaned up when snapshots expire.
+
+[Unique table locations](https://github.com/apache/iceberg/pull/12892) via a new catalog property append a UUID to table storage paths, preventing a data loss scenario where `DeleteOrphanFiles` could remove files from a renamed table.
+
+Scheduled credential refresh for [AWS S3FileIO](https://github.com/apache/iceberg/pull/15678) and [GCS FileIO](https://github.com/apache/iceberg/pull/15696) proactively rotates credentials before they expire, eliminating transient failures in long-running Spark and Flink jobs.
+
+The [GCSAnalyticsCore library](https://github.com/apache/iceberg/pull/14333) is now integrated into GCSFileIO, bringing analytics-optimized I/O for Google Cloud Storage.
+
+### Format V4 Foundations
+
+1.11.0 begins laying the groundwork for Table Format V4.
+
+New foundational types — [TrackedFile, TrackingInfo, ContentInfo, and ManifestStats](https://github.com/apache/iceberg/pull/15049) — are the building blocks for V4's adaptive metadata tree.
+
+The new [FormatModel abstraction](https://github.com/apache/iceberg/pull/12774) replaces hardcoded file format handling with a pluggable interface. [Parquet](https://github.com/apache/iceberg/pull/15253), [ORC](https://github.com/apache/iceberg/pull/15255), Avro, and Arrow each now implement a `FormatModel` contract.
+
+### Encryption
+
+1.11.0 makes table encryption available to Iceberg users. The [Encryption integration and test](https://github.com/apache/iceberg/pull/13066) activates the encryption mechanism in Hive tables via a table property containing the ID of the table master key.
+
+[Manifest list encryption](https://github.com/apache/iceberg/pull/7770) extends Iceberg's encryption coverage to manifest list files. [Automatic key rotation](https://github.com/apache/iceberg/pull/14396) adds support for rotating key encryption keys without manual intervention.
+
+[Cloud KMS support](https://github.com/apache/iceberg/pull/15272) now covers AWS, Azure, and GCP through a unified `encryption.kms-type` property.
+
+### New APIs
+
+The [Content Stats API](https://github.com/apache/iceberg/pull/13933) introduces classes for file-level statistics — min/max values, null counts, and more — providing richer information for query planners.
+
+The [Partition Stats Scan API](https://github.com/apache/iceberg/pull/14640) replaces the old single-shot partition stats reader with a composable, filterable interface consistent with the rest of Iceberg's Scan API.
+
+### Engine Updates
+
+#### Spark
+
+[Spark 4.1](https://github.com/apache/iceberg/pull/14155) is now supported, with several notable additions:
+
+- **MERGE INTO schema evolution**: [Initial support](https://github.com/apache/iceberg/pull/14970) for schema changes during merge writes
+- **Shredded Variant writes**: [Support for writing shredded Variant data](https://github.com/apache/iceberg/pull/14297) in Iceberg-Spark
+- **Async micro-batch planner**: [Reduces scheduling overhead](https://github.com/apache/iceberg/pull/15299) in Structured Streaming
+- **Adaptive split sizing**: [Session config support](https://github.com/apache/iceberg/pull/16088) for tuning split sizes and parallelism
+
+**[Spark 3.4 support is deprecated](https://github.com/apache/iceberg/pull/14099)** in this release.
+
+#### Flink
+
+[Flink 2.1](https://github.com/apache/iceberg/pull/13714) is now supported and Flink 1.19 has been removed.
+
+**Row lineage** readers for [`_row_id` and `_last_updated_sequence_number`](https://github.com/apache/iceberg/pull/14148) are now available in Flink, with [row lineage preserved through RewriteDataFiles](https://github.com/apache/iceberg/pull/14149).
+
+The Flink Dynamic Sink receives major improvements:
+
+- **Deletion vector support**: [Efficient row-level deletes](https://github.com/apache/iceberg/pull/14414) without rewriting data files
+- **Variant type support**: [Variant is now supported in Flink 2.1](https://github.com/apache/iceberg/pull/15265)
+- **Schema evolution**: [Support for dropping columns](https://github.com/apache/iceberg/pull/14728) and [case-insensitive field matching](https://github.com/apache/iceberg/pull/14729)
+- **SQL-configurable options**: Dynamic Sink options are now configurable through [Flink SQL](https://github.com/apache/iceberg/pull/15279)
+- **Post-commit maintenance**: [Arbitrary maintenance tasks can now be registered via the IcebergSink Builder](https://github.com/apache/iceberg/pull/15566)
+
+[Nanosecond timestamp precision](https://github.com/apache/iceberg/pull/15475) is now supported, matching the full range of Iceberg's timestamp spec.
+
+#### Kafka Connect
+
+- **Variant type ingestion**: [Semi-structured JSON data](https://github.com/apache/iceberg/pull/15283) can now be ingested directly into Iceberg's Variant type
+- **Table UUID validation on commit**: [Verifies table identity at commit time](https://github.com/apache/iceberg/pull/14979)
+- **SMT offset tracking fix**: [Fixes a bug](https://github.com/apache/iceberg/pull/15880) where Single Message Transforms could cause duplicate records
+
+### Cloud Integrations
+
+**AWS**: The [KMS endpoint is now configurable](https://github.com/apache/iceberg/pull/14246), [chunked encoding for S3 requests is configurable](https://github.com/apache/iceberg/pull/15242), custom credential providers are [preferred over the default chain](https://github.com/apache/iceberg/pull/15249), and [retry policies now apply to Glue and DynamoDB clients](https://github.com/apache/iceberg/pull/15094).
+
+**Azure**: A [KeyManagementClient implementation for Azure Key Vault](https://github.com/apache/iceberg/pull/13186) adds native Azure KMS support, and [token credential provider support](https://github.com/apache/iceberg/pull/14136) enables flexible authentication including managed identity and service principal flows.
+
+**GCP**: [Service account impersonation in BigQueryMetastoreCatalog](https://github.com/apache/iceberg/pull/14447), a new [`gcp.auth.credentials-key` property](https://github.com/apache/iceberg/pull/14713) for base64-encoded service account keys, and [ETag-based conflict detection on commit](https://github.com/apache/iceberg/pull/14940).
+
+**Aliyun**: [RRSA authentication is now supported for OSS](https://github.com/apache/iceberg/pull/14443).
+
+## Breaking Changes
+
+- **Apache DataFusion Comet removed**: [The Comet integration has been removed](https://github.com/apache/iceberg/pull/15674) from the Spark module
+- **Java 11 dropped**: [Java 11 support has been removed](https://github.com/apache/iceberg/pull/14400); Java 17 is now the minimum required version
+- **Flink 1.19 removed**: [Flink 1.19 support has been removed](https://github.com/apache/iceberg/pull/13714); upgrade to Flink 1.20 or 2.x
+
+## Dependency Updates
+
+Notable version changes in this release:
+
+- **AWS SDK**: 2.33.0 → 2.44.4
+- **Parquet**: 1.16.0 → 1.17.1
+- **ORC**: 1.9.7 → 1.9.8
+- **Avro**: 1.12.0 → 1.12.1
+- **Nessie**: 0.104.5 → 0.107.5
+- **Guava**: 33.4.8-jre → 33.6.0-jre
+- **Hadoop**: 3.4.1 → 3.4.3
+- **Jetty**: 11.0.26 → 12.1.8
+
+New support added for Spark 4.1 (4.1.1) and Flink 2.1 (2.1.0).
+
+## Getting Involved
+
+Apache Iceberg is developed by a community of contributors. We use GitHub [issues](https://github.com/apache/iceberg/issues) for tracking work and the [Apache Iceberg Community Slack](https://iceberg.apache.org/community/#slack) for discussions.
+
+The easiest way to get started is to:
+
+1. Try Apache Iceberg with your workloads and report any issues you encounter
+2. Review the [contributor guide](https://iceberg.apache.org/contribute/)
+3. Look for [good first issues](https://github.com/apache/iceberg/contribute)
+
+For more information, visit the [Apache Iceberg repository](https://github.com/apache/iceberg) or the [documentation](https://iceberg.apache.org/docs/latest/).
+
+---
+
+*Originally posted on [https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/](https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/).*

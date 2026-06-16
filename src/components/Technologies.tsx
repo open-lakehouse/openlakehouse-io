@@ -6,7 +6,7 @@ import { useRef, useState, useEffect } from "react";
 const categories = [
   { slug: "compute-engines", title: "Compute Engines", icon: Cpu, items: ["Apache Spark", "Apache Flink", "DataFusion"] },
   { slug: "catalogs", title: "Catalogs", icon: BookOpen, items: ["Unity Catalog", "Apache Polaris", "Lakekeeper"] },
-  { slug: "agentic", title: "Agentic", icon: Bot, items: ["MLflow"] },
+  { slug: "agentic", title: "Agentic", icon: Bot, items: ["MLflow", "Omnigent"] },
   { slug: "lakehouse-formats", title: "Lakehouse Formats", icon: Layers, items: ["Apache Iceberg", "Delta Lake", "Apache Hudi"] },
   { slug: "orchestration", title: "Orchestration", icon: Workflow, items: ["Apache Airflow", "Temporal"] },
   { slug: "open-governance", title: "Open Governance", icon: ShieldCheck, items: ["OpenLineage", "Policies", "ABAC"] },

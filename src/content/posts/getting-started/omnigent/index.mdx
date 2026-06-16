@@ -1,0 +1,87 @@
+---
+title: "Getting started with Omnigent"
+date: 2026-06-15
+authors: [scott-haines]
+excerpt: "Run a coding agent locally with a web UI, inline comments, file editing, and policy enforcement."
+tags: [omnigent, agents, genai]
+include: [learn]
+status: published
+kind: getting-started
+readingTime: 5
+---
+
+Already using Claude Code or Codex? This tutorial shows you what Omnigent adds on top: a web UI with file editing and inline comments, mobile access, session sharing, and the ability to fork or switch agents mid-conversation. None of this is possible with a native coding agent alone.
+
+**Time:** 5 minutes. **Everything runs locally.**
+
+<Callout type="info" title="Prerequisite">
+Get Omnigent running in a few minutes. [Install the CLI](/learn/getting-started/omnigent-install), set up your credentials, and launch your first agent. Once it's running you can add the native macOS app for a full UI — it's the last step of this same flow.
+</Callout>
+
+## 1. Start your coding agent
+
+```bash
+omni claude    # Claude Code
+omni codex     # Codex
+```
+
+Pick whichever you already use. Either command launches the coding agent in your terminal and opens a web UI at `http://localhost:6767`. Both are connected to the same session and stream output in real time.
+
+## 2. Give it a task
+
+Ask it to do something in your project. For example:
+
+```text
+Write a Python function that reads a CSV file and returns the top 5 rows sorted by the second column.
+```
+
+Watch it work in the terminal. Then follow along in the web UI or the desktop app. Terminal, browser, and desktop app are three views of the same session: type in one, and the others update in real time.
+
+<Tabs>
+<Tab label="Web UI">
+
+Open `http://localhost:6767` in your browser. The web UI shows your conversation on the left and a right panel with four tabs: **Files** (browse and edit files the agent created), **Agents** (sub-agents if any), **Shells** (running terminals), and **Todos**. Everything syncs with the terminal in real time.
+
+</Tab>
+<Tab label="Desktop App">
+
+Install the native macOS app from the [install guide](/learn/getting-started/omnigent-install). It attaches to the same local session as the terminal and browser, giving you a polished native UI with the same files, agents, shells, and todos panels.
+
+</Tab>
+</Tabs>
+
+## 3. Try native Omnigent features
+
+Now that your agent has produced some output, try these features in the web UI:
+
+### Comment on the agent's work
+
+Click on a specific part of the agent's output and leave an inline comment like "make this more concise" or "use pandas instead". The agent sees exactly what you're referring to and revises it. No need to describe the location in chat.
+
+### Edit files directly
+
+Open any file the agent created in the built-in editor. Make changes yourself with syntax highlighting. The agent can see your edits and continue from there.
+
+### Paste an image
+
+Drag a screenshot, mockup, or diagram into the chat. The agent sees it alongside your text. Try pasting a screenshot of a UI bug or a design spec.
+
+### Fork a session and switch agents
+
+Fork your current session to try a different approach without affecting the original. The fork copies the full conversation history up to that point, so you can experiment freely.
+
+Sessions in Omnigent belong to you, not to a specific agent, so a fork doesn't have to continue with the agent it started with. **Started in Claude Code? Fork the session and continue the fork with Codex (or vice versa).** The new agent picks up the full conversation history and keeps going, so you can compare how each one tackles the same problem from the same starting point.
+
+## 4. Add a policy in plain language
+
+Type this into the chat:
+
+```text
+Don't send any PII like emails or credit card numbers to the model. Ask me first if a message contains some.
+```
+
+The agent attaches Omnigent's built-in PII policy to the session. From now on, every outgoing model request is scanned, and anything containing PII is held for your approval before it leaves your machine. Try it: paste a log file with a fake email address and watch the policy step in. This is enforcement at the platform layer, something no coding agent can do on its own. Cost budgets, access controls, and more work the same way. See [Contextual Policies](https://omnigent.ai/docs/policies/overview).
+
+## What's next
+
+- [Try Polly](https://omnigent.ai/quickstart/polly) to see multi-agent coding orchestration in action.

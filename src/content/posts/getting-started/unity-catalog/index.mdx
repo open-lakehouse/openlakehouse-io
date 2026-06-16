@@ -8,11 +8,11 @@ include: [learn]
 status: published
 kind: getting-started
 readingTime: 5
-video: "NUuZ2n_ZkqI"
+video: dEFAkS7vYV0
 ---
 
 Unity Catalog is the open-source catalog for **every** asset in your lakehouse — tables, files,
-functions, and AI models — with one shared permission model that travels across engines.
+functions, and AI models — with one shared permission model that travels across engines. In the above video, Developer Advocate's [Lisa Cao](https://www.linkedin.com/in/lisancao/) and [Scott Haines](https://www.linkedin.com/in/scotthaines/) cover what the catalog is, and also what it isn't.
 
 ## Why catalogs matter
 
@@ -39,7 +39,7 @@ into that hierarchy: Delta tables, Iceberg tables, volumes (files), functions, A
     ```
   </Step>
   <Step title="List the seed assets">
-    The server boots with a sample catalog so you can poke at it before creating your own.
+    The server runs locally with a sample catalog so you can test the waters before heading out on your own.
 
     ```bash
     bin/uc table list --catalog unity --schema default
@@ -75,6 +75,10 @@ Walk me through:
 3. How an engine like Spark uses the catalog to resolve a table reference at
    query time.
 </PromptBlock>
+
+## Go Further, Jump into the Unity Catalog Playground
+Head over to [unitycatalog-playground](https://github.com/open-lakehouse/unitycatalog-playground) in the open-lakehouse github organization. This project provides you with a simple way of getting started with Unity Catalog on your own terms. 
+
 
 ## What's next
 

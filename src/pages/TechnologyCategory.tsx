@@ -5,6 +5,8 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
 import { PolicastFlow } from "@/components/PolicastFlow";
 import { OpenLineageFlow } from "@/components/OpenLineageFlow";
+import { PdfReader } from "@/components/PdfReader";
+import { Download } from "lucide-react";
 
 const data: Record<string, { title: string; blurb: string; items: { name: string; desc: string; url: string }[] }> = {
   "compute-engines": {
@@ -30,6 +32,7 @@ const data: Record<string, { title: string; blurb: string; items: { name: string
     blurb: "Tools that make the lakehouse a substrate for AI agents and ML workflows.",
     items: [
       { name: "MLflow", desc: "Open lifecycle for ML and agentic systems.", url: "https://mlflow.org" },
+      { name: "Omnigent", desc: "A common layer over Claude Code, Codex, Pi, and the agents you write yourself: swap or combine harnesses without rewriting, keep them in check with policies and sandboxing, and collaborate in real time on the same live session, from any device.", url: "https://omnigent.ai/" },
     ],
   },
   "lakehouse-formats": {
@@ -91,7 +94,7 @@ const TechnologyCategory = () => {
             <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-6">
               <ArrowLeft className="h-4 w-4" /> Back
             </Link>
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight">{cat.title}</h1>
+            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white">{cat.title}</h1>
             <p className="mt-5 text-lg md:text-xl text-white/85 max-w-2xl">{cat.blurb}</p>
           </div>
         </section>
@@ -124,6 +127,32 @@ const TechnologyCategory = () => {
             })}
           </div>
         </section>
+
+        {slug === "lakehouse-formats" && (
+          <section className="container pb-20">
+            <div className="max-w-2xl mb-8">
+              <p className="text-sm font-medium text-primary uppercase tracking-widest">Delta Lake</p>
+              <h2 className="mt-3 text-2xl md:text-4xl font-bold tracking-tight">The Delta Lake Definitive Guide</h2>
+              <p className="mt-3 text-muted-foreground">
+                Read the full O'Reilly guide on modern data lakehouses with Delta Lake directly here, or download a copy for offline reading.
+              </p>
+              <div className="mt-5">
+                <a
+                  href="/resources/delta-lake-definitive-guide.pdf"
+                  download="delta-lake-definitive-guide.pdf"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-secondary transition-colors"
+                >
+                  <Download className="h-4 w-4" /> Download PDF
+                </a>
+              </div>
+            </div>
+            <PdfReader
+              file="/resources/delta-lake-definitive-guide.pdf"
+              downloadName="delta-lake-definitive-guide.pdf"
+              title="The Delta Lake Definitive Guide"
+            />
+          </section>
+        )}
 
         {slug === "open-governance" && (
           <>
