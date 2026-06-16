@@ -120,7 +120,7 @@ export const PostLayout = ({ post, surface }: { post: Post; surface: PostLayoutS
 
       {post.flowDiagram && <FlowDiagram name={post.flowDiagram} />}
 
-      <div className="prose prose-neutral dark:prose-invert mt-10 max-w-none prose-headings:tracking-tight prose-pre:rounded-xl prose-pre:border prose-pre:border-border">
+      <div className="prose prose-neutral dark:prose-invert mt-10 max-w-none prose-headings:tracking-tight prose-pre:rounded-xl prose-pre:border prose-pre:border-border prose-a:text-primary prose-a:font-medium prose-a:no-underline hover:prose-a:underline prose-a:underline-offset-4">
         <MdxProvider>
           <Body />
         </MdxProvider>

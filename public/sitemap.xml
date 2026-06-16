@@ -66,20 +66,8 @@
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/agentic/mlflow-agents</loc>
-    <lastmod>2026-05-10</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://openlakehouse-guide-hub.lovable.app/blog/agentic/openclaw-tracing</loc>
     <lastmod>2026-05-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/delta-lake/acid-explained</loc>
-    <lastmod>2026-05-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -132,14 +120,26 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/omnigent</loc>
+    <lastmod>2026-06-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/omnigent-install</loc>
+    <lastmod>2026-06-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/unity-catalog</loc>
     <lastmod>2026-06-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/iceberg/getting-started</loc>
-    <lastmod>2026-05-20</lastmod>
+    <loc>https://openlakehouse-guide-hub.lovable.app/blog/iceberg/iceberg-1-11-0-release</loc>
+    <lastmod>2026-06-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -169,22 +169,17 @@
     <priority>0.4</priority>
   </url>
   <url>
+    <loc>https://openlakehouse-guide-hub.lovable.app/authors/apache-iceberg-pmc</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse-guide-hub.lovable.app/authors/ben-fleis</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
     <loc>https://openlakehouse-guide-hub.lovable.app/authors/benjamin-mathew</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/jane-doe</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/john-smith</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>

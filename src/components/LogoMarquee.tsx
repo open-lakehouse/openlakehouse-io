@@ -5,6 +5,7 @@ import unityCatalogLogo from "@/assets/logos/unity-catalog.svg";
 import polarisLogo from "@/assets/logos/apache-polaris.svg";
 import openLineageLogo from "@/assets/logos/openlineage.svg";
 import lakekeeperLogo from "@/assets/logos/lakekeeper.svg";
+import omnigentLogo from "@/assets/logos/omnigent.png";
 
 type Logo = { name: string; slug?: string; src?: string; mono?: boolean; hideName?: boolean; widthClass?: string; url: string };
 
@@ -16,6 +17,7 @@ const logos: Logo[] = [
   { name: "Apache Polaris", src: polarisLogo, mono: true, hideName: true, widthClass: "w-32", url: "https://polaris.apache.org/" },
   { name: "Lakekeeper", src: lakekeeperLogo, widthClass: "w-8", url: "https://lakekeeper.io/" },
   { name: "MLflow", slug: "mlflow", url: "https://mlflow.org/" },
+  { name: "Omnigent", src: omnigentLogo, hideName: true, widthClass: "w-32", url: "https://omnigent.ai/" },
   { name: "Apache Iceberg", src: icebergLogo, hideName: true, widthClass: "w-36", url: "https://iceberg.apache.org/" },
   { name: "Delta Lake", src: deltaLakeLogo, mono: true, hideName: true, widthClass: "w-32", url: "https://delta.io/" },
   { name: "Apache Airflow", slug: "apacheairflow", url: "https://airflow.apache.org/" },
@@ -89,8 +91,8 @@ export const LogoMarquee = () => {
       `}</style>
 
       {/* Edge fades */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-background to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-background to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-[hsl(var(--brand-blueberry))] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-[hsl(var(--brand-blueberry))] to-transparent" />
 
       <div className="flex w-max logo-marquee-track">
         {[0, 1].map((dup) => (

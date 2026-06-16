@@ -38,7 +38,10 @@ const techCategories: TechCategory[] = [
     slug: "agentic",
     title: "Agentic",
     icon: Bot,
-    items: [{ name: "MLflow", url: "https://mlflow.org" }],
+    items: [
+      { name: "MLflow", url: "https://mlflow.org" },
+      { name: "Omnigent", url: "https://omnigent.ai/" },
+    ],
   },
   {
     slug: "lakehouse-formats",
@@ -105,7 +108,7 @@ export const SiteHeader = () => {
 
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/70 backdrop-blur-xl"
+      className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/60 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/40"
       onMouseLeave={() => setTechOpen(false)}
     >
       <div className="container flex h-16 items-center justify-between">
@@ -168,11 +171,11 @@ export const SiteHeader = () => {
         </div>
       </div>
 
-      {/* Desktop mega menu — extends the header's overlay/blur */}
+      {/* Desktop mega menu — overlays content below the header instead of pushing it */}
       <div
         className={cn(
-          "hidden md:block overflow-hidden border-border/40 transition-[max-height,opacity,border-color] duration-300 ease-out",
-          techOpen ? "max-h-[600px] opacity-100 border-t" : "max-h-0 opacity-0 border-t-0",
+          "hidden md:block absolute left-0 right-0 top-full overflow-hidden border-border/40 bg-background/90 backdrop-blur-xl transition-[max-height,opacity,border-color] duration-300 ease-out",
+          techOpen ? "max-h-[600px] opacity-100 border-t border-b" : "max-h-0 opacity-0 border-t-0 border-b-0 pointer-events-none",
         )}
         onMouseEnter={() => setTechOpen(true)}
       >
@@ -192,6 +195,7 @@ export const SiteHeader = () => {
         </div>
 
       </div>
+
 
       {/* Mobile nav panel */}
       <div

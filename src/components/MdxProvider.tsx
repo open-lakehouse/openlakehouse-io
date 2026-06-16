@@ -7,6 +7,7 @@ import { Callout } from "./mdx/Callout";
 import { Steps, Step } from "./mdx/Steps";
 import { FlowDiagram } from "./mdx/FlowDiagram";
 import { PromptBlock } from "./mdx/PromptBlock";
+import { Tabs, Tab } from "./mdx/Tabs";
 
 const components = {
   // Available in every .mdx file — no import needed.
@@ -17,6 +18,8 @@ const components = {
   Step,
   FlowDiagram,
   PromptBlock,
+  Tabs,
+  Tab,
   pre: CodeBlock,
 };
 

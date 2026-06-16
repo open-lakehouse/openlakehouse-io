@@ -1,0 +1,86 @@
+---
+title: "Installing Omnigent"
+date: 2026-06-17
+authors: [scott-haines]
+excerpt: "Install the Omnigent CLI, set up credentials, and launch your first agent in a few minutes."
+tags: [omnigent, agents, genai]
+include: [learn]
+status: published
+kind: getting-started
+readingTime: 4
+---
+
+Get Omnigent running in a few minutes. Install the CLI, set up your credentials, and launch your first agent. Once it's running you can add the native macOS app for a full UI — it's the last step of this same flow.
+
+## Requirements
+
+- **Python 3.12+**
+- **Node.js 22 LTS** and npm
+- **tmux**
+
+## Install Omnigent
+
+<Tabs>
+<Tab label="Installer">
+
+```bash
+curl -fsSL https://omnigent.ai/install.sh | sh
+```
+
+Run the same command to upgrade an existing installation.
+
+</Tab>
+<Tab label="uv">
+
+```bash
+uv tool install omnigent
+```
+
+</Tab>
+<Tab label="pip">
+
+```bash
+pip install omnigent
+```
+
+</Tab>
+<Tab label="Homebrew">
+
+```bash
+brew install omnigent
+```
+
+</Tab>
+</Tabs>
+
+## Set up credentials
+
+```bash
+omni setup
+```
+
+The wizard detects credentials in your environment and prompts for any that are missing. See [Models & Credentials](https://omnigent.ai/docs/build/models#credentials) for the full reference.
+
+## Launch Debby
+
+Try your install with Debby, a built-in multi-AI agent that sends every question to both Claude and GPT and lets them debate.
+
+```bash
+omni debby
+```
+
+This launches a web UI and prints the server URL and port. Ask something like `What came first, the chicken or the egg?` and watch the models challenge each other. See the [Debby reference](https://omnigent.ai/docs/use/builtin-agents/debby) for more.
+
+## Add the macOS app
+
+Prefer a native experience? The macOS app gives you a full UI, session history, and the ability to connect to a local or remote server — on top of the install you just set up. It's optional; everything above already works from the terminal.
+
+[Download macOS App](https://omnigent.ai/download/mac/v0.1.1)
+
+Open the downloaded app — it will ask for a server URL. The `omni debby` command above prints that URL when it launches the web UI. By default it is `http://localhost:6767`. If port 6767 is already taken, the server uses the next available port, so check the web UI for the actual URL (e.g. `http://localhost:6768`). Paste that into the desktop app to connect.
+
+Now your desktop app is ready to use. Pick **Debby** from the agent picker in the UI (along with the other agents we ship) and ask it anything.
+
+## Next step
+
+Now that Omnigent is installed, [get started with the coding agent](/learn/getting-started/omnigent) to see what it adds on top of Claude Code or Codex.

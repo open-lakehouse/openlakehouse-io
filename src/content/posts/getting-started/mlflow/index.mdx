@@ -10,7 +10,81 @@ kind: getting-started
 readingTime: 5
 ---
 
-Coming soon — a five-minute education-first intro to MLflow.
-
 MLflow is the open standard for tracking experiments, packaging models, and shipping ML
 and GenAI applications without locking you to a single vendor or framework.
+
+## Set up the MLflow server
+
+<Callout type="tip" title="MLflow Assistant">
+Need help with this setup? Try <a href="https://mlflow.org/docs/latest/genai/getting-started/try-assistant" target="_blank" rel="noreferrer">MLflow Assistant</a> — a powerful AI assistant that understands your codebase and can set up MLflow for you.
+</Callout>
+
+MLflow is open source, and you can set up the MLflow server using either `pip`, `uv`, or `docker`.
+Before you can leverage MLflow for your LLM application and AI agent development, you must first
+start the MLflow server.
+
+<Tabs>
+  <Tab label="Local (uv)">
+    Install the Python package manager [uv](https://docs.astral.sh/uv/getting-started/installation/)
+    (which also installs the [`uvx` command](https://docs.astral.sh/uv/guides/tools/) for invoking
+    Python tools without installing them).
+
+    Then start an MLflow server locally:
+
+    ```shell
+    uvx mlflow server
+    ```
+
+    <Callout type="info">
+      See <a href="https://mlflow.org/docs/latest/self-hosting/security/secure-installs" target="_blank" rel="noreferrer">Secure Installs</a> to learn how to pin dependencies to known-good versions using hash checking and upload-time filtering.
+    </Callout>
+  </Tab>
+  <Tab label="Local (pip)">
+    **Python environment:** Python 3.10+
+
+    Install the `mlflow` Python package via `pip` and start an MLflow server locally:
+
+    ```shell
+    pip install --upgrade mlflow
+    mlflow server
+    ```
+
+    <Callout type="info">
+      See <a href="https://mlflow.org/docs/latest/self-hosting/security/secure-installs" target="_blank" rel="noreferrer">Secure Installs</a> to learn how to pin dependencies to known-good versions using hash checking and upload-time filtering.
+    </Callout>
+  </Tab>
+  <Tab label="Local (docker)">
+    MLflow provides a Docker Compose file to start a local MLflow server with a PostgreSQL database
+    and a MinIO server.
+
+    ```shell
+    git clone --depth 1 --filter=blob:none --sparse https://github.com/mlflow/mlflow.git
+    cd mlflow
+    git sparse-checkout set docker-compose
+    cd docker-compose
+    cp .env.dev.example .env
+    docker compose up -d
+    ```
+
+    Refer to the [docker-compose README](https://github.com/mlflow/mlflow/tree/master/docker-compose/README.md)
+    for more details (e.g., overriding the default environment variables).
+  </Tab>
+</Tabs>
+
+### Access the UI
+
+Any of the options above will start the server on port 5000 on your local machine, and you can
+access the MLflow web UI at [http://localhost:5000](http://localhost:5000).
+
+If you are looking for more guidance about self-hosting the MLflow server, see the
+[Self-Hosting Guide](https://mlflow.org/docs/latest/self-hosting) for more details.
+
+<Callout type="info">
+If you are using MLflow on Databricks, visit the <a href="https://docs.databricks.com/aws/en/mlflow3/genai/getting-started/" target="_blank" rel="noreferrer">Databricks MLflow getting-started guide</a> for environment setup instructions specific to Databricks.
+</Callout>
+
+## Next step
+
+Now that you have started the MLflow server, let's start tracing your LLM application or AI agent.
+Follow [this quickstart](https://mlflow.org/docs/latest/genai/tracing/quickstart) to send your
+LLM application or AI agent traces to the MLflow server.

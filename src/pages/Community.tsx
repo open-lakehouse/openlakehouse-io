@@ -67,7 +67,7 @@ const channels = [
     icon: Users,
     title: "Contributors",
     desc: "Maintainers, authors, and practitioners shaping open data standards.",
-    href: "/authors/jane-doe",
+    href: "/authors",
     cta: "Meet the people",
   },
 ];
