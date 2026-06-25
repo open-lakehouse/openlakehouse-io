@@ -5,12 +5,15 @@ import {
   Handle,
   Position,
   MarkerType,
+  useNodesState,
+  useEdgesState,
   type Node,
   type Edge,
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Play, Pause, Pin, Cloud, Building2, AlertTriangle } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Play, Pause, Pin, Cloud, Building2, AlertTriangle, ArrowUpRight, ArrowRight } from "lucide-react";
 
 const TICK_MS = 2400;
 
@@ -24,6 +27,8 @@ export type FlowNodeMeta = {
   hint: string;
   icon: IconCmp;
   dashed?: boolean;
+  /** Optional "dig deeper" link to a technology category. */
+  explore?: { label: string; to: string };
 };
 
 export type FlowFrame = {
@@ -115,6 +120,18 @@ const StepNode = ({ data }: NodeProps) => {
           {d.badge && <div className="text-[10px] font-medium uppercase tracking-wider text-primary/80 truncate">{d.badge}</div>}
         </div>
       </div>
+      {d.explore && (
+        <Link
+          to={d.explore.to}
+          onClick={(e) => e.stopPropagation()}
+          className={`nodrag nopan mt-2 flex items-center gap-1 border-t pt-1.5 text-[10px] font-medium transition-colors hover:text-primary ${
+            d.active ? "border-primary/30 text-primary" : "border-border/60 text-primary/70"
+          }`}
+        >
+          <ArrowUpRight className="h-3 w-3 shrink-0" />
+          <span className="truncate">Explore {d.explore.label}</span>
+        </Link>
+      )}
     </div>
   );
 };
@@ -159,14 +176,16 @@ const nodeTypes = { step: StepNode, frame: FrameNode };
 export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
   const { nodeMeta, positions, frames, parentOf, steps, edges: edgeSpecs, intro, callout } = spec;
 
-  // Auto-advancing step, overridden by manual focus (hover/pin) and node hover.
+  // Auto-advancing step, overridden by manual focus (hover/pin) on steps or nodes.
   const [autoStep, setAutoStep] = useState(1);
   const [playing, setPlaying] = useState(true);
   const [pinnedStep, setPinnedStep] = useState<number | null>(null);
   const [hoverStep, setHoverStep] = useState<number | null>(null);
   const [hoverNode, setHoverNode] = useState<string | null>(null);
+  const [pinnedNode, setPinnedNode] = useState<string | null>(null);
 
-  const paused = !playing || pinnedStep != null || hoverStep != null || hoverNode != null;
+  const paused =
+    !playing || pinnedStep != null || pinnedNode != null || hoverStep != null || hoverNode != null;
 
   useEffect(() => {
     if (paused) return;
@@ -174,15 +193,63 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
     return () => clearInterval(id);
   }, [paused, steps.length]);
 
-  const focusNode = hoverNode;
+  // A focused node (hover or pin) takes over from the step sequence.
+  const focusNode = hoverNode ?? pinnedNode;
   const focusStep = focusNode ? null : hoverStep ?? pinnedStep ?? autoStep;
   const effectiveStep = hoverStep ?? pinnedStep ?? autoStep;
 
-  const stepNodes = focusStep ? steps.find((s) => s.n === focusStep)?.nodes ?? [] : [];
-  const isNodeLit = (id: string) => focusNode === id || stepNodes.includes(id);
+  // Steps the focused node participates in — surfaced softly on the pills.
+  const relatedSteps = focusNode ? steps.filter((s) => s.nodes.includes(focusNode)).map((s) => s.n) : [];
 
-  const nodes = useMemo<Node[]>(
-    () => [
+  const selectNode = (id: string) => {
+    setPinnedStep(null);
+    setPinnedNode((cur) => (cur === id ? null : id));
+  };
+  const selectStep = (n: number) => {
+    setPinnedNode(null);
+    setPinnedStep((cur) => (cur === n ? null : n));
+  };
+  const clearPins = () => {
+    setPinnedStep(null);
+    setPinnedNode(null);
+  };
+
+  // Which nodes to highlight for a given focus state.
+  const litNodes = (step: number | null, node: string | null) => {
+    const set = new Set<string>();
+    if (node) set.add(node);
+    if (step != null) for (const id of steps.find((s) => s.n === step)?.nodes ?? []) set.add(id);
+    return set;
+  };
+
+  const styleEdge = (e: FlowEdgeSpec, lit: boolean, stepActive: boolean): Edge => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    sourceHandle: e.sourceHandle,
+    targetHandle: e.targetHandle,
+    type: "smoothstep",
+    animated: lit,
+    label: e.label,
+    labelShowBg: true,
+    labelStyle: { fill: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 600 },
+    labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
+    labelBgPadding: [6, 3] as [number, number],
+    labelBgBorderRadius: 6,
+    style: {
+      stroke: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
+      strokeWidth: lit ? 2 : 1.5,
+      opacity: lit ? 1 : stepActive ? 0.25 : 0.6,
+    },
+    markerEnd: { type: MarkerType.ArrowClosed, color: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" },
+  });
+
+  // Build the graph once. Node/edge identity is preserved across focus changes
+  // (we mutate data/style in place), so React Flow keeps measured sizes and DOM
+  // nodes stable — no flicker, and clicks aren't dropped mid-render.
+  const initialNodes = useMemo<Node[]>(() => {
+    const lit = litNodes(1, null);
+    return [
       ...frames.map((f) => ({
         id: f.id,
         type: "frame",
@@ -197,56 +264,43 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
         id,
         type: "step",
         position: positions[id],
-        data: { ...nodeMeta[id], active: isNodeLit(id) },
+        data: { ...nodeMeta[id], active: lit.has(id) },
         draggable: false,
         selectable: true,
         ...(parentOf[id] ? { parentId: parentOf[id], extent: "parent" as const } : {}),
       })),
-    ],
+    ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [focusNode, focusStep],
+  }, [spec]);
+
+  const initialEdges = useMemo<Edge[]>(
+    () => edgeSpecs.map((e) => styleEdge(e, e.step === 1, true)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [spec],
   );
 
-  const flowEdges = useMemo<Edge[]>(
-    () =>
-      edgeSpecs.map((e) => {
-        const lit =
-          (focusStep != null && e.step === focusStep) ||
-          (focusNode != null && (e.source === focusNode || e.target === focusNode));
-        return {
-          id: e.id,
-          source: e.source,
-          target: e.target,
-          sourceHandle: e.sourceHandle,
-          targetHandle: e.targetHandle,
-          type: "smoothstep",
-          animated: lit,
-          label: e.label,
-          labelShowBg: true,
-          labelStyle: { fill: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 600 },
-          labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
-          labelBgPadding: [6, 3] as [number, number],
-          labelBgBorderRadius: 6,
-          style: {
-            stroke: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
-            strokeWidth: lit ? 2 : 1.5,
-            opacity: lit ? 1 : focusStep != null ? 0.25 : 0.6,
-          },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
-          },
-        };
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Repaint highlight state in place whenever focus changes.
+  useEffect(() => {
+    const lit = litNodes(focusStep, focusNode);
+    setNodes((nds) =>
+      nds.map((n) => (n.type === "step" ? { ...n, data: { ...n.data, active: lit.has(n.id) } } : n)),
+    );
+    const stepActive = focusStep != null;
+    setEdges((eds) =>
+      eds.map((e) => {
+        const es = edgeSpecs.find((s) => s.id === e.id)!;
+        return styleEdge(es, stepActive && es.step === focusStep, stepActive);
       }),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [focusNode, focusStep],
-  );
+  }, [focusNode, focusStep]);
 
   const detail = focusNode
-    ? { kind: "node" as const, ...nodeMeta[focusNode] }
+    ? { kind: "node" as const, id: focusNode, ...nodeMeta[focusNode] }
     : { kind: "step" as const, ...steps.find((s) => s.n === effectiveStep)! };
-
-  const togglePin = (n: number) => setPinnedStep((cur) => (cur === n ? null : n));
 
   const legendVariants = Array.from(new Set(frames.map((f) => f.variant)));
 
@@ -260,22 +314,29 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
           aria-label={playing ? "Pause sequence" : "Play sequence"}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         >
-          {playing && pinnedStep == null ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          {playing && pinnedStep == null && pinnedNode == null ? (
+            <Pause className="h-3.5 w-3.5" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
         </button>
         {steps.map((s) => {
           const on = !focusNode && effectiveStep === s.n;
+          const related = focusNode != null && relatedSteps.includes(s.n);
           const isPinned = pinnedStep === s.n;
           return (
             <button
               key={s.n}
               type="button"
-              onClick={() => togglePin(s.n)}
+              onClick={() => selectStep(s.n)}
               onMouseEnter={() => setHoverStep(s.n)}
               onMouseLeave={() => setHoverStep(null)}
               className={`group inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-all ${
                 on
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  : related
+                    ? "border-primary/40 bg-primary/5 text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
               }`}
             >
               <span
@@ -296,7 +357,9 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
         <div className="h-[400px] md:h-[460px]">
           <ReactFlow
             nodes={nodes}
-            edges={flowEdges}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ padding: 0.04 }}
@@ -312,7 +375,10 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
               if (node.id in nodeMeta) setHoverNode(node.id);
             }}
             onNodeMouseLeave={() => setHoverNode(null)}
-            onPaneClick={() => setPinnedStep(null)}
+            onNodeClick={(_, node) => {
+              if (node.id in nodeMeta) selectNode(node.id);
+            }}
+            onPaneClick={clearPins}
             minZoom={0.4}
             maxZoom={2.2}
           >
@@ -348,12 +414,22 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
               <detail.icon className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Inspecting</p>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                {pinnedNode === detail.id ? "Pinned" : "Inspecting"}
+              </p>
               <h4 className="mt-0.5 font-semibold tracking-tight">
                 {detail.label}
                 {detail.badge && <span className="ml-2 text-xs uppercase tracking-wider text-primary/80">{detail.badge}</span>}
               </h4>
               <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">{detail.hint}</p>
+              {detail.explore && (
+                <Link
+                  to={detail.explore.to}
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
+                >
+                  Explore {detail.explore.label} <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
             </div>
           </div>
         ) : (

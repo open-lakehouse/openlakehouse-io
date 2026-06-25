@@ -16,6 +16,7 @@ const spec: FlowSpec = {
       sub: "compute engine",
       icon: Cpu,
       hint: "Holds no standing storage keys. It authenticates with the IdP, then asks the catalog for access to a table.",
+      explore: { label: "Compute Engines", to: "/technologies/compute-engines" },
     },
     catalog: {
       label: "Trusted catalog",
@@ -23,6 +24,7 @@ const spec: FlowSpec = {
       icon: ShieldCheck,
       hint: "The single trust anchor. It enforces, decides, and informs policy — verifying identity, authorizing the request, and minting the credential.",
       dashed: true,
+      explore: { label: "Catalogs", to: "/technologies/catalogs" },
     },
     aux: {
       label: "Auxiliary systems",
@@ -30,6 +32,7 @@ const spec: FlowSpec = {
       icon: Puzzle,
       hint: "External policy or attribute sources the catalog may consult to reach an authorization decision.",
       dashed: true,
+      explore: { label: "Open Governance", to: "/technologies/open-governance" },
     },
     storage: {
       label: "Storage",

@@ -10,6 +10,7 @@ const spec: FlowSpec = {
       sub: "compute engine",
       icon: Cpu,
       hint: "Holds no standing keys and never plans the query itself. It asks the catalog for a scan, then reads only the staged files it is handed.",
+      explore: { label: "Compute Engines", to: "/technologies/compute-engines" },
     },
     catalog: {
       label: "Trusted catalog",
@@ -17,6 +18,7 @@ const spec: FlowSpec = {
       icon: ShieldCheck,
       hint: "The trust anchor. It verifies identity, applies row- and column-level policy, and invokes a trusted engine to produce a clean result — then vends a credential scoped to just those files.",
       dashed: true,
+      explore: { label: "Catalogs", to: "/technologies/catalogs" },
     },
     engine: {
       label: "Trusted engine",
@@ -24,6 +26,7 @@ const spec: FlowSpec = {
       icon: Filter,
       hint: "A trusted query service the catalog invokes. It applies row filters and column masks, writing the pruned, masked result files into a staging area.",
       dashed: true,
+      explore: { label: "Compute Engines", to: "/technologies/compute-engines" },
     },
     aux: {
       label: "Auxiliary systems",
@@ -31,6 +34,7 @@ const spec: FlowSpec = {
       icon: Puzzle,
       hint: "External policy or attribute sources the catalog may consult to reach an authorization decision.",
       dashed: true,
+      explore: { label: "Open Governance", to: "/technologies/open-governance" },
     },
     idp: {
       label: "Identity Provider",

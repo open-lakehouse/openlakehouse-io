@@ -163,7 +163,8 @@ const Governance = () => (
               <div className="mt-10">
                 <h3 className="text-sm font-medium uppercase tracking-widest text-primary">How it works</h3>
                 <p className="mt-2 mb-6 max-w-3xl text-muted-foreground">
-                  Step through the sequence, or hover any node to inspect its role.
+                  Step through the sequence, or hover a node to inspect its role. Click any node to pin it
+                  and dig deeper into the technology behind it.
                 </p>
                 <Suspense
                   fallback={<div className="h-[420px] rounded-2xl border border-border bg-card/40 animate-pulse" />}
