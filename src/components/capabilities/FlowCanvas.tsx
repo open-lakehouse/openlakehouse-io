@@ -69,11 +69,17 @@ export type FlowSpec = {
 
 const handleStyle = { opacity: 0, width: 1, height: 1, border: "none", minWidth: 0, minHeight: 0 } as const;
 
-const sideHandles: { pos: Position; src: string; tgt: string }[] = [
+// Centered handles per side, plus upper/lower variants on the left/right sides
+// (suffix -hi / -lo) so two opposing edges can run as separate, non-overlapping lines.
+const sideHandles: { pos: Position; src: string; tgt: string; offset?: string }[] = [
   { pos: Position.Top, src: "ts", tgt: "tt" },
-  { pos: Position.Right, src: "rs", tgt: "rt" },
   { pos: Position.Bottom, src: "bs", tgt: "bt" },
+  { pos: Position.Right, src: "rs", tgt: "rt" },
+  { pos: Position.Right, src: "rs-hi", tgt: "rt-hi", offset: "33.333%" },
+  { pos: Position.Right, src: "rs-lo", tgt: "rt-lo", offset: "66.667%" },
   { pos: Position.Left, src: "ls", tgt: "lt" },
+  { pos: Position.Left, src: "ls-hi", tgt: "lt-hi", offset: "33.333%" },
+  { pos: Position.Left, src: "ls-lo", tgt: "lt-lo", offset: "66.667%" },
 ];
 
 type StepNodeData = FlowNodeMeta & { active: boolean };
@@ -92,12 +98,15 @@ const StepNode = ({ data }: NodeProps) => {
           : "border-border bg-card/80 hover:border-primary/40"
       }`}
     >
-      {sideHandles.map((h) => (
-        <span key={h.pos}>
-          <Handle type="source" position={h.pos} id={h.src} style={handleStyle} isConnectable={false} />
-          <Handle type="target" position={h.pos} id={h.tgt} style={handleStyle} isConnectable={false} />
-        </span>
-      ))}
+      {sideHandles.map((h) => {
+        const style = h.offset ? { ...handleStyle, top: h.offset } : handleStyle;
+        return (
+          <span key={h.src}>
+            <Handle type="source" position={h.pos} id={h.src} style={style} isConnectable={false} />
+            <Handle type="target" position={h.pos} id={h.tgt} style={style} isConnectable={false} />
+          </span>
+        );
+      })}
       <div className="flex items-center gap-2">
         <Icon className={`h-4 w-4 shrink-0 transition-colors ${d.active ? "text-primary" : "text-muted-foreground"}`} />
         <div className="min-w-0">

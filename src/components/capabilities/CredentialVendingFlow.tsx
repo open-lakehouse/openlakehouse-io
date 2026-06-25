@@ -44,7 +44,7 @@ const spec: FlowSpec = {
   ],
   parentOf: { aux: "platform", catalog: "platform", idp: "cloud", storage: "cloud" },
   positions: {
-    client: { x: 120, y: 125 },
+    client: { x: 120, y: 122 },
     catalog: { x: 25, y: 42 },
     aux: { x: 415, y: 42 },
     storage: { x: 25, y: 42 },
@@ -77,11 +77,11 @@ const spec: FlowSpec = {
     },
   ],
   edges: [
-    { id: "request", source: "client", target: "catalog", sourceHandle: "rs", targetHandle: "lt", step: 1, label: "1" },
-    { id: "token", source: "client", target: "idp", sourceHandle: "rs", targetHandle: "lt", step: 1, label: "token" },
+    { id: "request", source: "client", target: "catalog", sourceHandle: "rs-lo", targetHandle: "lt-lo", step: 1, label: "1" },
+    { id: "token", source: "client", target: "idp", sourceHandle: "rs-lo", targetHandle: "lt", step: 1, label: "token" },
     { id: "verify", source: "catalog", target: "idp", sourceHandle: "bs", targetHandle: "tt", step: 2, label: "2" },
     { id: "consult", source: "catalog", target: "aux", sourceHandle: "rs", targetHandle: "lt", step: 2, label: "attrs" },
-    { id: "vend", source: "catalog", target: "client", sourceHandle: "ls", targetHandle: "rt", step: 3, label: "3" },
+    { id: "vend", source: "catalog", target: "client", sourceHandle: "ls-hi", targetHandle: "rt-hi", step: 3, label: "3" },
     { id: "read", source: "client", target: "storage", sourceHandle: "bs", targetHandle: "tt", step: 4, label: "4" },
   ],
   intro:
