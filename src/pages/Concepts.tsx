@@ -1,9 +1,9 @@
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { Capabilities as CapabilitiesSection } from "@/components/Capabilities";
+import { Concepts as ConceptsSection } from "@/components/Concepts";
 import { Seo } from "@/components/Seo";
 
-const CapabilitiesPage = () => (
+const ConceptsPage = () => (
   <div className="min-h-screen flex flex-col">
     <Seo
       title="Lakehouse Concepts — Data Access, and the patterns behind it"
@@ -25,10 +25,10 @@ const CapabilitiesPage = () => (
         </div>
       </section>
 
-      <CapabilitiesSection />
+      <ConceptsSection />
     </main>
     <SiteFooter />
   </div>
 );
 
-export default CapabilitiesPage;
+export default ConceptsPage;

@@ -5,11 +5,11 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
 import { canonicalUrl } from "@/lib/seo";
-import { getCapability } from "@/data/capabilities";
+import { getConcept } from "@/data/concepts";
 
 const flowComponents: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
-  "credential-vending": lazy(() => import("@/components/capabilities/CredentialVendingFlow")),
-  "server-side-planning": lazy(() => import("@/components/capabilities/ScanApiFlow")),
+  "credential-vending": lazy(() => import("@/components/concepts/CredentialVendingFlow")),
+  "server-side-planning": lazy(() => import("@/components/concepts/ScanApiFlow")),
 };
 
 const TITLE = "Data Access";
@@ -17,7 +17,7 @@ const TAGLINE = "Trust in your open lakehouse";
 const DESCRIPTION =
   "How an open lakehouse decides who can read and write data — and how engines reach storage without standing secrets. The three patterns: credential vending, server-side planning, and trusted compute.";
 
-const capability = getCapability("data-access")!;
+const concept = getConcept("data-access")!;
 
 const approachContent: Record<string, { points: string[] }> = {
   "credential-vending": {
@@ -50,7 +50,7 @@ const techArticleLd = {
   headline: `${TITLE} — ${TAGLINE}`,
   description: DESCRIPTION,
   url: canonicalUrl("/concepts/data-access"),
-  about: capability.approaches.map((a) => ({ "@type": "Thing", name: a.title })),
+  about: concept.approaches.map((a) => ({ "@type": "Thing", name: a.title })),
 };
 
 const breadcrumbLd = {
@@ -91,7 +91,7 @@ const DataAccess = () => (
       {/* On-page nav across the three approaches */}
       <nav className="sticky top-16 z-30 border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="container flex gap-1 overflow-x-auto py-3 text-sm">
-          {capability.approaches.map((a) => (
+          {concept.approaches.map((a) => (
             <a
               key={a.slug}
               href={`#${a.slug}`}
@@ -103,7 +103,7 @@ const DataAccess = () => (
         </div>
       </nav>
 
-      {capability.approaches.map((a, i) => {
+      {concept.approaches.map((a, i) => {
         const c = approachContent[a.slug];
         const Icon = a.icon;
         const Flow = flowComponents[a.slug];
@@ -119,7 +119,7 @@ const DataAccess = () => (
                 <Icon className="h-5 w-5" />
               </span>
               <p className="text-sm font-medium uppercase tracking-widest text-primary">
-                Pattern {i + 1} of {capability.approaches.length}
+                Pattern {i + 1} of {concept.approaches.length}
               </p>
             </div>
             <h2 className="mt-4 text-2xl md:text-4xl font-bold tracking-tight">{a.title}</h2>

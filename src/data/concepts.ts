@@ -1,6 +1,6 @@
 import { ShieldCheck, KeyRound, ServerCog, ShieldHalf, type LucideIcon } from "lucide-react";
 
-export type CapabilityApproach = {
+export type ConceptApproach = {
   slug: string;
   title: string;
   icon: LucideIcon;
@@ -8,16 +8,16 @@ export type CapabilityApproach = {
   status: "live" | "coming-soon";
 };
 
-export type Capability = {
+export type Concept = {
   slug: string;
   title: string;
   icon: LucideIcon;
   blurb: string;
   status: "live" | "coming-soon";
-  approaches: CapabilityApproach[];
+  approaches: ConceptApproach[];
 };
 
-export const capabilities: Capability[] = [
+export const concepts: Concept[] = [
   {
     slug: "data-access",
     title: "Data Access",
@@ -54,5 +54,5 @@ export const capabilities: Capability[] = [
   },
 ];
 
-export const getCapability = (slug: string): Capability | undefined =>
-  capabilities.find((c) => c.slug === slug);
+export const getConcept = (slug: string): Concept | undefined =>
+  concepts.find((c) => c.slug === slug);

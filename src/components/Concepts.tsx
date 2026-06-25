@@ -1,8 +1,8 @@
 import { ArrowRight } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
-import { capabilities, type Capability } from "@/data/capabilities";
+import { concepts, type Concept } from "@/data/concepts";
 
-const CapabilityCard = ({ slug, title, icon: Icon, blurb, status, approaches }: Capability) => {
+const ConceptCard = ({ slug, title, icon: Icon, blurb, status, approaches }: Concept) => {
   const isLive = status === "live";
   const body = (
     <>
@@ -56,7 +56,7 @@ const CapabilityCard = ({ slug, title, icon: Icon, blurb, status, approaches }: 
   );
 };
 
-export const Capabilities = () => {
+export const Concepts = () => {
   const isHome = useLocation().pathname === "/";
 
   return (
@@ -70,8 +70,8 @@ export const Capabilities = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border rounded-2xl overflow-hidden shadow-card border border-border">
-        {capabilities.map((cap) => (
-          <CapabilityCard key={cap.slug} {...cap} />
+        {concepts.map((cap) => (
+          <ConceptCard key={cap.slug} {...cap} />
         ))}
       </div>
 

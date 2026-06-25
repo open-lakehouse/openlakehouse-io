@@ -4,7 +4,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, ChevronDown, ArrowRight, Cpu, BookOpen, Bot, Layers, ShieldCheck, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { capabilities } from "@/data/capabilities";
+import { concepts } from "@/data/concepts";
 
 type TechItem = { name: string; url: string };
 type TechCategory = {
@@ -212,7 +212,7 @@ export const SiteHeader = () => {
                 <ArrowRight className="h-3 w-3 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
               </Link>
               <div className="mt-4 space-y-4">
-                {capabilities.map((cap) => (
+                {concepts.map((cap) => (
                   <div key={cap.slug}>
                     <Link
                       to={`/concepts/${cap.slug}`}
@@ -307,7 +307,7 @@ export const SiteHeader = () => {
                     Concepts
                   </Link>
                   <div className="space-y-1">
-                    {capabilities.map((cap) => (
+                    {concepts.map((cap) => (
                       <Link
                         key={cap.slug}
                         to={`/concepts/${cap.slug}`}
