@@ -1,4 +1,21 @@
-import { ShieldCheck, KeyRound, ServerCog, ShieldHalf, type LucideIcon } from "lucide-react";
+import {
+  ShieldCheck,
+  KeyRound,
+  ServerCog,
+  ShieldHalf,
+  GitFork,
+  Workflow,
+  Radar,
+  Share2,
+  Scale,
+  Activity,
+  Server,
+  Bot,
+  Boxes,
+  Gavel,
+  Network,
+  type LucideIcon,
+} from "lucide-react";
 
 export type ConceptApproach = {
   slug: string;
@@ -51,6 +68,101 @@ export const concepts: Concept[] = [
         status: "coming-soon",
       },
     ],
+  },
+  {
+    slug: "lineage",
+    title: "Lineage & ABAC",
+    icon: GitFork,
+    blurb:
+      "How an open lakehouse learns where data came from, discovers what's sensitive, and propagates that knowledge into attribute-based access decisions — all on OpenLineage.",
+    status: "live",
+    approaches: [
+      {
+        slug: "event-emission",
+        title: "Lineage Event Emission",
+        icon: Workflow,
+        summary:
+          "Engines emit OpenLineage run events at planning time — table- and column-level lineage describing every query's inputs and outputs — to a lineage service.",
+        status: "live",
+      },
+      {
+        slug: "data-discovery",
+        title: "Discovery & Findings",
+        icon: Radar,
+        summary:
+          "Analysis services inspect the actual data, discover sensitive columns like PII, and raise findings as ordinary OpenLineage events tagging those fields.",
+        status: "live",
+      },
+      {
+        slug: "propagation",
+        title: "Classification Propagation",
+        icon: Share2,
+        summary:
+          "Backend projection folds lineage events and findings into a graph, then propagates a tag like PII to every downstream field it flows into.",
+        status: "live",
+      },
+      {
+        slug: "abac-policy",
+        title: "ABAC Policy Decisions",
+        icon: Scale,
+        summary:
+          "A catalog queries which fields inherit a sensitive tag downstream and uses the answer to make attribute-based access control decisions — mask, deny, or allow.",
+        status: "live",
+      },
+    ],
+  },
+  {
+    slug: "observability",
+    title: "Observability",
+    icon: Activity,
+    blurb:
+      "One standard — OpenTelemetry — for understanding the whole stack: infrastructure traces flowing to Jaeger, agentic and workflow traces flowing to MLflow.",
+    status: "coming-soon",
+    approaches: [
+      {
+        slug: "system-level",
+        title: "System-Level Observability",
+        icon: Server,
+        summary:
+          "Cross-service distributed traces over OpenTelemetry — engine, gateway, and platform services exporting OTLP to a shared collector like Jaeger.",
+        status: "coming-soon",
+      },
+      {
+        slug: "agentic-level",
+        title: "Agentic-Level Observability",
+        icon: Bot,
+        summary:
+          "Workflow and agent traces in MLflow's trace model (WORKFLOW / CHAIN / TASK) exported over the same OpenTelemetry protocol for experiment-correlated visibility.",
+        status: "coming-soon",
+      },
+    ],
+  },
+  {
+    slug: "open-table-formats",
+    title: "Open Table Formats",
+    icon: Boxes,
+    blurb:
+      "How open table formats turn a pile of files in object storage into a transactional table — ACID, time travel, and schema evolution without a proprietary engine.",
+    status: "coming-soon",
+    approaches: [],
+  },
+  {
+    slug: "policy-governance",
+    title: "Policy & Governance",
+    icon: Gavel,
+    blurb:
+      "Policy as code for the lakehouse — expressive, auditable rules (Cedar) distributed as versioned bundles and enforced consistently across engines.",
+    status: "coming-soon",
+    approaches: [],
+  },
+  {
+    slug: "compute-federation",
+    title: "Compute & Query Federation",
+    icon: Network,
+    blurb:
+      "Many engines, one set of tables and one set of policies — how an open lakehouse lets compute meet data wherever it lives, without copies or lock-in.",
+    status: "coming-soon",
+    approaches: [],
   },
 ];
 

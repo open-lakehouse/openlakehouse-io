@@ -211,32 +211,31 @@ export const SiteHeader = () => {
                 Concepts
                 <ArrowRight className="h-3 w-3 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
               </Link>
-              <div className="mt-4 space-y-4">
-                {concepts.map((cap) => (
-                  <div key={cap.slug}>
+              <div className="mt-4 flex flex-col gap-y-1">
+                {concepts.map((cap) =>
+                  cap.status === "live" ? (
                     <Link
+                      key={cap.slug}
                       to={`/concepts/${cap.slug}`}
                       onClick={() => setExploreOpen(false)}
-                      className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm font-semibold tracking-tight text-foreground transition-all hover:text-primary hover:bg-primary/10"
+                      className="inline-flex w-fit items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-foreground transition-all hover:text-primary hover:bg-primary/10"
                     >
-                      <cap.icon className="h-4 w-4 text-primary" />
+                      <cap.icon className="h-4 w-4 text-primary/80" />
                       {cap.title}
                     </Link>
-                    <ul className="mt-1.5 space-y-0.5 pl-2">
-                      {cap.approaches.map((a) => (
-                        <li key={a.slug}>
-                          <Link
-                            to={`/concepts/${cap.slug}#${a.slug}`}
-                            onClick={() => setExploreOpen(false)}
-                            className="block rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/40"
-                          >
-                            {a.title}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+                  ) : (
+                    <span
+                      key={cap.slug}
+                      className="inline-flex w-fit items-center gap-2 px-2 py-1.5 text-sm font-medium text-muted-foreground"
+                    >
+                      <cap.icon className="h-4 w-4 text-primary/50" />
+                      {cap.title}
+                      <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider">
+                        Soon
+                      </span>
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -307,17 +306,30 @@ export const SiteHeader = () => {
                     Concepts
                   </Link>
                   <div className="space-y-1">
-                    {concepts.map((cap) => (
-                      <Link
-                        key={cap.slug}
-                        to={`/concepts/${cap.slug}`}
-                        onClick={() => setOpen(false)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-foreground/90 hover:text-foreground hover:bg-accent/40 rounded-md"
-                      >
-                        <cap.icon className="h-4 w-4 text-primary" />
-                        {cap.title}
-                      </Link>
-                    ))}
+                    {concepts.map((cap) =>
+                      cap.status === "live" ? (
+                        <Link
+                          key={cap.slug}
+                          to={`/concepts/${cap.slug}`}
+                          onClick={() => setOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-foreground/90 hover:text-foreground hover:bg-accent/40 rounded-md"
+                        >
+                          <cap.icon className="h-4 w-4 text-primary" />
+                          {cap.title}
+                        </Link>
+                      ) : (
+                        <div
+                          key={cap.slug}
+                          className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-muted-foreground"
+                        >
+                          <cap.icon className="h-4 w-4 text-primary/60" />
+                          {cap.title}
+                          <span className="rounded-full border border-border px-1.5 py-0.5 text-[9px] uppercase tracking-wider">
+                            Soon
+                          </span>
+                        </div>
+                      ),
+                    )}
                   </div>
                 </div>
               </div>

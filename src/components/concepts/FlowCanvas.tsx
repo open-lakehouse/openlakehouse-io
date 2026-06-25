@@ -27,6 +27,8 @@ export type FlowNodeMeta = {
   hint: string;
   icon: IconCmp;
   dashed?: boolean;
+  /** Visual treatment: "service" (a card, the default) or "dataset" (an artifact). */
+  kind?: "service" | "dataset";
   /** Optional "dig deeper" link to a technology category. */
   explore?: { label: string; to: string };
 };
@@ -54,9 +56,13 @@ export type FlowEdgeSpec = {
   target: string;
   sourceHandle: string;
   targetHandle: string;
-  step: number;
+  /** The narrative step (or steps) this edge is active in. */
+  step: number | number[];
   label?: string;
 };
+
+const edgeOnStep = (step: number | number[], n: number | null) =>
+  n != null && (Array.isArray(step) ? step.includes(n) : step === n);
 
 export type FlowSpec = {
   nodeMeta: Record<string, FlowNodeMeta>;
@@ -90,15 +96,18 @@ type StepNodeData = FlowNodeMeta & { active: boolean };
 const StepNode = ({ data }: NodeProps) => {
   const d = data as unknown as StepNodeData;
   const Icon = d.icon;
+  const isData = d.kind === "dataset";
   return (
     <div
       title={d.hint}
-      className={`w-[184px] rounded-lg px-3 py-2.5 text-left transition-all duration-300 ${
-        d.dashed ? "border border-dashed" : "border"
-      } ${
+      className={`w-[184px] px-3 py-2.5 text-left transition-all duration-300 border ${
+        d.dashed ? "border-dashed" : ""
+      } ${isData ? "rounded-md border-l-[3px]" : "rounded-lg"} ${
         d.active
           ? "border-accent bg-accent/10 shadow-glow-accent scale-[1.03]"
-          : "border-border bg-card/80 hover:border-accent/40"
+          : isData
+            ? "border-border border-l-primary/50 bg-secondary/50 hover:border-accent/40"
+            : "border-border bg-card/80 hover:border-accent/40"
       }`}
     >
       {sideHandles.map((h) => {
@@ -167,11 +176,31 @@ const FrameNode = ({ data }: NodeProps) => {
 
 const nodeTypes = { step: StepNode, frame: FrameNode };
 
-export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
+export const FlowCanvas = ({
+  spec,
+  activeSteps,
+  onStepSelect,
+}: {
+  spec: FlowSpec;
+  /** Scrollytelling: when set, auto-advance only cycles through these step
+   * numbers (the chapter currently in view) instead of the whole sequence. */
+  activeSteps?: number[];
+  /** Scrollytelling: when set, clicking a step pill calls this (to drive
+   * external scroll) instead of pinning the step. */
+  onStepSelect?: (n: number) => void;
+}) => {
   const { nodeMeta, positions, frames, parentOf, steps, edges: edgeSpecs, intro } = spec;
 
+  // In scrollytelling mode the page narrows the auto-advance to the steps of the
+  // chapter currently in view; otherwise it walks every step.
+  const scrolly = Array.isArray(activeSteps);
+  const cycle = useMemo(
+    () => (activeSteps && activeSteps.length ? activeSteps : steps.map((s) => s.n)),
+    [activeSteps, steps],
+  );
+
   // Auto-advancing step, overridden by manual focus (hover/pin) on steps or nodes.
-  const [autoStep, setAutoStep] = useState(1);
+  const [autoStep, setAutoStep] = useState(cycle[0]);
   const [playing, setPlaying] = useState(true);
   const [pinnedStep, setPinnedStep] = useState<number | null>(null);
   const [hoverStep, setHoverStep] = useState<number | null>(null);
@@ -181,11 +210,19 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
   const paused =
     !playing || pinnedStep != null || pinnedNode != null || hoverStep != null || hoverNode != null;
 
+  // When the active chapter changes (scroll), snap into its step range.
   useEffect(() => {
-    if (paused) return;
-    const id = setInterval(() => setAutoStep((s) => (s % steps.length) + 1), TICK_MS);
+    setAutoStep((s) => (cycle.includes(s) ? s : cycle[0]));
+  }, [cycle]);
+
+  useEffect(() => {
+    if (paused || cycle.length <= 1) return;
+    const id = setInterval(
+      () => setAutoStep((s) => cycle[(cycle.indexOf(s) + 1) % cycle.length]),
+      TICK_MS,
+    );
     return () => clearInterval(id);
-  }, [paused, steps.length]);
+  }, [paused, cycle]);
 
   // A focused node (hover or pin) takes over from the step sequence.
   const focusNode = hoverNode ?? pinnedNode;
@@ -200,6 +237,10 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
     setPinnedNode((cur) => (cur === id ? null : id));
   };
   const selectStep = (n: number) => {
+    if (onStepSelect) {
+      onStepSelect(n);
+      return;
+    }
     setPinnedNode(null);
     setPinnedStep((cur) => (cur === n ? null : n));
   };
@@ -281,7 +322,7 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
   }, [spec]);
 
   const initialEdges = useMemo<Edge[]>(
-    () => edgeSpecs.map((e) => styleEdge(e, e.step === 1, true)),
+    () => edgeSpecs.map((e) => styleEdge(e, edgeOnStep(e.step, 1), true)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [spec],
   );
@@ -299,7 +340,7 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
     setEdges((eds) =>
       eds.map((e) => {
         const es = edgeSpecs.find((s) => s.id === e.id)!;
-        return styleEdge(es, stepActive && es.step === focusStep, stepActive);
+        return styleEdge(es, stepActive && edgeOnStep(es.step, focusStep), stepActive);
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -313,14 +354,16 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
     <div className="animate-[fade-up_0.4s_ease-out]">
       {/* Step navigator — auto-advances; hover to focus, click to pin */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={togglePlay}
-          aria-label={sequenceRunning ? "Pause sequence" : "Play sequence"}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-accent/40 hover:text-foreground"
-        >
-          {sequenceRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-        </button>
+        {!scrolly && (
+          <button
+            type="button"
+            onClick={togglePlay}
+            aria-label={sequenceRunning ? "Pause sequence" : "Play sequence"}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-accent/40 hover:text-foreground"
+          >
+            {sequenceRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          </button>
+        )}
         {steps.map((s) => {
           const on = !focusNode && effectiveStep === s.n;
           const related = focusNode != null && relatedSteps.includes(s.n);

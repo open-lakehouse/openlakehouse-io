@@ -13,6 +13,7 @@ import DeltaLakePillar from "./pages/tech/DeltaLakePillar.tsx";
 import TechnologiesPage from "./pages/Technologies.tsx";
 import ConceptsPage from "./pages/Concepts.tsx";
 import DataAccess from "./pages/concepts/DataAccess.tsx";
+import Lineage from "./pages/concepts/Lineage.tsx";
 import Learn from "./pages/Learn.tsx";
 import GettingStarted from "./pages/learn/GettingStarted.tsx";
 import LearnCategory from "./pages/learn/LearnCategory.tsx";
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/technologies/:slug" element={<TechnologyCategory />} />
             <Route path="/concepts" element={<ConceptsPage />} />
             <Route path="/concepts/data-access" element={<DataAccess />} />
+            <Route path="/concepts/lineage" element={<Lineage />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/learn/getting-started" element={<GettingStarted />} />
             <Route path="/learn/:category" element={<LearnCategory />} />
