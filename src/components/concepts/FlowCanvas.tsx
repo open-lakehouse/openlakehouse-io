@@ -48,6 +48,8 @@ export type FlowStep = {
   title: string;
   desc: string;
   nodes: string[];
+  /** Highlight color for this step's lit edges: default "accent" or "finding". */
+  tone?: "accent" | "finding";
 };
 
 export type FlowEdgeSpec = {
@@ -270,27 +272,35 @@ export const FlowCanvas = ({
     return set;
   };
 
-  const styleEdge = (e: FlowEdgeSpec, lit: boolean, stepActive: boolean): Edge => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    sourceHandle: e.sourceHandle,
-    targetHandle: e.targetHandle,
-    type: "smoothstep",
-    animated: lit,
-    label: e.label,
-    labelShowBg: true,
-    labelStyle: { fill: lit ? "hsl(var(--accent))" : "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 600 },
-    labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
-    labelBgPadding: [6, 3] as [number, number],
-    labelBgBorderRadius: 6,
-    style: {
-      stroke: lit ? "hsl(var(--accent))" : "hsl(var(--muted-foreground))",
-      strokeWidth: lit ? 2 : 1.5,
-      opacity: lit ? 1 : stepActive ? 0.25 : 0.6,
-    },
-    markerEnd: { type: MarkerType.ArrowClosed, color: lit ? "hsl(var(--accent))" : "hsl(var(--muted-foreground))" },
-  });
+  const styleEdge = (
+    e: FlowEdgeSpec,
+    lit: boolean,
+    stepActive: boolean,
+    litTone: "accent" | "finding" = "accent",
+  ): Edge => {
+    const litColor = litTone === "finding" ? "hsl(var(--primary))" : "hsl(var(--accent))";
+    return {
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      type: "smoothstep",
+      animated: lit,
+      label: e.label,
+      labelShowBg: true,
+      labelStyle: { fill: lit ? litColor : "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 600 },
+      labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 6,
+      style: {
+        stroke: lit ? litColor : "hsl(var(--muted-foreground))",
+        strokeWidth: lit ? 2 : 1.5,
+        opacity: lit ? 1 : stepActive ? 0.25 : 0.6,
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: lit ? litColor : "hsl(var(--muted-foreground))" },
+    };
+  };
 
   // Build the graph once. Node/edge identity is preserved across focus changes
   // (we mutate data/style in place), so React Flow keeps measured sizes and DOM
@@ -322,7 +332,10 @@ export const FlowCanvas = ({
   }, [spec]);
 
   const initialEdges = useMemo<Edge[]>(
-    () => edgeSpecs.map((e) => styleEdge(e, edgeOnStep(e.step, 1), true)),
+    () => {
+      const tone = steps.find((s) => s.n === 1)?.tone ?? "accent";
+      return edgeSpecs.map((e) => styleEdge(e, edgeOnStep(e.step, 1), true, tone));
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [spec],
   );
@@ -337,10 +350,11 @@ export const FlowCanvas = ({
       nds.map((n) => (n.type === "step" ? { ...n, data: { ...n.data, active: lit.has(n.id) } } : n)),
     );
     const stepActive = focusStep != null;
+    const litTone = steps.find((s) => s.n === focusStep)?.tone ?? "accent";
     setEdges((eds) =>
       eds.map((e) => {
         const es = edgeSpecs.find((s) => s.id === e.id)!;
-        return styleEdge(es, stepActive && edgeOnStep(es.step, focusStep), stepActive);
+        return styleEdge(es, stepActive && edgeOnStep(es.step, focusStep), stepActive, litTone);
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -352,18 +366,18 @@ export const FlowCanvas = ({
 
   return (
     <div className="animate-[fade-up_0.4s_ease-out]">
-      {/* Step navigator — auto-advances; hover to focus, click to pin */}
+      {/* Step navigator — autoplay only; in scrollytelling the page scroll and
+          the chapter cards drive the steps, so the pills would be redundant. */}
+      {!scrolly && (
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {!scrolly && (
-          <button
-            type="button"
-            onClick={togglePlay}
-            aria-label={sequenceRunning ? "Pause sequence" : "Play sequence"}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-accent/40 hover:text-foreground"
-          >
-            {sequenceRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label={sequenceRunning ? "Pause sequence" : "Play sequence"}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-accent/40 hover:text-foreground"
+        >
+          {sequenceRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        </button>
         {steps.map((s) => {
           const on = !focusNode && effectiveStep === s.n;
           const related = focusNode != null && relatedSteps.includes(s.n);
@@ -396,6 +410,7 @@ export const FlowCanvas = ({
           );
         })}
       </div>
+      )}
 
       <div className="rounded-2xl border border-border bg-card/40 shadow-card overflow-hidden">
         <div className="h-[400px] md:h-[460px]">

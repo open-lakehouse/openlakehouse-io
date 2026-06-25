@@ -6,7 +6,6 @@ import {
   GitFork,
   Workflow,
   Radar,
-  Share2,
   Scale,
   Activity,
   Server,
@@ -90,15 +89,7 @@ export const concepts: Concept[] = [
         title: "Discovery & Findings",
         icon: Radar,
         summary:
-          "Analysis services inspect the actual data, discover sensitive columns like PII, and raise findings as ordinary OpenLineage events tagging those fields.",
-        status: "live",
-      },
-      {
-        slug: "propagation",
-        title: "Classification Propagation",
-        icon: Share2,
-        summary:
-          "Backend projection folds lineage events and findings into a graph, then propagates a tag like PII to every downstream field it flows into.",
+          "Analysis services inspect the data, discover sensitive columns like PII, and raise findings — which propagate through the lineage graph to every field they reach.",
         status: "live",
       },
       {

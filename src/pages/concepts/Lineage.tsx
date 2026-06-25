@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
@@ -20,63 +20,56 @@ const concept = getConcept("lineage")!;
 // Each narrative chapter is a sequence of beats, one per diagram step. As the
 // reader scrolls, each beat materializes as a bullet and the diagram locks to
 // that step.
-type Beat = { step: number; text: string };
+type Beat = { step: number; text: string; link?: { label: string; href: string } };
 
 const beatsBySlug: Record<string, Beat[]> = {
   "event-emission": [
     {
       step: 1,
-      text: "Instrumented at planning time, the engine emits OpenLineage run events — table- and column-level lineage for every query — and the lineage service appends them to the event log. Lineage never blocks the query, and any OpenLineage producer speaks the same wire format.",
+      text: "Instrumented at plan time, the engine analyzes the query against the dataset — resolving the exact tables and columns it touches.",
+    },
+    {
+      step: 2,
+      text: "It emits OpenLineage run events to the lineage service: table- and column-level lineage for the query, shipped without blocking execution.",
+    },
+    {
+      step: 3,
+      text: "The lineage service appends every event to an append-only log — the raw landing zone and the source of truth.",
+    },
+    {
+      step: 4,
+      text: "A processor reads the log and extracts well-known and custom facets — schema, column lineage, tags — building the lineage graph.",
+      link: { label: "OpenLineage facets", href: "https://openlineage.io/docs/spec/facets/" },
     },
   ],
   "data-discovery": [
     {
-      step: 2,
-      text: "A separate analysis service reads the same data, profiling and classifying columns to discover what's sensitive — decoupled from the engine.",
-    },
-    {
-      step: 3,
-      text: "On a hit it raises a finding as an ordinary OpenLineage event tagging the field — appended to the very same log, with no bespoke API. The scanner asserts facts; it never enforces.",
-    },
-  ],
-  propagation: [
-    {
-      step: 4,
-      text: "Backend processing reads the append-only log — the rebuildable source of truth for everything downstream.",
-    },
-    {
       step: 5,
-      text: "It folds events into the lineage graph, building column-level edges and propagating tags like PII to every field they reach. Propagation is a graph traversal, and the tag name is just a convention.",
+      text: "A separate analysis service reads the same dataset — smart classifiers detecting PII, or values curated by hand.",
+    },
+    {
+      step: 6,
+      text: "A detection becomes a finding: an ordinary OpenLineage event from the analysis service, appended to the very same log.",
+    },
+    {
+      step: 7,
+      text: "Processing then propagates the finding through the graph the engine path built — following column lineage so a tag like PII reaches every field derived from it.",
+    },
+    {
+      step: 7,
+      text: "It rechecks as new lineage and findings arrive, so the resolved classifications stay current.",
     },
   ],
   "abac-policy": [
     {
-      step: 6,
+      step: 8,
       text: "A catalog asks the graph where a tag lands downstream — which fields, in which datasets, inherit the sensitivity.",
     },
     {
-      step: 7,
-      text: "It turns those attributes into an attribute-based access decision — mask, deny, or allow — before the query runs. Lineage is the data plane; the catalog owns the control plane.",
+      step: 9,
+      text: "It turns those attributes into an attribute-based access decision — mask, deny, or allow — before the query runs.",
     },
   ],
-};
-
-// Each chapter maps to the diagram step(s) it explains.
-const chapterSteps: Record<string, number[]> = {
-  "event-emission": [1],
-  "data-discovery": [2, 3],
-  propagation: [4, 5],
-  "abac-policy": [6, 7],
-};
-
-const stepToSlug: Record<number, string> = {
-  1: "event-emission",
-  2: "data-discovery",
-  3: "data-discovery",
-  4: "propagation",
-  5: "propagation",
-  6: "abac-policy",
-  7: "abac-policy",
 };
 
 const useIsDesktop = () => {
@@ -112,11 +105,30 @@ const breadcrumbLd = {
 
 const Lineage = () => {
   const isDesktop = useIsDesktop();
-  const [activeStep, setActiveStep] = useState(1);
-  const stepRefs = useRef<Record<number, HTMLElement | null>>({});
+  const [activeBeat, setActiveBeat] = useState(0);
+  const beatRefs = useRef<Record<number, HTMLElement | null>>({});
+
+  // Chapters with a global beat index so each beat gets its own scroll sentinel
+  // and the diagram can lock to that beat's step. Several beats may share one
+  // diagram step (e.g. "instrumented" + "emit" both belong to step 1).
+  const chapters = useMemo(() => {
+    let idx = 0;
+    return concept.approaches.map((a, ci) => ({
+      slug: a.slug,
+      title: a.title,
+      icon: a.icon,
+      summary: a.summary,
+      stage: ci + 1,
+      beats: (beatsBySlug[a.slug] ?? []).map((b) => ({ ...b, index: idx++ })),
+    }));
+  }, []);
+  const flatBeats = useMemo(
+    () => chapters.flatMap((c) => c.beats.map((b) => ({ ...b, slug: c.slug }))),
+    [chapters],
+  );
 
   // Desktop scrollytelling: a thin band at the viewport center detects which
-  // per-step sentinel we're on and advances the active step; the diagram and
+  // per-beat sentinel we're on and advances the active beat; the diagram and
   // the sticky chapter cards follow it. On smaller screens the diagram simply
   // auto-cycles and the cards read top-to-bottom.
   useEffect(() => {
@@ -125,20 +137,19 @@ const Lineage = () => {
       (entries) => {
         for (const e of entries)
           if (e.isIntersecting) {
-            const n = Number((e.target as HTMLElement).dataset.step);
-            if (n) setActiveStep(n);
+            const i = Number((e.target as HTMLElement).dataset.beat);
+            if (!Number.isNaN(i)) setActiveBeat(i);
           }
       },
       { rootMargin: "-50% 0px -50% 0px", threshold: 0 },
     );
-    Object.values(stepRefs.current).forEach((el) => el && observer.observe(el));
+    Object.values(beatRefs.current).forEach((el) => el && observer.observe(el));
     return () => observer.disconnect();
-  }, [isDesktop]);
+  }, [isDesktop, flatBeats.length]);
 
-  const activeSlug = stepToSlug[activeStep];
+  const activeStep = flatBeats[activeBeat]?.step ?? 1;
+  const activeSlug = flatBeats[activeBeat]?.slug ?? chapters[0].slug;
   const activeSteps = useMemo(() => (isDesktop ? [activeStep] : undefined), [isDesktop, activeStep]);
-  const scrollToStep = (n: number) =>
-    stepRefs.current[n]?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   return (
   <div className="min-h-screen flex flex-col">
@@ -199,25 +210,23 @@ const Lineage = () => {
 
         <div className="mt-10 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:items-start">
           {/* The diagram tracks the chapter currently in view */}
-          <div className="lg:sticky lg:top-28">
+          <div className="lg:sticky lg:top-36">
             <Suspense
               fallback={<div className="h-[420px] rounded-2xl border border-border bg-card/40 animate-pulse" />}
             >
-              <LineageFlow activeSteps={activeSteps} onStepSelect={scrollToStep} />
+              <LineageFlow activeSteps={activeSteps} />
             </Suspense>
           </div>
 
           {/* Narrative chapters: sticky cards whose steps materialize on scroll */}
           <div className="flex flex-col gap-6 lg:gap-0">
-            {concept.approaches.map((a) => {
-              const Icon = a.icon;
-              const beats = beatsBySlug[a.slug] ?? [];
-              const stepNums = chapterSteps[a.slug] ?? [];
-              const isActive = activeSlug === a.slug;
+            {chapters.map((ch) => {
+              const Icon = ch.icon;
+              const isActive = activeSlug === ch.slug;
               return (
-                <section key={a.slug} id={a.slug} className="relative scroll-mt-32">
+                <section key={ch.slug} id={ch.slug} className="relative scroll-mt-40">
                   <div
-                    className={`rounded-2xl border p-6 transition-all duration-500 lg:sticky lg:top-28 ${
+                    className={`rounded-2xl border p-6 transition-all duration-500 lg:sticky lg:top-36 ${
                       isDesktop
                         ? isActive
                           ? "border-primary/50 bg-primary/[0.04] shadow-card"
@@ -231,27 +240,25 @@ const Lineage = () => {
                       </span>
                       <div>
                         <p className="text-[11px] font-medium uppercase tracking-widest text-primary">
-                          {stepNums.length > 1
-                            ? `Steps ${stepNums[0]}\u2013${stepNums[stepNums.length - 1]}`
-                            : `Step ${stepNums[0]}`}
+                          Stage {ch.stage} of {chapters.length}
                         </p>
-                        <h3 className="text-xl font-bold tracking-tight">{a.title}</h3>
+                        <h3 className="text-xl font-bold tracking-tight">{ch.title}</h3>
                       </div>
                     </div>
-                    <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">{a.summary}</p>
+                    <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">{ch.summary}</p>
 
                     <ul className="mt-5 space-y-4">
-                      {beats.map((b) => {
+                      {ch.beats.map((b, bi) => {
                         const state = !isDesktop
                           ? "done"
-                          : b.step < activeStep
+                          : b.index < activeBeat
                             ? "done"
-                            : b.step === activeStep
+                            : b.index === activeBeat
                               ? "active"
                               : "upcoming";
                         return (
                           <li
-                            key={b.step}
+                            key={b.index}
                             className={`flex gap-3 text-[15px] leading-relaxed transition-all duration-500 ${
                               state === "upcoming" ? "lg:opacity-30 lg:blur-[1px]" : "opacity-100 blur-0"
                             }`}
@@ -265,10 +272,24 @@ const Lineage = () => {
                                     : "bg-secondary text-muted-foreground"
                               }`}
                             >
-                              {b.step}
+                              {bi + 1}
                             </span>
                             <span className={state === "active" ? "text-foreground" : "text-muted-foreground"}>
                               {b.text}
+                              {b.link && (
+                                <>
+                                  {" "}
+                                  <a
+                                    href={b.link.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-medium text-primary hover:underline"
+                                  >
+                                    {b.link.label}
+                                    <ArrowUpRight className="inline h-3 w-3 align-text-top" />
+                                  </a>
+                                </>
+                              )}
                             </span>
                           </li>
                         );
@@ -276,16 +297,16 @@ const Lineage = () => {
                     </ul>
                   </div>
 
-                  {/* Scroll sentinels (desktop): dwell space that drives the active step. */}
+                  {/* Scroll sentinels (desktop): dwell space that drives the active beat. */}
                   <div aria-hidden className="hidden lg:block">
-                    {beats.map((b) => (
+                    {ch.beats.map((b) => (
                       <div
-                        key={b.step}
-                        data-step={b.step}
+                        key={b.index}
+                        data-beat={b.index}
                         ref={(el) => {
-                          stepRefs.current[b.step] = el;
+                          beatRefs.current[b.index] = el;
                         }}
-                        className="h-[65vh]"
+                        className="h-[60vh]"
                       />
                     ))}
                   </div>
@@ -297,7 +318,7 @@ const Lineage = () => {
       </section>
 
       {/* Inside the engine: where governance attaches to the optimized plan */}
-      <section id="inside-the-engine" className="container scroll-mt-32 border-t border-border py-16 md:py-20">
+      <section id="inside-the-engine" className="container scroll-mt-40 border-t border-border py-16 md:py-20">
         <p className="text-sm font-medium uppercase tracking-widest text-primary">Inside the engine</p>
         <h2 className="mt-4 text-2xl md:text-4xl font-bold tracking-tight">Where it happens: the query plan</h2>
         <p className="mt-3 max-w-3xl text-lg text-muted-foreground">
