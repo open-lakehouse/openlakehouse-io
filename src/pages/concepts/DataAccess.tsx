@@ -115,10 +115,10 @@ const DataAccess = () => (
             className={`container scroll-mt-32 py-16 md:py-20 ${i > 0 ? "border-t border-border" : ""}`}
           >
             <div className="flex items-center gap-3">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent">
                 <Icon className="h-5 w-5" />
               </span>
-              <p className="text-sm font-medium uppercase tracking-widest text-primary">
+              <p className="text-sm font-medium uppercase tracking-widest text-accent">
                 Pattern {i + 1} of {concept.approaches.length}
               </p>
             </div>
@@ -128,7 +128,7 @@ const DataAccess = () => (
             <ul className="mt-8 max-w-3xl space-y-3">
               {c.points.map((p) => (
                 <li key={p} className="flex gap-3 text-[15px] leading-relaxed">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent/70" />
                   <span>{p}</span>
                 </li>
               ))}

@@ -97,8 +97,8 @@ const StepNode = ({ data }: NodeProps) => {
         d.dashed ? "border border-dashed" : "border"
       } ${
         d.active
-          ? "border-primary bg-primary/10 shadow-glow scale-[1.03]"
-          : "border-border bg-card/80 hover:border-primary/40"
+          ? "border-accent bg-accent/10 shadow-glow-accent scale-[1.03]"
+          : "border-border bg-card/80 hover:border-accent/40"
       }`}
     >
       {sideHandles.map((h) => {
@@ -111,19 +111,19 @@ const StepNode = ({ data }: NodeProps) => {
         );
       })}
       <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 shrink-0 transition-colors ${d.active ? "text-primary" : "text-muted-foreground"}`} />
+        <Icon className={`h-4 w-4 shrink-0 transition-colors ${d.active ? "text-accent" : "text-muted-foreground"}`} />
         <div className="min-w-0">
           <div className="text-xs font-semibold tracking-tight truncate">{d.label}</div>
           {d.sub && <div className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{d.sub}</div>}
-          {d.badge && <div className="text-[10px] font-medium uppercase tracking-wider text-primary/80 truncate">{d.badge}</div>}
+          {d.badge && <div className="text-[10px] font-medium uppercase tracking-wider text-accent/80 truncate">{d.badge}</div>}
         </div>
       </div>
       {d.explore && (
         <Link
           to={d.explore.to}
           onClick={(e) => e.stopPropagation()}
-          className={`nodrag nopan group/explore mt-2 flex cursor-pointer items-center gap-1 border-t pt-1.5 text-[10px] font-medium transition-colors hover:text-primary ${
-            d.active ? "border-primary/30 text-primary" : "border-border/60 text-primary/70"
+          className={`nodrag nopan group/explore mt-2 flex cursor-pointer items-center gap-1 border-t pt-1.5 text-[10px] font-medium transition-colors hover:text-accent ${
+            d.active ? "border-accent/30 text-accent" : "border-border/60 text-accent/70"
           }`}
         >
           <ArrowUpRight className="h-3 w-3 shrink-0 transition-transform group-hover/explore:-translate-y-px group-hover/explore:translate-x-px" />
@@ -239,16 +239,16 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
     animated: lit,
     label: e.label,
     labelShowBg: true,
-    labelStyle: { fill: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 600 },
+    labelStyle: { fill: lit ? "hsl(var(--accent))" : "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 600 },
     labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
     labelBgPadding: [6, 3] as [number, number],
     labelBgBorderRadius: 6,
     style: {
-      stroke: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))",
+      stroke: lit ? "hsl(var(--accent))" : "hsl(var(--muted-foreground))",
       strokeWidth: lit ? 2 : 1.5,
       opacity: lit ? 1 : stepActive ? 0.25 : 0.6,
     },
-    markerEnd: { type: MarkerType.ArrowClosed, color: lit ? "hsl(var(--primary))" : "hsl(var(--muted-foreground))" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: lit ? "hsl(var(--accent))" : "hsl(var(--muted-foreground))" },
   });
 
   // Build the graph once. Node/edge identity is preserved across focus changes
@@ -317,7 +317,7 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
           type="button"
           onClick={togglePlay}
           aria-label={sequenceRunning ? "Pause sequence" : "Play sequence"}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-accent/40 hover:text-foreground"
         >
           {sequenceRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
         </button>
@@ -334,15 +334,15 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
               onMouseLeave={() => setHoverStep(null)}
               className={`group inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-all ${
                 on
-                  ? "border-primary bg-primary/10 text-primary"
+                  ? "border-accent bg-accent/10 text-accent"
                   : related
-                    ? "border-primary/40 bg-primary/5 text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    ? "border-accent/40 bg-accent/5 text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-accent/40 hover:text-foreground"
               }`}
             >
               <span
                 className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold transition-colors ${
-                  on ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
+                  on ? "bg-accent text-accent-foreground" : "bg-secondary text-foreground"
                 }`}
               >
                 {s.n}
@@ -391,7 +391,7 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
       <div className="mt-6 rounded-xl border border-border bg-card p-5 min-h-[112px] transition-all">
         {detail.kind === "node" ? (
           <div className="flex gap-4">
-            <div className="h-10 w-10 shrink-0 rounded-lg bg-primary/10 text-primary inline-flex items-center justify-center">
+            <div className="h-10 w-10 shrink-0 rounded-lg bg-accent/10 text-accent inline-flex items-center justify-center">
               <detail.icon className="h-5 w-5" />
             </div>
             <div>
@@ -400,13 +400,13 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
               </p>
               <h4 className="mt-0.5 font-semibold tracking-tight">
                 {detail.label}
-                {detail.badge && <span className="ml-2 text-xs uppercase tracking-wider text-primary/80">{detail.badge}</span>}
+                {detail.badge && <span className="ml-2 text-xs uppercase tracking-wider text-accent/80">{detail.badge}</span>}
               </h4>
               <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">{detail.hint}</p>
               {detail.explore && (
                 <Link
                   to={detail.explore.to}
-                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:gap-2.5 transition-all"
                 >
                   Explore {detail.explore.label} <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
@@ -415,7 +415,7 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
           </div>
         ) : (
           <div className="flex gap-4">
-            <div className="h-10 w-10 shrink-0 rounded-full bg-primary text-primary-foreground inline-flex items-center justify-center text-sm font-semibold">
+            <div className="h-10 w-10 shrink-0 rounded-full bg-accent text-accent-foreground inline-flex items-center justify-center text-sm font-semibold">
               {detail.n}
             </div>
             <div>
