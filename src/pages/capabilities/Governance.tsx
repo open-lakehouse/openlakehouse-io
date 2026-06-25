@@ -7,7 +7,10 @@ import { Seo } from "@/components/Seo";
 import { canonicalUrl } from "@/lib/seo";
 import { getCapability } from "@/data/capabilities";
 
-const CredentialVendingFlow = lazy(() => import("@/components/capabilities/CredentialVendingFlow"));
+const flowComponents: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
+  "credential-vending": lazy(() => import("@/components/capabilities/CredentialVendingFlow")),
+  "server-side-planning": lazy(() => import("@/components/capabilities/ScanApiFlow")),
+};
 
 const TITLE = "Governance";
 const TAGLINE = "Trust in your open lakehouse";
@@ -120,7 +123,8 @@ const Governance = () => (
       {governance.approaches.map((a, i) => {
         const c = approachContent[a.slug];
         const Icon = a.icon;
-        const isLive = a.status === "live";
+        const Flow = flowComponents[a.slug];
+        const isLive = a.status === "live" && Flow;
         return (
           <section
             key={a.slug}
@@ -155,16 +159,16 @@ const Governance = () => (
               </div>
             </div>
 
-            {isLive ? (
+            {isLive && Flow ? (
               <div className="mt-10">
                 <h3 className="text-sm font-medium uppercase tracking-widest text-primary">How it works</h3>
                 <p className="mt-2 mb-6 max-w-3xl text-muted-foreground">
-                  Step through the sequence 1&ndash;4, or hover any node to inspect its role.
+                  Step through the sequence, or hover any node to inspect its role.
                 </p>
                 <Suspense
                   fallback={<div className="h-[420px] rounded-2xl border border-border bg-card/40 animate-pulse" />}
                 >
-                  <CredentialVendingFlow />
+                  <Flow />
                 </Suspense>
               </div>
             ) : (

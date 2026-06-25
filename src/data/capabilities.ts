@@ -40,7 +40,7 @@ export const capabilities: Capability[] = [
         icon: ServerCog,
         summary:
           "The client asks the catalog to plan a query; it returns the exact files to read plus a credential for them — enabling file-, column-, and row-level control.",
-        status: "coming-soon",
+        status: "live",
       },
       {
         slug: "trusted-compute",
