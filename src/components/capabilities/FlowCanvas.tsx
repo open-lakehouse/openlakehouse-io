@@ -122,12 +122,14 @@ const StepNode = ({ data }: NodeProps) => {
         <Link
           to={d.explore.to}
           onClick={(e) => e.stopPropagation()}
-          className={`nodrag nopan mt-2 flex items-center gap-1 border-t pt-1.5 text-[10px] font-medium transition-colors hover:text-primary ${
+          className={`nodrag nopan group/explore mt-2 flex cursor-pointer items-center gap-1 border-t pt-1.5 text-[10px] font-medium transition-colors hover:text-primary ${
             d.active ? "border-primary/30 text-primary" : "border-border/60 text-primary/70"
           }`}
         >
-          <ArrowUpRight className="h-3 w-3 shrink-0" />
-          <span className="truncate">Explore {d.explore.label}</span>
+          <ArrowUpRight className="h-3 w-3 shrink-0 transition-transform group-hover/explore:-translate-y-px group-hover/explore:translate-x-px" />
+          <span className="truncate group-hover/explore:underline" style={{ textUnderlineOffset: 2 }}>
+            Explore {d.explore.label}
+          </span>
         </Link>
       )}
     </div>
