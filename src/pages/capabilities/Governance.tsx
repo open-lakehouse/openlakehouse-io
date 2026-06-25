@@ -1,0 +1,183 @@
+import { lazy, Suspense } from "react";
+import { Link } from "react-router-dom";
+import { ArrowLeft, Clock } from "lucide-react";
+import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
+import { Seo } from "@/components/Seo";
+import { canonicalUrl } from "@/lib/seo";
+import { getCapability } from "@/data/capabilities";
+
+const CredentialVendingFlow = lazy(() => import("@/components/capabilities/CredentialVendingFlow"));
+
+const TITLE = "Governance";
+const TAGLINE = "Trust in your open lakehouse";
+const DESCRIPTION =
+  "How an open lakehouse decides who can read and write data — and how engines reach storage without standing secrets. The three patterns: credential vending, server-side planning, and trusted compute.";
+
+const governance = getCapability("governance")!;
+
+// Zero-trust policy points (NIST SP 800-207) per pattern — kept terse on purpose.
+type TrustMap = { PEP: string; PDP: string; PIP: string };
+
+const approachContent: Record<string, { trust: TrustMap; points: string[] }> = {
+  "credential-vending": {
+    trust: { PEP: "Storage", PDP: "Catalog", PIP: "Catalog metadata" },
+    points: [
+      "Trust shifts from the client to the catalog and storage — no secret management on the client.",
+      "Access is all-or-nothing per object prefix; scope a token to a table's storage prefix to partition access.",
+      "First, highest-leverage step a platform should take to harden its security posture.",
+    ],
+  },
+  "server-side-planning": {
+    trust: { PEP: "Catalog", PDP: "Catalog", PIP: "Catalog" },
+    points: [
+      "The catalog returns a file list + credential for a specific query, not raw table access.",
+      "Enforces access at the file boundary; with a trusted query service, at the column and row level.",
+      "Avoids leaking protected values through file-level statistics. Used by Delta Sharing.",
+      "Cost: a filtering fleet to maintain and extra processing.",
+    ],
+  },
+  "trusted-compute": {
+    trust: { PEP: "Engine", PDP: "Catalog", PIP: "Catalog + attestation" },
+    points: [
+      "Enables row-level security and column masking when partitioning along boundaries is infeasible.",
+      "Enforcement spans services: catalog denies, storage validates credentials, engine masks.",
+      "Trust is established by credential or by identity attestation (hardware cert -> namespace -> binary hash).",
+    ],
+  },
+};
+
+const techArticleLd = {
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  headline: `${TITLE} — ${TAGLINE}`,
+  description: DESCRIPTION,
+  url: canonicalUrl("/capabilities/governance"),
+  about: governance.approaches.map((a) => ({ "@type": "Thing", name: a.title })),
+};
+
+const breadcrumbLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Home", item: canonicalUrl("/") },
+    { "@type": "ListItem", position: 2, name: "Capabilities", item: canonicalUrl("/capabilities") },
+    { "@type": "ListItem", position: 3, name: "Governance", item: canonicalUrl("/capabilities/governance") },
+  ],
+};
+
+const TrustRow = ({ trust }: { trust: TrustMap }) => (
+  <dl className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border text-sm">
+    {(Object.entries(trust) as [keyof TrustMap, string][]).map(([k, v]) => (
+      <div key={k} className="bg-card p-3">
+        <dt className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">{k}</dt>
+        <dd className="mt-1 font-medium">{v}</dd>
+      </div>
+    ))}
+  </dl>
+);
+
+const Governance = () => (
+  <div className="min-h-screen flex flex-col">
+    <Seo
+      title={`${TITLE} — ${TAGLINE}`}
+      description={DESCRIPTION}
+      path="/capabilities/governance"
+      type="article"
+      jsonLd={[techArticleLd, breadcrumbLd]}
+    />
+    <SiteHeader />
+    <main className="flex-1">
+      <section className="bg-brand-gradient text-primary-foreground">
+        <div className="container py-20 md:py-28">
+          <Link to="/capabilities" className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-6">
+            <ArrowLeft className="h-4 w-4" /> Capabilities
+          </Link>
+          <p className="text-sm font-medium uppercase tracking-widest text-white/80">Capability</p>
+          <h1 className="mt-3 text-4xl md:text-6xl font-bold tracking-tight">{TITLE}</h1>
+          <p className="mt-4 text-lg md:text-xl text-white/85 max-w-3xl">
+            The catalog is the natural governance anchor — it holds the metadata, evaluates policy, and brokers access
+            between compute and storage. Three patterns make that real.
+          </p>
+        </div>
+      </section>
+
+      {/* On-page nav across the three approaches */}
+      <nav className="sticky top-16 z-30 border-b border-border bg-background/80 backdrop-blur-xl">
+        <div className="container flex gap-1 overflow-x-auto py-3 text-sm">
+          {governance.approaches.map((a) => (
+            <a
+              key={a.slug}
+              href={`#${a.slug}`}
+              className="whitespace-nowrap rounded-md px-3 py-1.5 font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            >
+              {a.title}
+            </a>
+          ))}
+        </div>
+      </nav>
+
+      {governance.approaches.map((a, i) => {
+        const c = approachContent[a.slug];
+        const Icon = a.icon;
+        const isLive = a.status === "live";
+        return (
+          <section
+            key={a.slug}
+            id={a.slug}
+            className={`container scroll-mt-32 py-16 md:py-20 ${i > 0 ? "border-t border-border" : ""}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Icon className="h-5 w-5" />
+              </span>
+              <p className="text-sm font-medium uppercase tracking-widest text-primary">
+                Pattern {i + 1} of {governance.approaches.length}
+              </p>
+            </div>
+            <h2 className="mt-4 text-2xl md:text-4xl font-bold tracking-tight">{a.title}</h2>
+            <p className="mt-3 max-w-3xl text-lg text-muted-foreground">{a.summary}</p>
+
+            <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
+              <ul className="space-y-3">
+                {c.points.map((p) => (
+                  <li key={p} className="flex gap-3 text-[15px] leading-relaxed">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                  Zero-trust mapping
+                </p>
+                <TrustRow trust={c.trust} />
+              </div>
+            </div>
+
+            {isLive ? (
+              <div className="mt-10">
+                <h3 className="text-sm font-medium uppercase tracking-widest text-primary">How it works</h3>
+                <p className="mt-2 mb-6 max-w-3xl text-muted-foreground">
+                  Step through the sequence 1&ndash;4, or hover any node to inspect its role.
+                </p>
+                <Suspense
+                  fallback={<div className="h-[420px] rounded-2xl border border-border bg-card/40 animate-pulse" />}
+                >
+                  <CredentialVendingFlow />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="mt-8 inline-flex items-center gap-2 rounded-lg border border-dashed border-border bg-card/40 px-4 py-2.5 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4" /> Interactive architecture walkthrough coming soon.
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </main>
+    <SiteFooter />
+  </div>
+);
+
+export default Governance;

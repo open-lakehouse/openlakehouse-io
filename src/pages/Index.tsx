@@ -4,6 +4,7 @@ import { Hero } from "@/components/Hero";
 
 import { LogoMarquee } from "@/components/LogoMarquee";
 import { Technologies } from "@/components/Technologies";
+import { Capabilities } from "@/components/Capabilities";
 import { VideosCarousel } from "@/components/VideosCarousel";
 import { FAQ } from "@/components/FAQ";
 import { Seo } from "@/components/Seo";
@@ -26,6 +27,7 @@ const Index = () => (
       <Hero />
       <LogoMarquee />
       <Technologies />
+      <Capabilities />
       <VideosCarousel />
 
       {/* Getting Started */}

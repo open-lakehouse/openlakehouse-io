@@ -11,6 +11,8 @@ import FaqPage from "./pages/FaqPage.tsx";
 import TechnologyCategory from "./pages/TechnologyCategory.tsx";
 import DeltaLakePillar from "./pages/tech/DeltaLakePillar.tsx";
 import TechnologiesPage from "./pages/Technologies.tsx";
+import CapabilitiesPage from "./pages/Capabilities.tsx";
+import Governance from "./pages/capabilities/Governance.tsx";
 import Learn from "./pages/Learn.tsx";
 import GettingStarted from "./pages/learn/GettingStarted.tsx";
 import LearnCategory from "./pages/learn/LearnCategory.tsx";
@@ -38,6 +40,8 @@ const App = () => (
             <Route path="/technologies" element={<TechnologiesPage />} />
             <Route path="/technologies/delta-lake" element={<DeltaLakePillar />} />
             <Route path="/technologies/:slug" element={<TechnologyCategory />} />
+            <Route path="/capabilities" element={<CapabilitiesPage />} />
+            <Route path="/capabilities/governance" element={<Governance />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/learn/getting-started" element={<GettingStarted />} />
             <Route path="/learn/:category" element={<LearnCategory />} />

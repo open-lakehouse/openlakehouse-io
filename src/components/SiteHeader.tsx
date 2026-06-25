@@ -4,6 +4,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, ChevronDown, Cpu, BookOpen, Bot, Layers, ShieldCheck, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { capabilities } from "@/data/capabilities";
 
 type TechItem = { name: string; url: string };
 type TechCategory = {
@@ -78,13 +79,17 @@ export const SiteHeader = () => {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [techOpen, setTechOpen] = useState(false);
+  const [capOpen, setCapOpen] = useState(false);
   const [mobileTechOpen, setMobileTechOpen] = useState(false);
+  const [mobileCapOpen, setMobileCapOpen] = useState(false);
 
   // Close on route change
   useEffect(() => {
     setOpen(false);
     setTechOpen(false);
+    setCapOpen(false);
     setMobileTechOpen(false);
+    setMobileCapOpen(false);
   }, [pathname]);
 
   // Lock body scroll when menu open
@@ -109,7 +114,10 @@ export const SiteHeader = () => {
   return (
     <header
       className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/60 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/40"
-      onMouseLeave={() => setTechOpen(false)}
+      onMouseLeave={() => {
+        setTechOpen(false);
+        setCapOpen(false);
+      }}
     >
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center group">
@@ -124,7 +132,10 @@ export const SiteHeader = () => {
         <nav className="hidden md:flex items-center gap-1">
           <div
             className="relative"
-            onMouseEnter={() => setTechOpen(true)}
+            onMouseEnter={() => {
+              setTechOpen(true);
+              setCapOpen(false);
+            }}
           >
             <Link
               to="/technologies"
@@ -135,6 +146,25 @@ export const SiteHeader = () => {
               Technologies
               <ChevronDown
                 className={cn("h-3.5 w-3.5 transition-transform", techOpen && "rotate-180")}
+              />
+            </Link>
+          </div>
+          <div
+            className="relative"
+            onMouseEnter={() => {
+              setCapOpen(true);
+              setTechOpen(false);
+            }}
+          >
+            <Link
+              to="/capabilities"
+              className={cn(desktopLinkClass, "inline-flex items-center gap-1")}
+              aria-haspopup="true"
+              aria-expanded={capOpen}
+            >
+              Capabilities
+              <ChevronDown
+                className={cn("h-3.5 w-3.5 transition-transform", capOpen && "rotate-180")}
               />
             </Link>
           </div>
@@ -196,6 +226,45 @@ export const SiteHeader = () => {
 
       </div>
 
+      {/* Desktop mega menu — Capabilities */}
+      <div
+        className={cn(
+          "hidden md:block absolute left-0 right-0 top-full overflow-hidden border-border/40 bg-background/90 backdrop-blur-xl transition-[max-height,opacity,border-color] duration-300 ease-out",
+          capOpen ? "max-h-[600px] opacity-100 border-t border-b" : "max-h-0 opacity-0 border-t-0 border-b-0 pointer-events-none",
+        )}
+        onMouseEnter={() => setCapOpen(true)}
+      >
+        <div className="container py-8">
+          <div className="grid grid-cols-3 gap-8">
+            {capabilities.map((cap) => (
+              <div key={cap.slug}>
+                <Link
+                  to={`/capabilities/${cap.slug}`}
+                  onClick={() => setCapOpen(false)}
+                  className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm font-semibold tracking-tight text-foreground transition-all hover:text-primary hover:bg-primary/10"
+                >
+                  <cap.icon className="h-4 w-4 text-primary" />
+                  {cap.title}
+                </Link>
+                <ul className="mt-2 space-y-0.5 pl-2">
+                  {cap.approaches.map((a) => (
+                    <li key={a.slug}>
+                      <Link
+                        to={`/capabilities/${cap.slug}#${a.slug}`}
+                        onClick={() => setCapOpen(false)}
+                        className="block rounded-md px-2 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent/40"
+                      >
+                        {a.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
 
       {/* Mobile nav panel */}
       <div
@@ -248,6 +317,50 @@ export const SiteHeader = () => {
                 ))}
               </div>
 
+            </div>
+          </div>
+
+          {/* Compound Capabilities item */}
+          <div>
+            <div className="flex items-stretch rounded-md overflow-hidden">
+              <Link
+                to="/capabilities"
+                onClick={() => setOpen(false)}
+                className="flex-1 px-4 py-4 text-lg font-medium text-foreground/90 hover:text-foreground hover:bg-accent/50 transition-colors"
+              >
+                Capabilities
+              </Link>
+              <button
+                type="button"
+                aria-label={mobileCapOpen ? "Collapse capabilities" : "Expand capabilities"}
+                aria-expanded={mobileCapOpen}
+                onClick={() => setMobileCapOpen((v) => !v)}
+                className="px-4 inline-flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+              >
+                <ChevronDown
+                  className={cn("h-5 w-5 transition-transform", mobileCapOpen && "rotate-180")}
+                />
+              </button>
+            </div>
+            <div
+              className={cn(
+                "overflow-hidden transition-[max-height,opacity] duration-300 ease-out",
+                mobileCapOpen ? "max-h-[1200px] opacity-100" : "max-h-0 opacity-0",
+              )}
+            >
+              <div className="pl-3 pr-1 pb-2 space-y-1">
+                {capabilities.map((cap) => (
+                  <Link
+                    key={cap.slug}
+                    to={`/capabilities/${cap.slug}`}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-foreground/90 hover:text-foreground hover:bg-accent/40 rounded-md"
+                  >
+                    <cap.icon className="h-4 w-4 text-primary" />
+                    {cap.title}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
 
