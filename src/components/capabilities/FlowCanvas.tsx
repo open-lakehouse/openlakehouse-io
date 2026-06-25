@@ -206,6 +206,19 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
     setPinnedNode(null);
   };
 
+  // The button reflects whether the sequence is actually advancing (a pin pauses
+  // it even while `playing` is true). Pressing it while pinned resumes by
+  // clearing the pin; pressing it while running pauses.
+  const sequenceRunning = playing && pinnedStep == null && pinnedNode == null;
+  const togglePlay = () => {
+    if (sequenceRunning) {
+      setPlaying(false);
+    } else {
+      clearPins();
+      setPlaying(true);
+    }
+  };
+
   // Which nodes to highlight for a given focus state.
   const litNodes = (step: number | null, node: string | null) => {
     const set = new Set<string>();
@@ -300,15 +313,11 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => setPlaying((p) => !p)}
-          aria-label={playing ? "Pause sequence" : "Play sequence"}
+          onClick={togglePlay}
+          aria-label={sequenceRunning ? "Pause sequence" : "Play sequence"}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         >
-          {playing && pinnedStep == null && pinnedNode == null ? (
-            <Pause className="h-3.5 w-3.5" />
-          ) : (
-            <Play className="h-3.5 w-3.5" />
-          )}
+          {sequenceRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
         </button>
         {steps.map((s) => {
           const on = !focusNode && effectiveStep === s.n;

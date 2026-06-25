@@ -50,7 +50,7 @@ const spec: FlowSpec = {
     },
   },
   frames: [
-    { id: "platform", x: 420, y: 70, w: 666, h: 150, label: "Your platform", variant: "platform" },
+    { id: "platform", x: 420, y: 70, w: 666, h: 150, label: "Open Lakehouse", variant: "platform" },
     { id: "cloud", x: 420, y: 300, w: 462, h: 150, label: "Cloud provider", variant: "cloud" },
   ],
   parentOf: { catalog: "platform", engine: "platform", aux: "platform", idp: "cloud", storage: "cloud" },
