@@ -13,7 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Link } from "react-router-dom";
-import { Play, Pause, Pin, Cloud, Building2, AlertTriangle, ArrowUpRight, ArrowRight } from "lucide-react";
+import { Play, Pause, Pin, Cloud, Building2, ArrowUpRight, ArrowRight } from "lucide-react";
 
 const TICK_MS = 2400;
 
@@ -68,8 +68,6 @@ export type FlowSpec = {
   steps: FlowStep[];
   edges: FlowEdgeSpec[];
   intro: string;
-  /** Optional caveat rendered as a callout below the canvas. */
-  callout?: string;
 };
 
 const handleStyle = { opacity: 0, width: 1, height: 1, border: "none", minWidth: 0, minHeight: 0 } as const;
@@ -136,23 +134,17 @@ const StepNode = ({ data }: NodeProps) => {
   );
 };
 
-const frameVariants: Record<FrameVariant, { border: string; bg: string; text: string; legendBorder: string; legendBg: string; label: string; icon: IconCmp }> = {
+const frameVariants: Record<FrameVariant, { border: string; bg: string; text: string; icon: IconCmp }> = {
   platform: {
     border: "border-primary/40",
     bg: "bg-primary/[0.04]",
     text: "text-primary/80",
-    legendBorder: "border-primary/60",
-    legendBg: "bg-primary/10",
-    label: "Your platform",
     icon: Building2,
   },
   cloud: {
     border: "border-sky-500/40",
     bg: "bg-sky-500/[0.05]",
     text: "text-sky-500/90",
-    legendBorder: "border-sky-500/60",
-    legendBg: "bg-sky-500/10",
-    label: "Cloud provider",
     icon: Cloud,
   },
 };
@@ -174,7 +166,7 @@ const FrameNode = ({ data }: NodeProps) => {
 const nodeTypes = { step: StepNode, frame: FrameNode };
 
 export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
-  const { nodeMeta, positions, frames, parentOf, steps, edges: edgeSpecs, intro, callout } = spec;
+  const { nodeMeta, positions, frames, parentOf, steps, edges: edgeSpecs, intro } = spec;
 
   // Auto-advancing step, overridden by manual focus (hover/pin) on steps or nodes.
   const [autoStep, setAutoStep] = useState(1);
@@ -302,8 +294,6 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
     ? { kind: "node" as const, id: focusNode, ...nodeMeta[focusNode] }
     : { kind: "step" as const, ...steps.find((s) => s.n === effectiveStep)! };
 
-  const legendVariants = Array.from(new Set(frames.map((f) => f.variant)));
-
   return (
     <div className="animate-[fade-up_0.4s_ease-out]">
       {/* Step navigator — auto-advances; hover to focus, click to pin */}
@@ -386,26 +376,6 @@ export const FlowCanvas = ({ spec }: { spec: FlowSpec }) => {
           </ReactFlow>
         </div>
       </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
-        {legendVariants.map((variant) => {
-          const v = frameVariants[variant];
-          return (
-            <span key={variant} className="inline-flex items-center gap-1.5">
-              <span className={`h-2.5 w-2.5 rounded-sm border border-dashed ${v.legendBorder} ${v.legendBg}`} />
-              {v.label}
-            </span>
-          );
-        })}
-        <span className="text-muted-foreground/80">The frames show who typically operates each trusted system.</span>
-      </div>
-
-      {callout && (
-        <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{callout}</span>
-        </div>
-      )}
 
       <div className="mt-6 rounded-xl border border-border bg-card p-5 min-h-[112px] transition-all">
         {detail.kind === "node" ? (

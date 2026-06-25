@@ -20,9 +20,9 @@ const spec: FlowSpec = {
     },
     catalog: {
       label: "Trusted catalog",
-      badge: "PEP + PDP + PIP",
+      sub: "metadata + policy",
       icon: ShieldCheck,
-      hint: "The single trust anchor. It enforces, decides, and informs policy — verifying identity, authorizing the request, and minting the credential.",
+      hint: "The single point of trust. It enforces, decides, and informs policy — verifying identity, authorizing the request, and minting the credential.",
       dashed: true,
       explore: { label: "Catalogs", to: "/technologies/catalogs" },
     },

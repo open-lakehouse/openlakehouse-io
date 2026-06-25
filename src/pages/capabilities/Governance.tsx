@@ -19,12 +19,8 @@ const DESCRIPTION =
 
 const governance = getCapability("governance")!;
 
-// Zero-trust policy points (NIST SP 800-207) per pattern — kept terse on purpose.
-type TrustMap = { PEP: string; PDP: string; PIP: string };
-
-const approachContent: Record<string, { trust: TrustMap; points: string[] }> = {
+const approachContent: Record<string, { points: string[] }> = {
   "credential-vending": {
-    trust: { PEP: "Storage", PDP: "Catalog", PIP: "Catalog metadata" },
     points: [
       "Trust shifts from the client to the catalog and storage — no secret management on the client.",
       "Access is all-or-nothing per object prefix; scope a token to a table's storage prefix to partition access.",
@@ -32,7 +28,6 @@ const approachContent: Record<string, { trust: TrustMap; points: string[] }> = {
     ],
   },
   "server-side-planning": {
-    trust: { PEP: "Catalog", PDP: "Catalog", PIP: "Catalog" },
     points: [
       "The catalog returns a file list + credential for a specific query, not raw table access.",
       "Enforces access at the file boundary; with a trusted query service, at the column and row level.",
@@ -41,7 +36,6 @@ const approachContent: Record<string, { trust: TrustMap; points: string[] }> = {
     ],
   },
   "trusted-compute": {
-    trust: { PEP: "Engine", PDP: "Catalog", PIP: "Catalog + attestation" },
     points: [
       "Enables row-level security and column masking when partitioning along boundaries is infeasible.",
       "Enforcement spans services: catalog denies, storage validates credentials, engine masks.",
@@ -68,17 +62,6 @@ const breadcrumbLd = {
     { "@type": "ListItem", position: 3, name: "Governance", item: canonicalUrl("/capabilities/governance") },
   ],
 };
-
-const TrustRow = ({ trust }: { trust: TrustMap }) => (
-  <dl className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border text-sm">
-    {(Object.entries(trust) as [keyof TrustMap, string][]).map(([k, v]) => (
-      <div key={k} className="bg-card p-3">
-        <dt className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">{k}</dt>
-        <dd className="mt-1 font-medium">{v}</dd>
-      </div>
-    ))}
-  </dl>
-);
 
 const Governance = () => (
   <div className="min-h-screen flex flex-col">
@@ -142,30 +125,17 @@ const Governance = () => (
             <h2 className="mt-4 text-2xl md:text-4xl font-bold tracking-tight">{a.title}</h2>
             <p className="mt-3 max-w-3xl text-lg text-muted-foreground">{a.summary}</p>
 
-            <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
-              <ul className="space-y-3">
-                {c.points.map((p) => (
-                  <li key={p} className="flex gap-3 text-[15px] leading-relaxed">
-                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
-                    <span>{p}</span>
-                  </li>
-                ))}
-              </ul>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                  Zero-trust mapping
-                </p>
-                <TrustRow trust={c.trust} />
-              </div>
-            </div>
+            <ul className="mt-8 max-w-3xl space-y-3">
+              {c.points.map((p) => (
+                <li key={p} className="flex gap-3 text-[15px] leading-relaxed">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70" />
+                  <span>{p}</span>
+                </li>
+              ))}
+            </ul>
 
             {isLive && Flow ? (
               <div className="mt-10">
-                <h3 className="text-sm font-medium uppercase tracking-widest text-primary">How it works</h3>
-                <p className="mt-2 mb-6 max-w-3xl text-muted-foreground">
-                  Step through the sequence, or hover a node to inspect its role. Click any node to pin it
-                  and dig deeper into the technology behind it.
-                </p>
                 <Suspense
                   fallback={<div className="h-[420px] rounded-2xl border border-border bg-card/40 animate-pulse" />}
                 >

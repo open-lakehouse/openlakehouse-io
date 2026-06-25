@@ -14,9 +14,9 @@ const spec: FlowSpec = {
     },
     catalog: {
       label: "Trusted catalog",
-      badge: "PEP + PDP + PIP",
+      sub: "metadata + policy",
       icon: ShieldCheck,
-      hint: "The trust anchor. It verifies identity, applies row- and column-level policy, and invokes a trusted engine to produce a clean result — then vends a credential scoped to just those files.",
+      hint: "The single point of trust. It verifies identity, applies row- and column-level policy, and invokes a trusted engine to produce a clean result — then vends a credential scoped to just those files.",
       dashed: true,
       explore: { label: "Catalogs", to: "/technologies/catalogs" },
     },
@@ -106,8 +106,6 @@ const spec: FlowSpec = {
   ],
   intro:
     "Instead of handing the client raw table access, the catalog plans the query: a trusted engine applies row and column policy, writes clean files to a staging area, and the catalog vends a credential scoped to just those files.",
-  callout:
-    "Fine-grained access control comes at a cost — a trusted filtering fleet to operate, plus extra data movement to stage masked files.",
 };
 
 const ScanApiFlow = () => <FlowCanvas spec={spec} />;
