@@ -19,8 +19,8 @@ export type Capability = {
 
 export const capabilities: Capability[] = [
   {
-    slug: "governance",
-    title: "Governance",
+    slug: "data-access",
+    title: "Data Access",
     icon: ShieldCheck,
     blurb:
       "Who can read and write data — and how engines reach storage without holding standing secrets. Three patterns power it today.",

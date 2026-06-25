@@ -11,12 +11,12 @@
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/capabilities</loc>
+    <loc>https://openlakehouse-guide-hub.lovable.app/concepts</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/capabilities/governance</loc>
+    <loc>https://openlakehouse-guide-hub.lovable.app/concepts/data-access</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

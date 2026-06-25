@@ -50,7 +50,7 @@ const CapabilityCard = ({ slug, title, icon: Icon, blurb, status, approaches }: 
   }
 
   return (
-    <Link to={`/capabilities/${slug}`} className={`${className} hover:bg-secondary/60`}>
+    <Link to={`/concepts/${slug}`} className={`${className} hover:bg-secondary/60`}>
       {body}
     </Link>
   );
@@ -60,12 +60,12 @@ export const Capabilities = () => {
   const isHome = useLocation().pathname === "/";
 
   return (
-    <section id="capabilities" className="container py-20 md:py-28">
+    <section id="concepts" className="container py-20 md:py-28">
       <div className="max-w-2xl mb-12">
-        <p className="text-sm font-medium text-primary uppercase tracking-widest">The capabilities</p>
-        <h2 className="mt-3 text-3xl md:text-5xl font-bold tracking-tight">Lakehouse Capabilities</h2>
+        <p className="text-sm font-medium text-primary uppercase tracking-widest">The concepts</p>
+        <h2 className="mt-3 text-3xl md:text-5xl font-bold tracking-tight">Lakehouse Concepts</h2>
         <p className="mt-4 text-muted-foreground text-lg">
-          The properties an open lakehouse must deliver — and the architectural patterns that make them real.
+          The core concepts of an open lakehouse — and the architectural patterns that make each one real.
         </p>
       </div>
 
@@ -78,10 +78,10 @@ export const Capabilities = () => {
       {isHome && (
         <div className="mt-10 flex justify-center">
           <Link
-            to="/capabilities"
+            to="/concepts"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
           >
-            Explore all capabilities <ArrowRight className="h-4 w-4" />
+            Explore all concepts <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       )}

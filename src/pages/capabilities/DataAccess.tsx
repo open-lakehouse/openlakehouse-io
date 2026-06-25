@@ -12,12 +12,12 @@ const flowComponents: Record<string, React.LazyExoticComponent<React.ComponentTy
   "server-side-planning": lazy(() => import("@/components/capabilities/ScanApiFlow")),
 };
 
-const TITLE = "Governance";
+const TITLE = "Data Access";
 const TAGLINE = "Trust in your open lakehouse";
 const DESCRIPTION =
   "How an open lakehouse decides who can read and write data — and how engines reach storage without standing secrets. The three patterns: credential vending, server-side planning, and trusted compute.";
 
-const governance = getCapability("governance")!;
+const capability = getCapability("data-access")!;
 
 const approachContent: Record<string, { points: string[] }> = {
   "credential-vending": {
@@ -49,8 +49,8 @@ const techArticleLd = {
   "@type": "TechArticle",
   headline: `${TITLE} — ${TAGLINE}`,
   description: DESCRIPTION,
-  url: canonicalUrl("/capabilities/governance"),
-  about: governance.approaches.map((a) => ({ "@type": "Thing", name: a.title })),
+  url: canonicalUrl("/concepts/data-access"),
+  about: capability.approaches.map((a) => ({ "@type": "Thing", name: a.title })),
 };
 
 const breadcrumbLd = {
@@ -58,17 +58,17 @@ const breadcrumbLd = {
   "@type": "BreadcrumbList",
   itemListElement: [
     { "@type": "ListItem", position: 1, name: "Home", item: canonicalUrl("/") },
-    { "@type": "ListItem", position: 2, name: "Capabilities", item: canonicalUrl("/capabilities") },
-    { "@type": "ListItem", position: 3, name: "Governance", item: canonicalUrl("/capabilities/governance") },
+    { "@type": "ListItem", position: 2, name: "Concepts", item: canonicalUrl("/concepts") },
+    { "@type": "ListItem", position: 3, name: "Data Access", item: canonicalUrl("/concepts/data-access") },
   ],
 };
 
-const Governance = () => (
+const DataAccess = () => (
   <div className="min-h-screen flex flex-col">
     <Seo
       title={`${TITLE} — ${TAGLINE}`}
       description={DESCRIPTION}
-      path="/capabilities/governance"
+      path="/concepts/data-access"
       type="article"
       jsonLd={[techArticleLd, breadcrumbLd]}
     />
@@ -76,14 +76,14 @@ const Governance = () => (
     <main className="flex-1">
       <section className="bg-brand-gradient text-primary-foreground">
         <div className="container py-20 md:py-28">
-          <Link to="/capabilities" className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-6">
-            <ArrowLeft className="h-4 w-4" /> Capabilities
+          <Link to="/concepts" className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-6">
+            <ArrowLeft className="h-4 w-4" /> Concepts
           </Link>
-          <p className="text-sm font-medium uppercase tracking-widest text-white/80">Capability</p>
+          <p className="text-sm font-medium uppercase tracking-widest text-white/80">Concept</p>
           <h1 className="mt-3 text-4xl md:text-6xl font-bold tracking-tight">{TITLE}</h1>
           <p className="mt-4 text-lg md:text-xl text-white/85 max-w-3xl">
-            The catalog is the natural governance anchor — it holds the metadata, evaluates policy, and brokers access
-            between compute and storage. Three patterns make that real.
+            The catalog is the natural anchor for data access — it holds the metadata, evaluates policy, and brokers
+            access between compute and storage. Three patterns make that real.
           </p>
         </div>
       </section>
@@ -91,7 +91,7 @@ const Governance = () => (
       {/* On-page nav across the three approaches */}
       <nav className="sticky top-16 z-30 border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="container flex gap-1 overflow-x-auto py-3 text-sm">
-          {governance.approaches.map((a) => (
+          {capability.approaches.map((a) => (
             <a
               key={a.slug}
               href={`#${a.slug}`}
@@ -103,7 +103,7 @@ const Governance = () => (
         </div>
       </nav>
 
-      {governance.approaches.map((a, i) => {
+      {capability.approaches.map((a, i) => {
         const c = approachContent[a.slug];
         const Icon = a.icon;
         const Flow = flowComponents[a.slug];
@@ -119,7 +119,7 @@ const Governance = () => (
                 <Icon className="h-5 w-5" />
               </span>
               <p className="text-sm font-medium uppercase tracking-widest text-primary">
-                Pattern {i + 1} of {governance.approaches.length}
+                Pattern {i + 1} of {capability.approaches.length}
               </p>
             </div>
             <h2 className="mt-4 text-2xl md:text-4xl font-bold tracking-tight">{a.title}</h2>
@@ -155,4 +155,4 @@ const Governance = () => (
   </div>
 );
 
-export default Governance;
+export default DataAccess;
