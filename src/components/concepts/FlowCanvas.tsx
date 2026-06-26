@@ -1,0 +1,495 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  ReactFlow,
+  Background,
+  Handle,
+  Position,
+  MarkerType,
+  useNodesState,
+  useEdgesState,
+  type Node,
+  type Edge,
+  type NodeProps,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { Link } from "react-router-dom";
+import { Play, Pause, Pin, Cloud, Building2, ArrowUpRight, ArrowRight } from "lucide-react";
+
+const TICK_MS = 2400;
+
+type IconCmp = React.ComponentType<{ className?: string }>;
+export type FrameVariant = "platform" | "cloud";
+
+export type FlowNodeMeta = {
+  label: string;
+  sub?: string;
+  badge?: string;
+  hint: string;
+  icon: IconCmp;
+  dashed?: boolean;
+  /** Visual treatment: "service" (a card, the default) or "dataset" (an artifact). */
+  kind?: "service" | "dataset";
+  /** Optional "dig deeper" link to a technology category. */
+  explore?: { label: string; to: string };
+};
+
+export type FlowFrame = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label: string;
+  variant: FrameVariant;
+};
+
+export type FlowStep = {
+  n: number;
+  title: string;
+  desc: string;
+  nodes: string[];
+  /** Highlight color for this step's lit edges: default "accent" or "finding". */
+  tone?: "accent" | "finding";
+};
+
+export type FlowEdgeSpec = {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle: string;
+  targetHandle: string;
+  /** The narrative step (or steps) this edge is active in. */
+  step: number | number[];
+  label?: string;
+};
+
+const edgeOnStep = (step: number | number[], n: number | null) =>
+  n != null && (Array.isArray(step) ? step.includes(n) : step === n);
+
+export type FlowSpec = {
+  nodeMeta: Record<string, FlowNodeMeta>;
+  /** Absolute for ungrouped nodes; relative to the parent frame for grouped ones. */
+  positions: Record<string, { x: number; y: number }>;
+  frames: FlowFrame[];
+  /** Maps a node id to the frame id it belongs to. */
+  parentOf: Record<string, string>;
+  steps: FlowStep[];
+  edges: FlowEdgeSpec[];
+  intro: string;
+};
+
+const handleStyle = { opacity: 0, width: 1, height: 1, border: "none", minWidth: 0, minHeight: 0 } as const;
+
+// Centered handles per side, plus upper/lower variants on the left/right sides
+// (suffix -hi / -lo) so two opposing edges can run as separate, non-overlapping lines.
+const sideHandles: { pos: Position; src: string; tgt: string; offset?: string }[] = [
+  { pos: Position.Top, src: "ts", tgt: "tt" },
+  { pos: Position.Bottom, src: "bs", tgt: "bt" },
+  { pos: Position.Right, src: "rs", tgt: "rt" },
+  { pos: Position.Right, src: "rs-hi", tgt: "rt-hi", offset: "33.333%" },
+  { pos: Position.Right, src: "rs-lo", tgt: "rt-lo", offset: "66.667%" },
+  { pos: Position.Left, src: "ls", tgt: "lt" },
+  { pos: Position.Left, src: "ls-hi", tgt: "lt-hi", offset: "33.333%" },
+  { pos: Position.Left, src: "ls-lo", tgt: "lt-lo", offset: "66.667%" },
+];
+
+type StepNodeData = FlowNodeMeta & { active: boolean };
+
+const StepNode = ({ data }: NodeProps) => {
+  const d = data as unknown as StepNodeData;
+  const Icon = d.icon;
+  const isData = d.kind === "dataset";
+  return (
+    <div
+      title={d.hint}
+      className={`w-[184px] px-3 py-2.5 text-left transition-all duration-300 border ${
+        d.dashed ? "border-dashed" : ""
+      } ${isData ? "rounded-md border-l-[3px]" : "rounded-lg"} ${
+        d.active
+          ? "border-accent bg-accent/10 shadow-glow-accent scale-[1.03]"
+          : isData
+            ? "border-border border-l-primary/50 bg-secondary/50 hover:border-accent/40"
+            : "border-border bg-card/80 hover:border-accent/40"
+      }`}
+    >
+      {sideHandles.map((h) => {
+        const style = h.offset ? { ...handleStyle, top: h.offset } : handleStyle;
+        return (
+          <span key={h.src}>
+            <Handle type="source" position={h.pos} id={h.src} style={style} isConnectable={false} />
+            <Handle type="target" position={h.pos} id={h.tgt} style={style} isConnectable={false} />
+          </span>
+        );
+      })}
+      <div className="flex items-center gap-2">
+        <Icon className={`h-4 w-4 shrink-0 transition-colors ${d.active ? "text-accent" : "text-muted-foreground"}`} />
+        <div className="min-w-0">
+          <div className="text-xs font-semibold tracking-tight truncate">{d.label}</div>
+          {d.sub && <div className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{d.sub}</div>}
+          {d.badge && <div className="text-[10px] font-medium uppercase tracking-wider text-accent/80 truncate">{d.badge}</div>}
+        </div>
+      </div>
+      {d.explore && (
+        <Link
+          to={d.explore.to}
+          onClick={(e) => e.stopPropagation()}
+          className={`nodrag nopan group/explore mt-2 flex cursor-pointer items-center gap-1 border-t pt-1.5 text-[10px] font-medium transition-colors hover:text-accent ${
+            d.active ? "border-accent/30 text-accent" : "border-border/60 text-accent/70"
+          }`}
+        >
+          <ArrowUpRight className="h-3 w-3 shrink-0 transition-transform group-hover/explore:-translate-y-px group-hover/explore:translate-x-px" />
+          <span className="truncate group-hover/explore:underline" style={{ textUnderlineOffset: 2 }}>
+            Explore {d.explore.label}
+          </span>
+        </Link>
+      )}
+    </div>
+  );
+};
+
+const frameVariants: Record<FrameVariant, { border: string; bg: string; text: string; icon: IconCmp }> = {
+  platform: {
+    border: "border-primary/40",
+    bg: "bg-primary/[0.04]",
+    text: "text-primary/80",
+    icon: Building2,
+  },
+  cloud: {
+    border: "border-sky-500/40",
+    bg: "bg-sky-500/[0.05]",
+    text: "text-sky-500/90",
+    icon: Cloud,
+  },
+};
+
+const FrameNode = ({ data }: NodeProps) => {
+  const { label, variant } = data as { label: string; variant: FrameVariant };
+  const v = frameVariants[variant];
+  const Icon = v.icon;
+  return (
+    <div className={`pointer-events-none relative h-full w-full rounded-2xl border border-dashed ${v.border} ${v.bg}`}>
+      <span className={`absolute -top-2.5 left-4 inline-flex items-center gap-1.5 bg-card px-2 text-[10px] font-medium uppercase tracking-widest ${v.text}`}>
+        <Icon className="h-3 w-3" />
+        {label}
+      </span>
+    </div>
+  );
+};
+
+const nodeTypes = { step: StepNode, frame: FrameNode };
+
+export const FlowCanvas = ({
+  spec,
+  activeSteps,
+  onStepSelect,
+}: {
+  spec: FlowSpec;
+  /** Scrollytelling: when set, auto-advance only cycles through these step
+   * numbers (the chapter currently in view) instead of the whole sequence. */
+  activeSteps?: number[];
+  /** Scrollytelling: when set, clicking a step pill calls this (to drive
+   * external scroll) instead of pinning the step. */
+  onStepSelect?: (n: number) => void;
+}) => {
+  const { nodeMeta, positions, frames, parentOf, steps, edges: edgeSpecs, intro } = spec;
+
+  // In scrollytelling mode the page narrows the auto-advance to the steps of the
+  // chapter currently in view; otherwise it walks every step.
+  const scrolly = Array.isArray(activeSteps);
+  const cycle = useMemo(
+    () => (activeSteps && activeSteps.length ? activeSteps : steps.map((s) => s.n)),
+    [activeSteps, steps],
+  );
+
+  // Auto-advancing step, overridden by manual focus (hover/pin) on steps or nodes.
+  const [autoStep, setAutoStep] = useState(cycle[0]);
+  const [playing, setPlaying] = useState(true);
+  const [pinnedStep, setPinnedStep] = useState<number | null>(null);
+  const [hoverStep, setHoverStep] = useState<number | null>(null);
+  const [hoverNode, setHoverNode] = useState<string | null>(null);
+  const [pinnedNode, setPinnedNode] = useState<string | null>(null);
+
+  const paused =
+    !playing || pinnedStep != null || pinnedNode != null || hoverStep != null || hoverNode != null;
+
+  // When the active chapter changes (scroll), snap into its step range.
+  useEffect(() => {
+    setAutoStep((s) => (cycle.includes(s) ? s : cycle[0]));
+  }, [cycle]);
+
+  useEffect(() => {
+    if (paused || cycle.length <= 1) return;
+    const id = setInterval(
+      () => setAutoStep((s) => cycle[(cycle.indexOf(s) + 1) % cycle.length]),
+      TICK_MS,
+    );
+    return () => clearInterval(id);
+  }, [paused, cycle]);
+
+  // A focused node (hover or pin) takes over from the step sequence.
+  const focusNode = hoverNode ?? pinnedNode;
+  const focusStep = focusNode ? null : hoverStep ?? pinnedStep ?? autoStep;
+  const effectiveStep = hoverStep ?? pinnedStep ?? autoStep;
+
+  // Steps the focused node participates in — surfaced softly on the pills.
+  const relatedSteps = focusNode ? steps.filter((s) => s.nodes.includes(focusNode)).map((s) => s.n) : [];
+
+  const selectNode = (id: string) => {
+    setPinnedStep(null);
+    setPinnedNode((cur) => (cur === id ? null : id));
+  };
+  const selectStep = (n: number) => {
+    if (onStepSelect) {
+      onStepSelect(n);
+      return;
+    }
+    setPinnedNode(null);
+    setPinnedStep((cur) => (cur === n ? null : n));
+  };
+  const clearPins = () => {
+    setPinnedStep(null);
+    setPinnedNode(null);
+  };
+
+  // The button reflects whether the sequence is actually advancing (a pin pauses
+  // it even while `playing` is true). Pressing it while pinned resumes by
+  // clearing the pin; pressing it while running pauses.
+  const sequenceRunning = playing && pinnedStep == null && pinnedNode == null;
+  const togglePlay = () => {
+    if (sequenceRunning) {
+      setPlaying(false);
+    } else {
+      clearPins();
+      setPlaying(true);
+    }
+  };
+
+  // Which nodes to highlight for a given focus state.
+  const litNodes = (step: number | null, node: string | null) => {
+    const set = new Set<string>();
+    if (node) set.add(node);
+    if (step != null) for (const id of steps.find((s) => s.n === step)?.nodes ?? []) set.add(id);
+    return set;
+  };
+
+  const styleEdge = (
+    e: FlowEdgeSpec,
+    lit: boolean,
+    stepActive: boolean,
+    litTone: "accent" | "finding" = "accent",
+  ): Edge => {
+    const litColor = litTone === "finding" ? "hsl(var(--primary))" : "hsl(var(--accent))";
+    return {
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      type: "smoothstep",
+      animated: lit,
+      label: e.label,
+      labelShowBg: true,
+      labelStyle: { fill: lit ? litColor : "hsl(var(--muted-foreground))", fontSize: 11, fontWeight: 600 },
+      labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
+      labelBgPadding: [6, 3] as [number, number],
+      labelBgBorderRadius: 6,
+      style: {
+        stroke: lit ? litColor : "hsl(var(--muted-foreground))",
+        strokeWidth: lit ? 2 : 1.5,
+        opacity: lit ? 1 : stepActive ? 0.25 : 0.6,
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: lit ? litColor : "hsl(var(--muted-foreground))" },
+    };
+  };
+
+  // Build the graph once. Node/edge identity is preserved across focus changes
+  // (we mutate data/style in place), so React Flow keeps measured sizes and DOM
+  // nodes stable — no flicker, and clicks aren't dropped mid-render.
+  const initialNodes = useMemo<Node[]>(() => {
+    const lit = litNodes(1, null);
+    return [
+      ...frames.map((f) => ({
+        id: f.id,
+        type: "frame",
+        position: { x: f.x, y: f.y },
+        data: { label: f.label, variant: f.variant },
+        draggable: false,
+        selectable: false,
+        zIndex: 0,
+        style: { width: f.w, height: f.h, pointerEvents: "none" as const },
+      })),
+      ...Object.keys(nodeMeta).map((id) => ({
+        id,
+        type: "step",
+        position: positions[id],
+        data: { ...nodeMeta[id], active: lit.has(id) },
+        draggable: false,
+        selectable: true,
+        ...(parentOf[id] ? { parentId: parentOf[id], extent: "parent" as const } : {}),
+      })),
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec]);
+
+  const initialEdges = useMemo<Edge[]>(
+    () => {
+      const tone = steps.find((s) => s.n === 1)?.tone ?? "accent";
+      return edgeSpecs.map((e) => styleEdge(e, edgeOnStep(e.step, 1), true, tone));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [spec],
+  );
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // Repaint highlight state in place whenever focus changes.
+  useEffect(() => {
+    const lit = litNodes(focusStep, focusNode);
+    setNodes((nds) =>
+      nds.map((n) => (n.type === "step" ? { ...n, data: { ...n.data, active: lit.has(n.id) } } : n)),
+    );
+    const stepActive = focusStep != null;
+    const litTone = steps.find((s) => s.n === focusStep)?.tone ?? "accent";
+    setEdges((eds) =>
+      eds.map((e) => {
+        const es = edgeSpecs.find((s) => s.id === e.id)!;
+        return styleEdge(es, stepActive && edgeOnStep(es.step, focusStep), stepActive, litTone);
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNode, focusStep]);
+
+  const detail = focusNode
+    ? { kind: "node" as const, id: focusNode, ...nodeMeta[focusNode] }
+    : { kind: "step" as const, ...steps.find((s) => s.n === effectiveStep)! };
+
+  return (
+    <div className="animate-[fade-up_0.4s_ease-out]">
+      {/* Step navigator — autoplay only; in scrollytelling the page scroll and
+          the chapter cards drive the steps, so the pills would be redundant. */}
+      {!scrolly && (
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label={sequenceRunning ? "Pause sequence" : "Play sequence"}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-accent/40 hover:text-foreground"
+        >
+          {sequenceRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        </button>
+        {steps.map((s) => {
+          const on = !focusNode && effectiveStep === s.n;
+          const related = focusNode != null && relatedSteps.includes(s.n);
+          const isPinned = pinnedStep === s.n;
+          return (
+            <button
+              key={s.n}
+              type="button"
+              onClick={() => selectStep(s.n)}
+              onMouseEnter={() => setHoverStep(s.n)}
+              onMouseLeave={() => setHoverStep(null)}
+              className={`group inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-all ${
+                on
+                  ? "border-accent bg-accent/10 text-accent"
+                  : related
+                    ? "border-accent/40 bg-accent/5 text-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-accent/40 hover:text-foreground"
+              }`}
+            >
+              <span
+                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold transition-colors ${
+                  on ? "bg-accent text-accent-foreground" : "bg-secondary text-foreground"
+                }`}
+              >
+                {s.n}
+              </span>
+              {s.title}
+              {isPinned && <Pin className="h-3 w-3 fill-current" />}
+            </button>
+          );
+        })}
+      </div>
+      )}
+
+      <div className="rounded-2xl border border-border bg-card/40 shadow-card overflow-hidden">
+        <div className="h-[400px] md:h-[460px]">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            nodeTypes={nodeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.04 }}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            zoomOnScroll={false}
+            zoomOnPinch={false}
+            zoomOnDoubleClick={false}
+            panOnScroll={false}
+            panOnDrag={false}
+            preventScrolling={false}
+            onNodeMouseEnter={(_, node) => {
+              if (node.id in nodeMeta) setHoverNode(node.id);
+            }}
+            onNodeMouseLeave={() => setHoverNode(null)}
+            onNodeClick={(_, node) => {
+              if (node.id in nodeMeta) selectNode(node.id);
+            }}
+            onPaneClick={clearPins}
+            minZoom={0.4}
+            maxZoom={2.2}
+          >
+            <Background gap={22} color="hsl(var(--border))" />
+          </ReactFlow>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-border bg-card p-5 min-h-[112px] transition-all">
+        {detail.kind === "node" ? (
+          <div className="flex gap-4">
+            <div className="h-10 w-10 shrink-0 rounded-lg bg-accent/10 text-accent inline-flex items-center justify-center">
+              <detail.icon className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                {pinnedNode === detail.id ? "Pinned" : "Inspecting"}
+              </p>
+              <h4 className="mt-0.5 font-semibold tracking-tight">
+                {detail.label}
+                {detail.badge && <span className="ml-2 text-xs uppercase tracking-wider text-accent/80">{detail.badge}</span>}
+              </h4>
+              <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">{detail.hint}</p>
+              {detail.explore && (
+                <Link
+                  to={detail.explore.to}
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:gap-2.5 transition-all"
+                >
+                  Explore {detail.explore.label} <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-4">
+            <div className="h-10 w-10 shrink-0 rounded-full bg-accent text-accent-foreground inline-flex items-center justify-center text-sm font-semibold">
+              {detail.n}
+            </div>
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                {pinnedStep === detail.n ? "Pinned" : !paused ? "Playing" : "Step"}
+              </p>
+              <h4 className="mt-0.5 font-semibold tracking-tight">{detail.title}</h4>
+              <p className="mt-1.5 text-sm text-muted-foreground leading-relaxed">{detail.desc}</p>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* intro is shown via the step panel default (auto-play starts immediately); kept for a11y */}
+      <span className="sr-only">{intro}</span>
+    </div>
+  );
+};
+
+export default FlowCanvas;
