@@ -1,225 +1,225 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/</loc>
+    <loc>https://openlakehouse.io/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies</loc>
+    <loc>https://openlakehouse.io/technologies</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/learn</loc>
+    <loc>https://openlakehouse.io/learn</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/community</loc>
+    <loc>https://openlakehouse.io/community</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog</loc>
+    <loc>https://openlakehouse.io/blog</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/faq</loc>
+    <loc>https://openlakehouse.io/faq</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies/compute-engines</loc>
+    <loc>https://openlakehouse.io/technologies/compute-engines</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies/catalogs</loc>
+    <loc>https://openlakehouse.io/technologies/catalogs</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies/agentic</loc>
+    <loc>https://openlakehouse.io/technologies/agentic</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies/lakehouse-formats</loc>
+    <loc>https://openlakehouse.io/technologies/lakehouse-formats</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies/orchestration</loc>
+    <loc>https://openlakehouse.io/technologies/orchestration</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies/open-governance</loc>
+    <loc>https://openlakehouse.io/technologies/open-governance</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/technologies/delta-lake</loc>
+    <loc>https://openlakehouse.io/technologies/delta-lake</loc>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/agentic/openclaw-tracing</loc>
-    <lastmod>2026-05-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://openlakehouse.io/blog/category/agentic</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/delta-lake/clickhouse-delta-kernel</loc>
-    <lastmod>2026-05-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://openlakehouse.io/blog/category/delta-lake</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/delta-lake/delta-4-2-released</loc>
-    <lastmod>2026-04-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://openlakehouse.io/blog/category/iceberg</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/delta-lake/delta-catalog-managed-tables</loc>
-    <lastmod>2026-02-02</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/delta-lake/delta-lake-4-1-0-released</loc>
-    <lastmod>2026-03-01</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/delta-lake/duckdb-delta-grows-up</loc>
-    <lastmod>2026-05-06</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/apache-spark</loc>
-    <lastmod>2026-06-03</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/delta-lake</loc>
-    <lastmod>2026-06-03</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/mlflow</loc>
-    <lastmod>2026-06-03</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/omnigent</loc>
-    <lastmod>2026-06-15</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/omnigent-install</loc>
-    <lastmod>2026-06-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/getting-started/unity-catalog</loc>
-    <lastmod>2026-06-03</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/iceberg/iceberg-1-11-0-release</loc>
+    <loc>https://openlakehouse.io/blog/iceberg/iceberg-1-11-0-release</loc>
     <lastmod>2026-06-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/category/agentic</loc>
+    <loc>https://openlakehouse.io/blog/delta-lake/clickhouse-delta-kernel</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/blog/delta-lake/duckdb-delta-grows-up</loc>
+    <lastmod>2026-05-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/blog/agentic/openclaw-tracing</loc>
+    <lastmod>2026-05-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/blog/delta-lake/delta-4-2-released</loc>
+    <lastmod>2026-04-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/blog/delta-lake/delta-lake-4-1-0-released</loc>
+    <lastmod>2026-03-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/blog/delta-lake/delta-catalog-managed-tables</loc>
+    <lastmod>2026-02-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/learn/getting-started</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/category/delta-lake</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
+    <loc>https://openlakehouse.io/learn/getting-started/omnigent-install</loc>
+    <lastmod>2026-06-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/category/getting-started</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
+    <loc>https://openlakehouse.io/learn/getting-started/omnigent</loc>
+    <lastmod>2026-06-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/blog/category/iceberg</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
+    <loc>https://openlakehouse.io/learn/getting-started/unity-catalog</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/alex-jiang</loc>
+    <loc>https://openlakehouse.io/learn/getting-started/mlflow</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/learn/getting-started/delta-lake</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/learn/getting-started/apache-spark</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/authors/alex-jiang</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/apache-iceberg-pmc</loc>
+    <loc>https://openlakehouse.io/authors/apache-iceberg-pmc</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/ben-fleis</loc>
+    <loc>https://openlakehouse.io/authors/ben-fleis</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/benjamin-mathew</loc>
+    <loc>https://openlakehouse.io/authors/benjamin-mathew</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/kseniia-sumarokova</loc>
+    <loc>https://openlakehouse.io/authors/kseniia-sumarokova</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/melvyn-peignon</loc>
+    <loc>https://openlakehouse.io/authors/melvyn-peignon</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/mlflow-team</loc>
+    <loc>https://openlakehouse.io/authors/mlflow-team</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/raul-marin</loc>
+    <loc>https://openlakehouse.io/authors/raul-marin</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/scott-haines</loc>
+    <loc>https://openlakehouse.io/authors/scott-haines</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/scottsandre</loc>
+    <loc>https://openlakehouse.io/authors/scottsandre</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/yuki-watanabe</loc>
+    <loc>https://openlakehouse.io/authors/yuki-watanabe</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://openlakehouse-guide-hub.lovable.app/authors/zheng-hu</loc>
+    <loc>https://openlakehouse.io/authors/zheng-hu</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>

@@ -4,16 +4,18 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "bunx tsx scripts/generate-sitemap.ts",
+    "predev": "bunx tsx scripts/generate-seo.ts",
     "dev": "vite",
-    "prebuild": "bunx tsx scripts/generate-sitemap.ts",
+    "prebuild": "bunx tsx scripts/generate-seo.ts",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sync:videos": "node scripts/sync-playlists.mjs"
+    "sync:videos": "node scripts/sync-playlists.mjs",
+    "strip-lock-proxy": "bun run scripts/strip-bun-lock-proxy.ts",
+    "strip-lock-proxy:check": "bun run scripts/strip-bun-lock-proxy.ts --check"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
