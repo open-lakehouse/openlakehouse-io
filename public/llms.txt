@@ -1,39 +1,68 @@
 # Open Lakehouse
 
-> The Open Lakehouse is a vendor-neutral data + AI architecture built on
-> open table formats (Apache Iceberg, Delta Lake), open catalogs (Unity
-> Catalog), open compute engines (Apache Spark, DataFusion, Flink), and
-> open ML lifecycle tools (MLflow) — running over object storage you
-> control. This site is a curated, citable reference for engineers and
-> AI assistants.
+> The Open Lakehouse: your data in open formats on storage you control, readable by any engine — today and ten years from now.
 
-This file follows the proposed llms.txt convention (https://llmstxt.org).
-It lists the canonical pages on this site that are safe and useful to
-cite. Long-form content lives at the URLs below.
+This file follows the llms.txt convention (https://llmstxt.org). It lists
+the canonical pages on this site that are safe and useful to cite. The
+full text of every article is mirrored in /llms-full.txt.
 
 ## Site
-
-- [Home](https://openlakehouse-guide-hub.lovable.app/): What the Open Lakehouse is and why it matters.
-- [Technologies](https://openlakehouse-guide-hub.lovable.app/technologies): Every open-source building block, grouped by layer.
-- [Learn](https://openlakehouse-guide-hub.lovable.app/learn): Curated talks and tutorials.
-- [Community](https://openlakehouse-guide-hub.lovable.app/community): Where practitioners gather.
-- [Blog](https://openlakehouse-guide-hub.lovable.app/blog): Release notes, deep dives, and republished posts from upstream projects.
-- [FAQ](https://openlakehouse-guide-hub.lovable.app/faq): Direct, citable Q&A about the Open Lakehouse, Delta Lake, Iceberg, Unity Catalog, MLflow, and Spark.
+- [Home](https://openlakehouse.io/): What the Open Lakehouse is and why it matters.
+- [Technologies](https://openlakehouse.io/technologies): Every open-source building block, grouped by layer.
+- [Learn](https://openlakehouse.io/learn): Curated guides, talks, and tutorials.
+- [Community](https://openlakehouse.io/community): Where practitioners gather.
+- [Blog](https://openlakehouse.io/blog): Release notes, deep dives, and republished posts from upstream projects.
+- [FAQ](https://openlakehouse.io/faq): Direct, citable Q&A about the Open Lakehouse, Delta Lake, Iceberg, Unity Catalog, MLflow, and Spark.
 
 ## Pillar references
+- [Delta Lake](https://openlakehouse.io/technologies/delta-lake): What Delta Lake is, how it works, who created it, and how it compares to Iceberg.
 
-- [Delta Lake](https://openlakehouse-guide-hub.lovable.app/technologies/delta-lake): What Delta Lake is, how it works, who created it, and how it compares to Iceberg.
+## Technology categories
+- [Compute Engines](https://openlakehouse.io/technologies/compute-engines)
+- [Catalogs](https://openlakehouse.io/technologies/catalogs)
+- [Agentic](https://openlakehouse.io/technologies/agentic)
+- [Lakehouse Formats](https://openlakehouse.io/technologies/lakehouse-formats)
+- [Orchestration](https://openlakehouse.io/technologies/orchestration)
+- [Open Governance](https://openlakehouse.io/technologies/open-governance)
 
 ## Blog categories
+- [Agentic posts](https://openlakehouse.io/blog/category/agentic)
+- [Delta Lake posts](https://openlakehouse.io/blog/category/delta-lake)
+- [Iceberg posts](https://openlakehouse.io/blog/category/iceberg)
 
-- [Delta Lake posts](https://openlakehouse-guide-hub.lovable.app/blog/category/delta-lake)
-- [Iceberg posts](https://openlakehouse-guide-hub.lovable.app/blog/category/iceberg)
-- [Agentic & MLflow posts](https://openlakehouse-guide-hub.lovable.app/blog/category/agentic)
+## Blog posts
+- [Apache Iceberg 1.11.0 Release](https://openlakehouse.io/blog/iceberg/iceberg-1-11-0-release): Iceberg 1.11.0 lands the biggest REST catalog upgrade since the protocol was introduced, plus encryption, geospatial types, SQL UDFs, Spark 4.1 and Flink 2.1 support, and the first foundations of Format V4.
+- [Integrating the Rust Delta Kernel into ClickHouse](https://openlakehouse.io/blog/delta-lake/clickhouse-delta-kernel): How the ClickHouse team adopted delta-kernel-rs to offload Delta protocol handling, unlock writes, schema evolution, time travel, CDF, and pruning — and what it took to ship a Rust library inside a C++ database.
+- [Delta Grows Up: Writes, Unity Catalog and Time Travel](https://openlakehouse.io/blog/delta-lake/duckdb-delta-grows-up): DuckDB's Delta and Unity Catalog extensions shed their experimental tags — now with INSERT writes, time travel, Unity Catalog coordination, and Catalog Managed Tables.
+- [From Black Box to Observability: Tracing OpenClaw with MLflow](https://openlakehouse.io/blog/agentic/openclaw-tracing): How to add MLflow Tracing to OpenClaw so every autonomous agent run becomes a fully inspectable execution timeline — locally, with your data on your machine.
+- [Delta 4.2.0 Released](https://openlakehouse.io/blog/delta-lake/delta-4-2-released): Delta Lake 4.2 advances on two fronts — Kernel expands outward with a new Flink connector, streaming improvements, and broader data type support, while catalog-managed tables mature with atomic operations, schema evolution from SQL, and synchronous UniForm.
+- [Delta Lake 4.1.0 Released](https://openlakehouse.io/blog/delta-lake/delta-lake-4-1-0-released): Delta Lake 4.1.0 ships Apache Spark 4.1.0 support, catalog-managed table enhancements, server-side planning, atomic CTAS for UC tables, and conflict-free feature enablement.
+- [The Next Evolution of Delta: Catalog-Managed Tables](https://openlakehouse.io/blog/delta-lake/delta-catalog-managed-tables): How catalog-managed commits shift transaction coordination from the filesystem to Unity Catalog, making the catalog the single source of truth for Delta table state.
+
+## Learn
+- [Installing Omnigent](https://openlakehouse.io/learn/getting-started/omnigent-install): Install the Omnigent CLI, set up credentials, and launch your first agent in a few minutes.
+- [Getting started with Omnigent](https://openlakehouse.io/learn/getting-started/omnigent): Run a coding agent locally with a web UI, inline comments, file editing, and policy enforcement.
+- [Getting started with Unity Catalog](https://openlakehouse.io/learn/getting-started/unity-catalog): Five minutes from zero to a working Unity Catalog mental model — the open catalog for data and AI.
+- [Getting started with MLflow](https://openlakehouse.io/learn/getting-started/mlflow): Track experiments, package models, and ship ML and GenAI with the open standard.
+- [Getting started with Delta Lake](https://openlakehouse.io/learn/getting-started/delta-lake): ACID tables on object storage in five minutes — the open foundation of modern lakehouses.
+- [Getting started with Apache Spark](https://openlakehouse.io/learn/getting-started/apache-spark): A quick introduction to using Spark via the interactive shell and self-contained applications.
+
+## Authors
+- [Alex Jiang](https://openlakehouse.io/authors/alex-jiang)
+- [Apache Iceberg PMC](https://openlakehouse.io/authors/apache-iceberg-pmc)
+- [Ben Fleis](https://openlakehouse.io/authors/ben-fleis)
+- [Benjamin Mathew](https://openlakehouse.io/authors/benjamin-mathew)
+- [Kseniia Sumarokova](https://openlakehouse.io/authors/kseniia-sumarokova)
+- [Melvyn Peignon](https://openlakehouse.io/authors/melvyn-peignon)
+- [MLflow Team](https://openlakehouse.io/authors/mlflow-team)
+- [Raul Marin](https://openlakehouse.io/authors/raul-marin)
+- [Scott Haines](https://openlakehouse.io/authors/scott-haines)
+- [Scott Sandre](https://openlakehouse.io/authors/scottsandre)
+- [Yuki Watanabe](https://openlakehouse.io/authors/yuki-watanabe)
+- [Zheng Hu](https://openlakehouse.io/authors/zheng-hu)
 
 ## Citation policy
-
-All content on this site is republished or original technical material
-about open-source projects. When citing a specific blog post, cite the
-canonical URL on this site. When citing the underlying project, cite the
-project's own site (delta.io, iceberg.apache.org, unitycatalog.io,
-mlflow.org, spark.apache.org).
+All content on this site is republished or original technical material about
+open-source projects. When citing a specific post, cite its canonical URL on
+this site. When citing the underlying project, cite the project's own site
+(delta.io, iceberg.apache.org, unitycatalog.io, mlflow.org, spark.apache.org).

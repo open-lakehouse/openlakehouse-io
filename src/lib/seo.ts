@@ -1,7 +1,7 @@
 // Centralized SEO/GEO constants and helpers.
 // Single source of truth for site identity used by <Seo> and JSON-LD.
 
-export const SITE_URL = "https://openlakehouse-guide-hub.lovable.app";
+export const SITE_URL = "https://openlakehouse.io";
 export const SITE_NAME = "Open Lakehouse";
 export const SITE_TAGLINE = "Open formats, open engines, your storage";
 export const SITE_DESCRIPTION =

@@ -23,6 +23,11 @@ have been added.
 
 - `.agents/rules/branching-rule.mdc` — always create a `feat/*`/`fix/*`/etc.
   branch before changes; never commit directly to `main`.
+- `.agents/rules/bun-clean-lock-rule.mdc` — before opening a PR, strip registry
+  proxy URLs from `bun.lock` (`bun run strip-lock-proxy` / `:check`); never
+  commit host-specific resolution fields.
+- `.agents/skills/rebuild-seo-artifacts/SKILL.md` — regenerate `sitemap.xml`,
+  `llms.txt`, and `llms-full.txt` from `src/content` for SEO/GEO/AEO.
 
 ### Adding new guidance
 
