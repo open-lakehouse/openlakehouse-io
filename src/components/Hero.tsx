@@ -1,239 +1,148 @@
-import { useEffect, useRef } from "react";
+import { PixelConfetti } from "./PixelConfetti";
+
+/**
+ * Pixel-art lakehouse hero — a 16-bit retro scene rendered as crisp SVG
+ * (shape-rendering: crispEdges) so it stays sharp at any size and themes
+ * with the brand palette. Clouds drift via a `steps()` animation that the
+ * global `prefers-reduced-motion` rule disables. Flat, no glow.
+ */
+
+const PixelCloud = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+  <svg viewBox="0 0 32 14" className={className} style={style} shapeRendering="crispEdges" aria-hidden="true">
+    <g fill="#ffffff">
+      <rect x="8" y="4" width="16" height="6" />
+      <rect x="4" y="6" width="24" height="4" />
+      <rect x="12" y="2" width="8" height="2" />
+      <rect x="18" y="4" width="8" height="2" />
+    </g>
+    <g fill="#D6E9FC">
+      <rect x="4" y="10" width="24" height="2" />
+    </g>
+  </svg>
+);
+
+const PixelTree = ({ x, scale = 1 }: { x: number; scale?: number }) => (
+  <g transform={`translate(${x} 0) scale(${scale})`} shapeRendering="crispEdges">
+    <rect x="7" y="26" width="4" height="8" fill="#5A3A1E" />
+    <g fill="#1E6B3A">
+      <rect x="2" y="20" width="14" height="8" />
+      <rect x="4" y="14" width="10" height="8" />
+      <rect x="6" y="8" width="6" height="8" />
+    </g>
+    <g fill="#2E8B57">
+      <rect x="4" y="22" width="4" height="4" />
+      <rect x="6" y="16" width="4" height="4" />
+    </g>
+  </g>
+);
 
 export const Hero = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const N = 220; // simulation resolution
-
-    type Layer = {
-      color: string;
-      baseY: number; // fraction of canvas height
-      damping: number; // 0..1, closer to 1 = longer ringing
-      spring: number; // restoring force pulling toward flat
-      c2: number; // wave propagation coefficient
-      strokeAlpha: number;
-      fillAlpha: number;
-      lineWidth: number;
-      h: Float32Array;
-      v: Float32Array;
-    };
-
-    const layers: Layer[] = [
-      { color: "229 64% 48%", baseY: 0.32, damping: 0.988, spring: 0.0009, c2: 0.30, strokeAlpha: 0.55, fillAlpha: 0.18, lineWidth: 2, h: new Float32Array(N), v: new Float32Array(N) },
-      { color: "296 56% 58%", baseY: 0.42, damping: 0.984, spring: 0.0011, c2: 0.32, strokeAlpha: 0.72, fillAlpha: 0.14, lineWidth: 1.75, h: new Float32Array(N), v: new Float32Array(N) },
-      { color: "192 94% 55%", baseY: 0.52, damping: 0.980, spring: 0.0013, c2: 0.34, strokeAlpha: 0.85, fillAlpha: 0.10, lineWidth: 1.5, h: new Float32Array(N), v: new Float32Array(N) },
-      { color: "191 100% 84%", baseY: 0.62, damping: 0.976, spring: 0.0015, c2: 0.36, strokeAlpha: 0.95, fillAlpha: 0.06, lineWidth: 1, h: new Float32Array(N), v: new Float32Array(N) },
-    ];
-
-    const resize = () => {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      canvas.width = Math.max(1, Math.floor(w * dpr));
-      canvas.height = Math.max(1, Math.floor(h * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    // Debounce buffer resync — during an active resize the browser
-    // CSS-stretches the existing bitmap (waves stay visible). Once the
-    // user stops dragging we resync the backing buffer at native res.
-    let resizeTimer: number | null = null;
-    const ro = new ResizeObserver(() => {
-      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => {
-        resizeTimer = null;
-        resize();
-      }, 120);
-    });
-    ro.observe(canvas);
-
-    // Apply a localized impulse (gaussian) to the velocity field of all layers.
-    // Each layer scales the impulse so deeper layers get a softer kick.
-    const layerImpulseScale = [0.55, 0.75, 0.9, 1.0];
-    const impulse = (xFrac: number, strength: number, width: number) => {
-      const center = xFrac * (N - 1);
-      const inv2w2 = 1 / (2 * width * width);
-      for (let l = 0; l < layers.length; l++) {
-        const L = layers[l];
-        const s = strength * layerImpulseScale[l];
-        for (let i = 0; i < N; i++) {
-          const d = i - center;
-          const g = Math.exp(-(d * d) * inv2w2);
-          if (g < 0.001) continue;
-          L.v[i] -= s * g; // negative velocity = upward displacement
-        }
-      }
-    };
-
-    let lastX = 0, lastY = 0, lastT = 0, hasLast = false;
-    const onPointerMove = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const t = performance.now();
-      if (hasLast) {
-        const dt = Math.max(1, t - lastT);
-        const speed = Math.hypot(x - lastX, y - lastY) / dt; // px/ms
-        if (speed > 0.4) {
-          // Gentle hover ripple — much softer than click
-          const strength = Math.min(speed * 0.15, 0.9);
-          const width = Math.max(5, 9 - speed);
-          impulse(x / rect.width, strength, width);
-        }
-      }
-      lastX = x; lastY = y; lastT = t; hasLast = true;
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      impulse(x / rect.width, 7, 3.5);
-      lastX = x; lastY = e.clientY - rect.top; lastT = performance.now(); hasLast = true;
-    };
-    const onPointerLeave = () => { hasLast = false; };
-
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerdown", onPointerDown);
-    canvas.addEventListener("pointerleave", onPointerLeave);
-
-    // Ambient ripples — small random impulses so the water is never fully still
-    let nextAmbient = performance.now() + 600;
-    const scheduleAmbient = (now: number) => {
-      // ~every 0.9–2.2s, drop a soft impulse somewhere across the surface
-      nextAmbient = now + 900 + Math.random() * 1300;
-    };
-
-
-    let raf = 0;
-    const step = () => {
-      const now = performance.now();
-      // Draw at the backing-buffer's logical size (not clientWidth/Height).
-      // During a window resize the buffer is debounced and CSS stretches it.
-      const w = canvas.width / dpr;
-      const h = canvas.height / dpr;
-      ctx.clearRect(0, 0, w, h);
-
-      // Ambient ripples — soft, wide impulses at random spots
-      if (now >= nextAmbient) {
-        const xFrac = 0.05 + Math.random() * 0.9;
-        impulse(xFrac, 0.35 + Math.random() * 0.35, 10 + Math.random() * 6);
-        scheduleAmbient(now);
-      }
-
-
-
-      for (let li = 0; li < layers.length; li++) {
-        const L = layers[li];
-        const H = L.h, V = L.v;
-        // 1D damped wave equation toward flat baseline
-        for (let i = 1; i < N - 1; i++) {
-          const accel = (H[i - 1] + H[i + 1] - 2 * H[i]) * L.c2 - L.spring * H[i];
-          V[i] = (V[i] + accel) * L.damping;
-        }
-        // soft absorbing boundary so ripples don't bounce hard off the edges
-        V[0] *= 0.86; V[N - 1] *= 0.86;
-        H[0] = H[1] * 0.5; H[N - 1] = H[N - 2] * 0.5;
-        for (let i = 0; i < N; i++) H[i] += V[i];
-
-        // Stroke the wave
-        const baseY = h * L.baseY;
-        ctx.beginPath();
-        for (let i = 0; i < N; i++) {
-          const x = (i / (N - 1)) * w;
-          const y = baseY + H[i];
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.strokeStyle = `hsl(${L.color} / ${L.strokeAlpha})`;
-        ctx.lineWidth = L.lineWidth;
-        ctx.lineJoin = "round";
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = `hsl(${L.color} / 0.6)`;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Gradient fill underneath
-        ctx.lineTo(w, h);
-        ctx.lineTo(0, h);
-        ctx.closePath();
-        const grad = ctx.createLinearGradient(0, baseY, 0, baseY + h * 0.22);
-        grad.addColorStop(0, `hsl(${L.color} / ${L.fillAlpha})`);
-        grad.addColorStop(0.55, `hsl(${L.color} / ${L.fillAlpha * 0.35})`);
-        grad.addColorStop(1, `hsl(${L.color} / 0)`);
-        ctx.fillStyle = grad;
-        ctx.fill();
-      }
-
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
-      ro.disconnect();
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerdown", onPointerDown);
-      canvas.removeEventListener("pointerleave", onPointerLeave);
-    };
-  }, []);
-
   return (
-    <section className="relative overflow-hidden bg-[hsl(229_64%_9%)]">
-      {/* Ambient depth glow */}
+    <section className="relative overflow-hidden bg-flow-900">
+      {/* Pixel-art scene */}
+      <svg
+        className="absolute inset-0 h-full w-full"
+        viewBox="0 0 320 180"
+        preserveAspectRatio="xMidYMax slice"
+        shapeRendering="crispEdges"
+        aria-hidden="true"
+      >
+        <defs>
+          {/* Sky — banded gradient for a retro dithered feel */}
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6BB0F0" />
+            <stop offset="55%" stopColor="#9ACEF8" />
+            <stop offset="100%" stopColor="#D6E9FC" />
+          </linearGradient>
+          <linearGradient id="lake" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3890E5" />
+            <stop offset="100%" stopColor="#005695" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="320" height="120" fill="url(#sky)" />
+
+        {/* Pixel sun */}
+        <g fill="#FFF3EC">
+          <rect x="250" y="18" width="20" height="20" />
+          <rect x="246" y="22" width="28" height="12" />
+          <rect x="248" y="20" width="24" height="16" />
+        </g>
+
+        {/* Distant hills — clustered to the right so the copy sits over open sky/water */}
+        <rect x="196" y="96" width="124" height="24" fill="#2E8B57" />
+        <path d="M196 100 H240 V92 H288 V98 H320 V120 H196 Z" fill="#37A05F" opacity="0.7" />
+
+        {/* Trees on the right ridge */}
+        <PixelTree x={205} scale={0.8} />
+        <PixelTree x={232} scale={1.1} />
+        <PixelTree x={296} scale={0.9} />
+
+        {/* Cabin on the right shore */}
+        <g shapeRendering="crispEdges">
+          <rect x="252" y="82" width="44" height="24" fill="#C58A52" />
+          <rect x="252" y="82" width="44" height="4" fill="#8A5A2E" />
+          <path d="M248 82 L274 66 L300 82 Z" fill="#7A4A24" />
+          <rect x="260" y="90" width="10" height="9" fill="#3890E5" />
+          <rect x="280" y="90" width="10" height="13" fill="#5A3A1E" />
+        </g>
+
+        {/* Lake */}
+        <rect x="0" y="106" width="320" height="74" fill="url(#lake)" />
+        {/* Pixel ripples */}
+        <g fill="#6BB0F0" opacity="0.7">
+          <rect x="20" y="120" width="14" height="2" />
+          <rect x="60" y="132" width="20" height="2" />
+          <rect x="120" y="126" width="16" height="2" />
+          <rect x="30" y="148" width="24" height="2" />
+          <rect x="150" y="140" width="18" height="2" />
+          <rect x="90" y="158" width="20" height="2" />
+          <rect x="200" y="164" width="16" height="2" />
+        </g>
+        {/* Dock reaching in from the right shore */}
+        <g fill="#8A5A2E" shapeRendering="crispEdges">
+          <rect x="272" y="106" width="6" height="26" />
+          <rect x="236" y="128" width="42" height="4" />
+        </g>
+      </svg>
+
+      {/* Drifting pixel clouds */}
+      <PixelCloud
+        className="animate-cloud-drift absolute left-[8%] top-[14%] w-24 opacity-95"
+        style={{ animationDuration: "50s" }}
+      />
+      <PixelCloud
+        className="animate-cloud-drift absolute left-[38%] top-[8%] w-16 opacity-90"
+        style={{ animationDuration: "62s", animationDelay: "-8s" }}
+      />
+      <PixelCloud
+        className="animate-cloud-drift absolute left-[64%] top-[20%] w-20 opacity-90"
+        style={{ animationDuration: "44s", animationDelay: "-20s" }}
+      />
+
+      {/* Legibility scrim behind the copy + fade into the next section */}
       <div
-        className="absolute inset-0 -z-0 pointer-events-none"
+        className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            "radial-gradient(120% 80% at 50% 0%, hsl(296 56% 28% / 0.55), transparent 60%), radial-gradient(100% 70% at 80% 30%, hsl(192 94% 35% / 0.35), transparent 65%), linear-gradient(180deg, hsl(229 64% 12%), hsl(229 64% 7%))",
+            "linear-gradient(180deg, hsl(213 100% 16% / 0.55) 0%, hsl(213 100% 16% / 0.2) 45%, hsl(222 100% 8% / 0.85) 100%)",
         }}
       />
 
-      {/* Interactive water canvas */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-x-0 top-0 h-[70%] w-full touch-none"
-        style={{ zIndex: 1 }}
-        aria-hidden="true"
-      />
-
-      {/* Fade to dark at bottom for clean transition into the marquee */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-40 pointer-events-none"
-        style={{
-          zIndex: 2,
-          background: "linear-gradient(180deg, transparent, hsl(229 50% 6%))",
-        }}
-      />
-
-      <div className="container relative py-32 md:py-48 pointer-events-none" style={{ zIndex: 3 }}>
-        <div className="max-w-5xl mx-auto text-center animate-[fade-up_0.8s_ease-out] relative">
-          {/* Dark purple gradient halo behind the heading */}
-          <div
-            aria-hidden="true"
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none -z-10"
-            style={{
-              width: "min(900px, 110%)",
-              height: "min(420px, 140%)",
-              background:
-                "radial-gradient(ellipse at center, hsl(296 70% 22% / 0.85) 0%, hsl(285 65% 16% / 0.6) 35%, hsl(280 60% 10% / 0.25) 65%, transparent 80%)",
-              filter: "blur(20px)",
-            }}
-          />
-          <h1 className="text-6xl md:text-8xl font-semibold tracking-tight text-white leading-[1.02] drop-shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
+      {/* Copy */}
+      <div className="container relative py-32 md:py-48">
+        <div className="max-w-5xl mx-auto text-center animate-[fade-up_0.8s_ease-out]">
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-white leading-[1.02]">
             What is the Open Lakehouse?
           </h1>
-
-          <p className="mt-10 mx-auto max-w-2xl text-lg md:text-xl text-white/85 leading-relaxed drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
+          <p className="mt-8 mx-auto max-w-2xl text-lg md:text-xl text-white/90 leading-relaxed">
             Your data, in open formats, on storage you control — readable by any engine you choose,
             today and ten years from now.
           </p>
         </div>
       </div>
+
+      {/* Pixel confetti twinkling across the scene */}
+      <PixelConfetti />
     </section>
   );
 };
