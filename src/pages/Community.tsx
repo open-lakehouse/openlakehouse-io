@@ -108,7 +108,7 @@ const Community = () => {
       <section className="relative overflow-hidden bg-brand-gradient">
         <div className="container py-24 md:py-32 text-center max-w-4xl mx-auto animate-[fade-up_0.8s_ease-out]">
           <p className="text-sm font-medium uppercase tracking-widest text-white/80">Community</p>
-          <h1 className="mt-4 text-5xl md:text-7xl font-semibold tracking-tight text-white leading-[1.05] drop-shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
+          <h1 className="mt-4 text-5xl md:text-7xl font-semibold tracking-tight text-white leading-[1.05] drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]">
             Build the Open Lakehouse, together.
           </h1>
           <p className="mt-8 mx-auto max-w-2xl text-lg md:text-xl text-white/85 leading-relaxed">
@@ -226,7 +226,7 @@ const Community = () => {
             href="https://luma.com/openlakehouseai"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm md:text-base font-bold text-[hsl(var(--brand-grape))] hover:text-[hsl(var(--brand-blueberry))] shadow-lg hover:scale-105 transition-all"
+            className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm md:text-base font-bold text-primary hover:text-flow-700 shadow-card hover:scale-105 transition-all"
           >
             <Calendar className="h-4 w-4" />
             Grab your spot →
