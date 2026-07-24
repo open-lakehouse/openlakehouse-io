@@ -4,124 +4,161 @@
 
 @layer base {
   :root {
-    /* Open Lakehouse brand — official palette
-       Grape #9C2FA5 · Blueberry #2339A0 · Teal #07AED4 · Sky #ABEFFF · White */
-    --brand-grape: 296 56% 42%;
-    --brand-blueberry: 229 64% 38%;
-    --brand-teal: 192 94% 43%;
-    --brand-sky: 191 100% 84%;
+    /* Open Lakehouse + AI brand — 2026 palette
+       FLOW #3890E5 (primary) · SPARK #FF5101 · UNITY #F53C9F · STEEL #000D2B
+       Each has a 100–900 tint ramp; 500 is the canonical step. */
+    --flow-100: 210 90% 96%;
+    --flow-200: 210 86% 91%;
+    --flow-300: 207 87% 79%;
+    --flow-400: 209 82% 68%;
+    --flow-500: 209 77% 56%;
+    --flow-600: 206 100% 37%;
+    --flow-700: 205 100% 29%;
+    --flow-800: 206 100% 22%;
+    --flow-900: 213 100% 16%;
+
+    --spark-100: 22 100% 96%;
+    --spark-200: 17 96% 89%;
+    --spark-300: 17 100% 74%;
+    --spark-400: 18 97% 62%;
+    --spark-500: 19 100% 50%;
+    --spark-600: 6 80% 50%;
+    --spark-700: 360 71% 45%;
+    --spark-800: 6 100% 32%;
+    --spark-900: 6 100% 25%;
+
+    --unity-100: 324 100% 96%;
+    --unity-200: 326 100% 88%;
+    --unity-300: 328 100% 76%;
+    --unity-400: 326 100% 67%;
+    --unity-500: 328 90% 60%;
+    --unity-600: 325 95% 45%;
+    --unity-700: 325 95% 38%;
+    --unity-800: 325 92% 30%;
+    --unity-900: 324 86% 22%;
+
+    --steel-100: 220 45% 94%;
+    --steel-200: 221 48% 89%;
+    --steel-300: 221 37% 82%;
+    --steel-400: 220 36% 75%;
+    --steel-500: 220 33% 67%;
+    --steel-600: 222 19% 50%;
+    --steel-700: 222 21% 39%;
+    --steel-800: 221 33% 30%;
+    --steel-900: 222 100% 8%;
+
+    /* Named brand aliases (canonical 500 steps) */
+    --brand-flow: var(--flow-500);
+    --brand-spark: var(--spark-500);
+    --brand-unity: var(--unity-500);
+    --brand-steel: var(--steel-900);
+    --brand-deep-flow: var(--flow-700);
 
     --background: 0 0% 100%;
-    --foreground: 229 64% 12%;
+    --foreground: 222 100% 8%;
 
     --card: 0 0% 100%;
-    --card-foreground: 229 64% 12%;
+    --card-foreground: 222 100% 8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 229 64% 12%;
+    --popover-foreground: 222 100% 8%;
 
-    /* Primary = Grape */
-    --primary: 296 56% 42%;
+    /* Primary = FLOW blue */
+    --primary: 209 77% 56%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 296 65% 58%;
-    --primary-deep: 296 60% 28%;
+    --primary-glow: 209 82% 68%;
+    --primary-deep: 205 100% 29%;
 
-    --secondary: 191 60% 96%;
-    --secondary-foreground: 229 64% 20%;
+    --secondary: 210 90% 96%;
+    --secondary-foreground: 206 100% 22%;
 
-    --muted: 220 25% 96%;
-    --muted-foreground: 229 25% 40%;
+    --muted: 220 45% 96%;
+    --muted-foreground: 222 19% 45%;
 
-    /* Accent = Teal */
-    --accent: 192 94% 43%;
+    /* Accent = SPARK orange */
+    --accent: 19 100% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 75% 52%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 25% 90%;
-    --input: 220 25% 92%;
-    --ring: 296 56% 42%;
+    --border: 221 37% 88%;
+    --input: 221 37% 90%;
+    --ring: 209 77% 56%;
 
     --radius: 0.75rem;
 
-    /* Brand gradient — Grape → Blueberry → Teal → Sky */
+    /* Brand gradient — FLOW → DEEP FLOW → SPARK */
     --gradient-brand: linear-gradient(115deg,
-      hsl(296 56% 42%) 0%,
-      hsl(229 64% 38%) 40%,
-      hsl(192 94% 43%) 80%,
-      hsl(191 100% 84%) 100%);
-    --gradient-hero: linear-gradient(180deg, hsl(296 56% 28%) 0%, hsl(229 64% 18%) 100%);
+      hsl(209 77% 56%) 0%,
+      hsl(205 100% 29%) 55%,
+      hsl(19 100% 50%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(205 100% 29%) 0%, hsl(213 100% 16%) 100%);
 
-    --shadow-glow: 0 20px 60px -15px hsl(296 56% 42% / 0.35);
-    --shadow-card: 0 8px 30px -8px hsl(229 64% 25% / 0.12);
+    /* Flat, restrained elevation — no neon bloom */
+    --shadow-glow: 0 4px 16px -6px hsl(222 100% 8% / 0.18);
+    --shadow-card: 0 6px 20px -10px hsl(222 100% 8% / 0.12);
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 229 40% 26%;
-    --sidebar-primary: 296 56% 42%;
+    --sidebar-foreground: 222 21% 30%;
+    --sidebar-primary: 209 77% 56%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 191 60% 95%;
-    --sidebar-accent-foreground: 229 64% 20%;
-    --sidebar-border: 220 25% 90%;
-    --sidebar-ring: 192 94% 43%;
+    --sidebar-accent: 210 90% 96%;
+    --sidebar-accent-foreground: 206 100% 22%;
+    --sidebar-border: 221 37% 88%;
+    --sidebar-ring: 209 77% 56%;
   }
 
   .dark {
-    /* Open Lakehouse brand — dark mode
-       Blueberry-anchored canvas with luminous Grape primary and Teal accent. */
-    --brand-grape: 296 56% 42%;
-    --brand-blueberry: 229 64% 38%;
-    --brand-teal: 192 94% 43%;
-    --brand-sky: 191 100% 84%;
+    /* Open Lakehouse + AI brand — dark mode
+       STEEL/DEEP-FLOW night canvas, luminous FLOW primary, SPARK accent. */
+    --background: 222 100% 8%;
+    --foreground: 210 90% 96%;
 
-    --background: 229 50% 6%;
-    --foreground: 191 100% 95%;
+    --card: 222 60% 12%;
+    --card-foreground: 210 90% 96%;
 
-    --card: 229 45% 10%;
-    --card-foreground: 191 100% 95%;
+    --popover: 222 60% 12%;
+    --popover-foreground: 210 90% 96%;
 
-    --popover: 229 45% 10%;
-    --popover-foreground: 191 100% 95%;
+    --primary: 209 82% 68%;
+    --primary-foreground: 222 100% 8%;
+    --primary-glow: 207 87% 79%;
+    --primary-deep: 205 100% 29%;
 
-    --primary: 296 70% 62%;
-    --primary-foreground: 229 50% 8%;
-    --primary-glow: 296 80% 72%;
-    --primary-deep: 296 60% 22%;
+    --secondary: 222 40% 18%;
+    --secondary-foreground: 210 86% 91%;
 
-    --secondary: 229 40% 16%;
-    --secondary-foreground: 191 80% 92%;
+    --muted: 222 40% 16%;
+    --muted-foreground: 220 33% 72%;
 
-    --muted: 229 40% 14%;
-    --muted-foreground: 191 30% 72%;
-
-    --accent: 192 94% 55%;
-    --accent-foreground: 229 50% 8%;
+    --accent: 18 97% 62%;
+    --accent-foreground: 222 100% 8%;
 
     --destructive: 0 65% 52%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 229 35% 18%;
-    --input: 229 35% 18%;
-    --ring: 296 70% 62%;
+    --border: 222 33% 22%;
+    --input: 222 33% 22%;
+    --ring: 209 82% 68%;
 
     --gradient-brand: linear-gradient(115deg,
-      hsl(296 60% 38%) 0%,
-      hsl(229 64% 35%) 40%,
-      hsl(192 94% 48%) 80%,
-      hsl(191 100% 78%) 100%);
-    --gradient-hero: linear-gradient(180deg, hsl(296 56% 22%) 0%, hsl(229 64% 9%) 100%);
+      hsl(209 82% 68%) 0%,
+      hsl(206 100% 37%) 55%,
+      hsl(18 97% 62%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(206 100% 22%) 0%, hsl(222 100% 8%) 100%);
 
-    --shadow-glow: 0 20px 60px -15px hsl(192 94% 50% / 0.35);
-    --shadow-card: 0 8px 30px -8px hsl(0 0% 0% / 0.5);
+    --shadow-glow: 0 4px 16px -6px hsl(0 0% 0% / 0.5);
+    --shadow-card: 0 6px 20px -10px hsl(0 0% 0% / 0.55);
 
-    --sidebar-background: 229 50% 8%;
-    --sidebar-foreground: 191 60% 90%;
-    --sidebar-primary: 296 70% 62%;
-    --sidebar-primary-foreground: 229 50% 8%;
-    --sidebar-accent: 229 40% 16%;
-    --sidebar-accent-foreground: 191 80% 92%;
-    --sidebar-border: 229 35% 18%;
-    --sidebar-ring: 192 94% 55%;
+    --sidebar-background: 222 100% 8%;
+    --sidebar-foreground: 210 86% 90%;
+    --sidebar-primary: 209 82% 68%;
+    --sidebar-primary-foreground: 222 100% 8%;
+    --sidebar-accent: 222 40% 18%;
+    --sidebar-accent-foreground: 210 86% 91%;
+    --sidebar-border: 222 33% 22%;
+    --sidebar-ring: 209 82% 68%;
   }
 
 
@@ -163,8 +200,27 @@
   .shadow-glow {
     box-shadow: var(--shadow-glow);
   }
+  .shadow-glow-accent {
+    box-shadow: 0 4px 16px -8px hsl(var(--accent) / 0.35);
+  }
   .shadow-card {
     box-shadow: var(--shadow-card);
+  }
+
+  /* Retro pixel-art helpers */
+  .pixelated {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  /* Signature dithered dot border used on colored section dividers */
+  .brand-pixel-border {
+    border-style: solid;
+    border-width: 12px;
+    border-image: repeating-conic-gradient(
+        hsl(0 0% 100% / 0.5) 0deg 90deg,
+        transparent 90deg 180deg
+      )
+      8 / 12px / 0 round;
   }
 }
 
@@ -206,4 +262,27 @@
 .animate-blob-2 { animation: blob-drift-2 28s ease-in-out infinite; }
 .animate-blob-3 { animation: blob-drift-3 25s ease-in-out infinite; }
 .animate-blob-4 { animation: blob-drift-4 30s ease-in-out infinite; }
+
+/* Retro pixel motifs — stepped animation for a chunky, 16-bit feel */
+@keyframes pixel-twinkle {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.7; }
+}
+@keyframes cloud-drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(120px); }
+}
+.animate-pixel-twinkle { animation: pixel-twinkle 2.4s steps(3) infinite; }
+.animate-cloud-drift { animation: cloud-drift 40s steps(24) infinite alternate; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pixel-twinkle,
+  .animate-cloud-drift,
+  .animate-blob-1,
+  .animate-blob-2,
+  .animate-blob-3,
+  .animate-blob-4 {
+    animation: none;
+  }
+}
 
