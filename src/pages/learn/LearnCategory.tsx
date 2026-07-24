@@ -26,7 +26,7 @@ const LearnCategory = () => {
           <div className="container py-20 md:py-24 max-w-4xl mx-auto animate-[fade-up_0.8s_ease-out]">
             <Link to="/learn" className="text-sm text-white/80 hover:text-white">← Learn</Link>
             <p className="mt-4 text-sm font-medium uppercase tracking-widest text-white/80">Learn</p>
-            <h1 className="mt-3 text-4xl md:text-6xl font-semibold tracking-tight text-white leading-[1.05] drop-shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
+            <h1 className="mt-3 text-4xl md:text-6xl font-semibold tracking-tight text-white leading-[1.05] drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]">
               {label}
             </h1>
           </div>

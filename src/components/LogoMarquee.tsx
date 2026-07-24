@@ -91,8 +91,8 @@ export const LogoMarquee = () => {
       `}</style>
 
       {/* Edge fades */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-[hsl(var(--brand-blueberry))] to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-[hsl(var(--brand-blueberry))] to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-24 z-10 bg-gradient-to-r from-flow-700 to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-24 z-10 bg-gradient-to-l from-flow-700 to-transparent" />
 
       <div className="flex w-max logo-marquee-track">
         {[0, 1].map((dup) => (

@@ -13,7 +13,42 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: [
+          "Inter",
+          "InterVariable",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica Neue",
+          "Arial",
+          "sans-serif",
+        ],
+      },
       colors: {
+        // Brand ramps (SPARK / UNITY / FLOW / STEEL) — use for pixel motifs & accents
+        flow: {
+          100: "hsl(var(--flow-100))", 200: "hsl(var(--flow-200))", 300: "hsl(var(--flow-300))",
+          400: "hsl(var(--flow-400))", 500: "hsl(var(--flow-500))", 600: "hsl(var(--flow-600))",
+          700: "hsl(var(--flow-700))", 800: "hsl(var(--flow-800))", 900: "hsl(var(--flow-900))",
+        },
+        spark: {
+          100: "hsl(var(--spark-100))", 200: "hsl(var(--spark-200))", 300: "hsl(var(--spark-300))",
+          400: "hsl(var(--spark-400))", 500: "hsl(var(--spark-500))", 600: "hsl(var(--spark-600))",
+          700: "hsl(var(--spark-700))", 800: "hsl(var(--spark-800))", 900: "hsl(var(--spark-900))",
+        },
+        unity: {
+          100: "hsl(var(--unity-100))", 200: "hsl(var(--unity-200))", 300: "hsl(var(--unity-300))",
+          400: "hsl(var(--unity-400))", 500: "hsl(var(--unity-500))", 600: "hsl(var(--unity-600))",
+          700: "hsl(var(--unity-700))", 800: "hsl(var(--unity-800))", 900: "hsl(var(--unity-900))",
+        },
+        steel: {
+          100: "hsl(var(--steel-100))", 200: "hsl(var(--steel-200))", 300: "hsl(var(--steel-300))",
+          400: "hsl(var(--steel-400))", 500: "hsl(var(--steel-500))", 600: "hsl(var(--steel-600))",
+          700: "hsl(var(--steel-700))", 800: "hsl(var(--steel-800))", 900: "hsl(var(--steel-900))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
