@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Github, Linkedin, Twitter, Youtube, MessageCircle, ExternalLink, Calendar } from "lucide-react";
-import logoUrl from "@/assets/bundled/olai-logo-white.png";
+import { Logo } from "./Logo";
 import databricksLogo from "@/assets/logos/databricks.svg";
 
 const projects = [
@@ -156,7 +156,7 @@ export const SiteFooter = () => {
 
         <div className="pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src={logoUrl} alt="Open Lakehouse Guide Hub — open data and AI architecture on Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark" className="h-7 w-auto invert dark:invert-0" />
+            <Logo className="h-7 text-foreground" />
             <span className="text-sm text-muted-foreground">© {new Date().getFullYear()} openlakehouse.io · Open by design.</span>
           </div>
           <div className="flex flex-col md:items-end gap-2">

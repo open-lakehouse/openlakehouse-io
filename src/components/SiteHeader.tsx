@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import logoUrl from "@/assets/bundled/olai-logo-white.png";
+import { Logo } from "./Logo";
 import { ThemeToggle } from "./ThemeToggle";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, ChevronDown, Cpu, BookOpen, Bot, Layers, ShieldCheck, Workflow } from "lucide-react";
@@ -112,12 +112,8 @@ export const SiteHeader = () => {
       onMouseLeave={() => setTechOpen(false)}
     >
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center group">
-          <img
-            src={logoUrl}
-            alt="Open Lakehouse Guide Hub — open data and AI architecture on Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark"
-            className="h-8 md:h-9 w-auto transition-transform group-hover:scale-105 invert dark:invert-0"
-          />
+        <Link to="/" className="flex items-center group" aria-label="Open Lakehouse + AI home">
+          <Logo className="h-8 md:h-9 text-primary transition-transform group-hover:scale-105 dark:text-foreground" />
         </Link>
 
         {/* Desktop nav */}
