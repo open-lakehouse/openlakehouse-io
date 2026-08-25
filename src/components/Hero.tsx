@@ -89,21 +89,33 @@ export const Hero = () => {
 
         // Pointer interaction (water only). We never preventDefault, so the
         // page keeps scrolling on touch devices.
+        // Hover ripples back off exponentially while the pointer stays active,
+        // so continuous movement spawns progressively fewer ripples. The
+        // interval resets when the pointer pauses (an idle gap) or on a press.
+        const MOVE_INTERVAL_MIN = 90; // ms between hover ripples at the start
+        const MOVE_INTERVAL_MAX = 1400; // ms once fully backed off
+        const MOVE_BACKOFF = 1.7; // interval growth factor per spawn
+        const MOVE_IDLE_RESET = 260; // ms of stillness that resets the backoff
+
         let lastX = 0,
           lastY = 0,
           lastT = 0,
           hasLast = false,
-          lastSpawn = 0;
+          lastSpawn = 0,
+          moveInterval = MOVE_INTERVAL_MIN;
 
         const onPointerMove = (e: PointerEvent) => {
           const { bx, by } = toBuffer(e.clientX, e.clientY);
           const t = performance.now();
+          // A pause in movement resets the backoff back to frequent.
+          if (t - lastT > MOVE_IDLE_RESET) moveInterval = MOVE_INTERVAL_MIN;
           if (hasLast && mask.isWater(bx, by)) {
             const dt = Math.max(1, t - lastT);
             const speed = Math.hypot(bx - lastX, by - lastY) / dt;
-            if (speed > 0.15 && t - lastSpawn > 70) {
+            if (speed > 0.15 && t - lastSpawn >= moveInterval) {
               ripples.spawn(bx, by, Math.min(0.15 + speed * 0.06, 0.55), t);
               lastSpawn = t;
+              moveInterval = Math.min(moveInterval * MOVE_BACKOFF, MOVE_INTERVAL_MAX);
             }
           }
           lastX = bx;
@@ -118,11 +130,15 @@ export const Hero = () => {
           }
           lastX = bx;
           lastY = by;
-          lastT = performance.now();
+          const t = performance.now();
+          lastT = t;
+          lastSpawn = t;
+          moveInterval = MOVE_INTERVAL_MIN; // a fresh press starts frequent again
           hasLast = true;
         };
         const onPointerLeave = () => {
           hasLast = false;
+          moveInterval = MOVE_INTERVAL_MIN;
         };
 
         canvas.addEventListener("pointermove", onPointerMove);
