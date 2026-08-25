@@ -226,7 +226,7 @@ const Community = () => {
             href="https://luma.com/openlakehouseai"
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm md:text-base font-bold text-[hsl(var(--brand-grape))] hover:text-[hsl(var(--brand-blueberry))] shadow-lg hover:scale-105 transition-all"
+            className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm md:text-base font-bold text-[hsl(var(--brand-green))] hover:text-[hsl(var(--brand-blue))] shadow-lg hover:scale-105 transition-all"
           >
             <Calendar className="h-4 w-4" />
             Grab your spot →
