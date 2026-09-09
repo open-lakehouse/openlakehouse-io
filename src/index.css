@@ -208,6 +208,54 @@
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
+
+  /* Tight navy plate behind the hero subtitle on narrow viewports. */
+  .hero-mobile-copy-glow {
+    background: hsl(var(--navy-900) / 0.7);
+  }
+
+  /* Extra glyph halo so the subtitle stays readable over the lakehouse. */
+  .hero-mobile-text-shadow {
+    text-shadow:
+      0 1px 2px hsl(var(--navy-900) / 0.9),
+      0 2px 12px hsl(var(--navy-900) / 0.75);
+  }
+
+  .hero-cloud-drift {
+    opacity: 0;
+    animation-name: hero-cloud-drift;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    will-change: transform, opacity;
+  }
+
+  @media (min-width: 768px) {
+    .hero-mobile-text-shadow {
+      text-shadow: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-cloud-drift {
+      opacity: 1;
+      animation: none;
+      transform: none;
+    }
+  }
+}
+
+@keyframes hero-cloud-drift {
+  0% {
+    opacity: 0;
+    transform: translate3d(calc(var(--cloud-travel) * -1), 0, 0);
+  }
+  8%, 92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--cloud-travel), 0, 0);
+  }
 }
 
 @keyframes float-slow {

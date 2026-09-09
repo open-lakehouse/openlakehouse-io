@@ -1,9 +1,8 @@
 // Interactive water ripples for the lakehouse hero.
 //
 // Renders Stardew-style expanding ripple rings in a pixelated 2D canvas. The
-// simulation runs in the scene's native buffer coordinates (1024x576); the
-// caller is responsible for clipping the rendered rings to the water region
-// (via destination-in compositing with the mask built by `buildWaterMask`).
+// simulation uses the caller's current canvas coordinate system. The caller is
+// responsible for clipping rendered rings to the visible water region.
 
 export interface RippleColors {
   /** Bright leading edge (near-white blue). */
@@ -15,7 +14,7 @@ export interface RippleColors {
 }
 
 export interface WaterRipplesOptions {
-  /** Max ring radius in buffer px at full strength. */
+  /** Max ring radius in the caller's canvas coordinates at full strength. */
   maxRadius?: number;
   /** Ripple lifetime in ms. */
   duration?: number;
@@ -55,7 +54,7 @@ export class WaterRipples {
     this.colors = opts.colors ?? DEFAULT_COLORS;
   }
 
-  /** Add a ripple at buffer coords. `strength` scales radius (0..~1.4). */
+  /** Add a ripple in canvas coordinates. `strength` scales radius (0..~1.4). */
   spawn(x: number, y: number, strength = 1, now = performance.now()) {
     this.ripples.push({ x, y, born: now, strength: Math.max(0.15, strength) });
     if (this.ripples.length > this.max) {
