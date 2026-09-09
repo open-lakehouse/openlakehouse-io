@@ -19,6 +19,16 @@ rules and skills from the `.agents/` directory before doing any work:
 Re-scan `.agents/` whenever the task changes, since new rules or skills may
 have been added.
 
+## Reference docs
+
+Longer-form references live under `docs/`. Consult the relevant one before doing
+related work:
+
+- [`docs/brand-guidelines.md`](docs/brand-guidelines.md) — the visual identity
+  source of truth: color palette (Green primary, Blue accent, Yellow highlight,
+  Navy ink), semantic tokens, gradients, logo, and favicon. Read this before any
+  color, theming, or branding change; use tokens, never hardcoded hex.
+
 ## Republished content attribution
 
 When a post republishes another site's content:

@@ -24,7 +24,7 @@ const CategoryCard = ({ slug, title, icon: Icon, items }: Category) => (
         className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-primary-foreground shadow-glow"
         style={{
           background:
-            "linear-gradient(180deg, hsl(296 60% 32%) 0%, hsl(296 72% 60%) 33%, hsl(330 85% 70%) 66%, hsl(330 70% 42%) 100%)",
+            "linear-gradient(180deg, hsl(var(--green-700)) 0%, hsl(var(--green-500)) 33%, hsl(var(--blue-500)) 66%, hsl(var(--blue-700)) 100%)",
         }}
       >
         <Icon className="h-5 w-5" />

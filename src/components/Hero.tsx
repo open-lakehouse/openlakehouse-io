@@ -1,236 +1,611 @@
-import { useEffect, useRef } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { WaterRipples } from "./hero/waterRipples";
+import {
+  drawShorelineWaves,
+  type ShorelineWaveLayout,
+} from "./hero/shorelineWaves";
+
+// Every artwork layer uses this shared coordinate system. The scene may shrink
+// with the viewport but stops growing at 1200 CSS pixels.
+const SCENE_W = 1024;
+const SCENE_H = 576;
+const SCENE_MAX_W = 1200;
+const HORIZON_Y = 254;
+const ARTWORK_W = 1024;
+const ARTWORK_H = 951;
+const ARTWORK_HEIGHT_RATIO = 1.015;
+const SMALLEST_ARTWORK_SCALE = 0.8;
+const ARTWORK_MAX_H = 609;
+const SMALL_CLOUD_SRC = "/assets/hero-cloud-small.png";
+const LARGE_CLOUD_SRC = "/assets/hero-cloud-large.png";
+const FOREGROUND_SRC = "/assets/hero-lakehouse-foreground.png";
+const FLOWER_BUSH_SRC = "/assets/hero-sprite-flower-bush.png";
+const TREE_SRC = "/assets/hero-sprite-pine-clean.png";
+
+interface HeroCloud {
+  id: string;
+  src: string;
+  left: string;
+  top: string;
+  width: string;
+  duration: string;
+  delay: string;
+  travel: string;
+}
+
+// Tweak these values to change each cloud's path and pace independently.
+const HERO_CLOUDS: readonly HeroCloud[] = [
+  {
+    id: "small-center",
+    src: SMALL_CLOUD_SRC,
+    left: "35%",
+    top: "19%",
+    width: "clamp(82px, 12vw, 145px)",
+    duration: "105s",
+    delay: "-24s",
+    travel: "22vw",
+  },
+  {
+    id: "large-right",
+    src: LARGE_CLOUD_SRC,
+    left: "58%",
+    top: "9%",
+    width: "clamp(130px, 18vw, 220px)",
+    duration: "138s",
+    delay: "-76s",
+    travel: "28vw",
+  },
+  {
+    id: "small-left",
+    src: SMALL_CLOUD_SRC,
+    left: "10%",
+    top: "8%",
+    width: "clamp(70px, 9vw, 115px)",
+    duration: "122s",
+    delay: "-63s",
+    travel: "16vw",
+  },
+];
+
+interface HeroTree {
+  id: string;
+  left: string;
+  top: string;
+  width: string;
+  layer: "behind" | "front";
+}
+
+const HERO_TREES: readonly HeroTree[] = [
+  { id: "left", left: "29%", top: "31%", width: "17%", layer: "front" },
+  { id: "center", left: "42%", top: "20%", width: "18%", layer: "front" },
+  { id: "mid-right", left: "58%", top: "24%", width: "14%", layer: "behind" },
+  { id: "far-right", left: "81%", top: "12%", width: "13%", layer: "behind" },
+];
+
+type CloudStyle = CSSProperties & {
+  "--cloud-travel": string;
+};
+
+interface SceneLayout {
+  width: number;
+  height: number;
+  scale: number;
+  horizonY: number;
+}
+
+const getSceneLayout = (width: number, height: number): SceneLayout => {
+  const sceneWidth = Math.min(width, SCENE_MAX_W);
+  const scale = sceneWidth / SCENE_W;
+  const sceneHeight = SCENE_H * scale;
+  const sceneTop = (height - sceneHeight) / 2;
+
+  return {
+    width,
+    height,
+    scale,
+    horizonY: sceneTop + HORIZON_Y * scale,
+  };
+};
+
+const getArtworkLayout = (
+  width: number,
+  height: number,
+): ShorelineWaveLayout => {
+  const isSmallViewport = width < 500;
+  const responsiveScale = isSmallViewport ? SMALLEST_ARTWORK_SCALE : 1;
+  const artworkHeight = Math.min(
+    height * ARTWORK_HEIGHT_RATIO * responsiveScale,
+    ARTWORK_MAX_H,
+  );
+  const artworkWidth = artworkHeight * (ARTWORK_W / ARTWORK_H);
+  const translate = !isSmallViewport && width < 640 ? 0.1 : 0;
+
+  return {
+    left: width - artworkWidth + artworkWidth * translate,
+    top: isSmallViewport ? height - artworkHeight : (height - artworkHeight) / 2,
+    scale: artworkHeight / ARTWORK_H,
+  };
+};
 
 export const Hero = () => {
+  const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const section = sectionRef.current;
+    if (!canvas || !section) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const N = 220; // simulation resolution
-
-    type Layer = {
-      color: string;
-      baseY: number; // fraction of canvas height
-      damping: number; // 0..1, closer to 1 = longer ringing
-      spring: number; // restoring force pulling toward flat
-      c2: number; // wave propagation coefficient
-      strokeAlpha: number;
-      fillAlpha: number;
-      lineWidth: number;
-      h: Float32Array;
-      v: Float32Array;
-    };
-
-    const layers: Layer[] = [
-      { color: "229 64% 48%", baseY: 0.32, damping: 0.988, spring: 0.0009, c2: 0.30, strokeAlpha: 0.55, fillAlpha: 0.18, lineWidth: 2, h: new Float32Array(N), v: new Float32Array(N) },
-      { color: "296 56% 58%", baseY: 0.42, damping: 0.984, spring: 0.0011, c2: 0.32, strokeAlpha: 0.72, fillAlpha: 0.14, lineWidth: 1.75, h: new Float32Array(N), v: new Float32Array(N) },
-      { color: "192 94% 55%", baseY: 0.52, damping: 0.980, spring: 0.0013, c2: 0.34, strokeAlpha: 0.85, fillAlpha: 0.10, lineWidth: 1.5, h: new Float32Array(N), v: new Float32Array(N) },
-      { color: "191 100% 84%", baseY: 0.62, damping: 0.976, spring: 0.0015, c2: 0.36, strokeAlpha: 0.95, fillAlpha: 0.06, lineWidth: 1, h: new Float32Array(N), v: new Float32Array(N) },
-    ];
-
-    const resize = () => {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      canvas.width = Math.max(1, Math.floor(w * dpr));
-      canvas.height = Math.max(1, Math.floor(h * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    resize();
-    // Debounce buffer resync — during an active resize the browser
-    // CSS-stretches the existing bitmap (waves stay visible). Once the
-    // user stops dragging we resync the backing buffer at native res.
-    let resizeTimer: number | null = null;
-    const ro = new ResizeObserver(() => {
-      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(() => {
-        resizeTimer = null;
-        resize();
-      }, 120);
-    });
-    ro.observe(canvas);
-
-    // Apply a localized impulse (gaussian) to the velocity field of all layers.
-    // Each layer scales the impulse so deeper layers get a softer kick.
-    const layerImpulseScale = [0.55, 0.75, 0.9, 1.0];
-    const impulse = (xFrac: number, strength: number, width: number) => {
-      const center = xFrac * (N - 1);
-      const inv2w2 = 1 / (2 * width * width);
-      for (let l = 0; l < layers.length; l++) {
-        const L = layers[l];
-        const s = strength * layerImpulseScale[l];
-        for (let i = 0; i < N; i++) {
-          const d = i - center;
-          const g = Math.exp(-(d * d) * inv2w2);
-          if (g < 0.001) continue;
-          L.v[i] -= s * g; // negative velocity = upward displacement
-        }
-      }
-    };
-
-    let lastX = 0, lastY = 0, lastT = 0, hasLast = false;
-    const onPointerMove = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const t = performance.now();
-      if (hasLast) {
-        const dt = Math.max(1, t - lastT);
-        const speed = Math.hypot(x - lastX, y - lastY) / dt; // px/ms
-        if (speed > 0.4) {
-          // Gentle hover ripple — much softer than click
-          const strength = Math.min(speed * 0.15, 0.9);
-          const width = Math.max(5, 9 - speed);
-          impulse(x / rect.width, strength, width);
-        }
-      }
-      lastX = x; lastY = y; lastT = t; hasLast = true;
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      impulse(x / rect.width, 7, 3.5);
-      lastX = x; lastY = e.clientY - rect.top; lastT = performance.now(); hasLast = true;
-    };
-    const onPointerLeave = () => { hasLast = false; };
-
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerdown", onPointerDown);
-    canvas.addEventListener("pointerleave", onPointerLeave);
-
-    // Ambient ripples — small random impulses so the water is never fully still
-    let nextAmbient = performance.now() + 600;
-    const scheduleAmbient = (now: number) => {
-      // ~every 0.9–2.2s, drop a soft impulse somewhere across the surface
-      nextAmbient = now + 900 + Math.random() * 1300;
-    };
-
+    const loadImage = (src: string) =>
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
 
     let raf = 0;
-    const step = () => {
-      const now = performance.now();
-      // Draw at the backing-buffer's logical size (not clientWidth/Height).
-      // During a window resize the buffer is debounced and CSS stretches it.
-      const w = canvas.width / dpr;
-      const h = canvas.height / dpr;
-      ctx.clearRect(0, 0, w, h);
+    let cancelled = false;
+    let cleanup = () => {};
 
-      // Ambient ripples — soft, wide impulses at random spots
-      if (now >= nextAmbient) {
-        const xFrac = 0.05 + Math.random() * 0.9;
-        impulse(xFrac, 0.35 + Math.random() * 0.35, 10 + Math.random() * 6);
-        scheduleAmbient(now);
-      }
+    Promise.all([
+      loadImage(SMALL_CLOUD_SRC),
+      loadImage(LARGE_CLOUD_SRC),
+      loadImage(FOREGROUND_SRC),
+      loadImage(FLOWER_BUSH_SRC),
+      loadImage(TREE_SRC),
+    ])
+      .then(() => {
+        if (cancelled) return;
+        setReady(true);
 
+        const ripples = new WaterRipples({ maxRadius: 110, duration: 1600 });
+        const reduceMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
 
+        const backgroundCanvas = document.createElement("canvas");
+        const backgroundCtx = backgroundCanvas.getContext("2d");
+        if (!backgroundCtx) return;
 
-      for (let li = 0; li < layers.length; li++) {
-        const L = layers[li];
-        const H = L.h, V = L.v;
-        // 1D damped wave equation toward flat baseline
-        for (let i = 1; i < N - 1; i++) {
-          const accel = (H[i - 1] + H[i + 1] - 2 * H[i]) * L.c2 - L.spring * H[i];
-          V[i] = (V[i] + accel) * L.damping;
+        let dpr = 1;
+        let layout = getSceneLayout(
+          section.clientWidth,
+          section.clientHeight,
+        );
+        let artworkLayout = getArtworkLayout(
+          section.clientWidth,
+          section.clientHeight,
+        );
+
+        const tokenColor = (token: string, alpha = 1) => {
+          const value = getComputedStyle(section)
+            .getPropertyValue(token)
+            .trim();
+          return `hsl(${value} / ${alpha})`;
+        };
+
+        const seededFraction = (seed: number) => {
+          const value = Math.sin(seed * 12.9898) * 43758.5453;
+          return value - Math.floor(value);
+        };
+
+        const paintBackground = () => {
+          const { width, height, horizonY, scale } = layout;
+          backgroundCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          backgroundCtx.clearRect(0, 0, width, height);
+
+          const skyEnd = Math.max(0, Math.min(height, horizonY));
+          if (skyEnd > 0) {
+            const sky = backgroundCtx.createLinearGradient(0, 0, 0, skyEnd);
+            sky.addColorStop(0, tokenColor("--blue-500"));
+            sky.addColorStop(0.72, tokenColor("--blue-400"));
+            sky.addColorStop(1, tokenColor("--blue-200"));
+            backgroundCtx.fillStyle = sky;
+            backgroundCtx.fillRect(0, 0, width, skyEnd);
+          }
+
+          const waterStart = Math.max(0, Math.min(height, horizonY));
+          if (waterStart < height) {
+            const water = backgroundCtx.createLinearGradient(
+              0,
+              horizonY,
+              0,
+              height,
+            );
+            water.addColorStop(0, tokenColor("--blue-500"));
+            water.addColorStop(0.58, tokenColor("--blue-600"));
+            water.addColorStop(1, tokenColor("--blue-700"));
+            backgroundCtx.fillStyle = water;
+            backgroundCtx.fillRect(0, waterStart, width, height - waterStart);
+
+            // Deterministic pixel streaks keep the generated water consistent
+            // with the source artwork without stretching a raster texture.
+            const detailScale = Math.max(0.7, scale);
+            const rowGap = Math.max(38, Math.round(52 * detailScale));
+            const columnGap = Math.max(92, Math.round(132 * detailScale));
+            const lineHeight = Math.max(2, Math.round(2 * detailScale));
+            let row = 0;
+
+            for (
+              let y = horizonY + rowGap;
+              y < height;
+              y += rowGap, row += 1
+            ) {
+              const offset = seededFraction(row + 1) * columnGap;
+              for (
+                let x = offset - columnGap;
+                x < width;
+                x += columnGap
+              ) {
+                const seed = row * 97 + Math.round(x / columnGap) + 13;
+                const length = Math.round(
+                  (18 + seededFraction(seed) * 48) * detailScale,
+                );
+                const px = Math.round(x);
+                const py = Math.round(y);
+
+                backgroundCtx.fillStyle = tokenColor("--blue-400", 0.2);
+                backgroundCtx.fillRect(px, py, length, lineHeight);
+
+                if (seededFraction(seed + 31) > 0.52) {
+                  const tailGap = Math.max(5, Math.round(7 * detailScale));
+                  backgroundCtx.fillRect(
+                    px + length + tailGap,
+                    py,
+                    Math.max(7, Math.round(length * 0.42)),
+                    lineHeight,
+                  );
+                }
+              }
+            }
+          }
+        };
+
+        const drawFrame = (now: number) => {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(backgroundCanvas, 0, 0);
+
+          if (!reduceMotion) {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(
+              0,
+              layout.horizonY,
+              layout.width,
+              layout.height - layout.horizonY,
+            );
+            ctx.clip();
+            drawShorelineWaves(ctx, now, artworkLayout, {
+              shore: tokenColor("--blue-300"),
+              middle: tokenColor("--blue-500"),
+              outer: tokenColor("--blue-600"),
+            });
+            ripples.draw(ctx, now);
+            ctx.restore();
+          }
+        };
+
+        const resize = () => {
+          const width = Math.max(1, section.clientWidth);
+          const height = Math.max(1, section.clientHeight);
+          dpr = Math.min(window.devicePixelRatio || 1, 2);
+          layout = getSceneLayout(width, height);
+          artworkLayout = getArtworkLayout(width, height);
+
+          canvas.width = Math.round(width * dpr);
+          canvas.height = Math.round(height * dpr);
+          backgroundCanvas.width = canvas.width;
+          backgroundCanvas.height = canvas.height;
+          ctx.imageSmoothingEnabled = false;
+          backgroundCtx.imageSmoothingEnabled = false;
+
+          paintBackground();
+          drawFrame(performance.now());
+        };
+
+        const isWater = (x: number, y: number) => {
+          return (
+            x >= 0 &&
+            x < layout.width &&
+            y >= layout.horizonY &&
+            y < layout.height
+          );
+        };
+
+        const toCanvasPoint = (clientX: number, clientY: number) => {
+          const rect = canvas.getBoundingClientRect();
+          return {
+            x: clientX - rect.left,
+            y: clientY - rect.top,
+          };
+        };
+
+        const randomWaterPoint = () => {
+          const firstWaterRow = Math.max(0, layout.horizonY);
+          const waterHeight = layout.height - firstWaterRow;
+          if (waterHeight <= 0) return null;
+
+          for (let attempt = 0; attempt < 40; attempt += 1) {
+            const x = Math.random() ** 1.35 * layout.width;
+            const y = firstWaterRow + Math.random() * waterHeight;
+            if (isWater(x, y)) return { x, y };
+          }
+          return null;
+        };
+
+        // Ambient ripples so the lake is never perfectly still.
+        let nextAmbient = performance.now() + 700;
+        const scheduleAmbient = (now: number) => {
+          nextAmbient = now + 1200 + Math.random() * 1400;
+        };
+
+        // Pointer interaction (water only). We never preventDefault, so the
+        // page keeps scrolling on touch devices.
+        // Hover ripples back off exponentially while the pointer stays active,
+        // so continuous movement spawns progressively fewer ripples. The
+        // interval resets when the pointer pauses (an idle gap) or on a press.
+        const MOVE_INTERVAL_MIN = 90; // ms between hover ripples at the start
+        const MOVE_INTERVAL_MAX = 1400; // ms once fully backed off
+        const MOVE_BACKOFF = 1.7; // interval growth factor per spawn
+        const MOVE_IDLE_RESET = 260; // ms of stillness that resets the backoff
+
+        let lastX = 0,
+          lastY = 0,
+          lastT = 0,
+          hasLast = false,
+          lastSpawn = 0,
+          moveInterval = MOVE_INTERVAL_MIN;
+
+        const onPointerMove = (e: PointerEvent) => {
+          const { x, y } = toCanvasPoint(e.clientX, e.clientY);
+          const t = performance.now();
+          // A pause in movement resets the backoff back to frequent.
+          if (t - lastT > MOVE_IDLE_RESET) moveInterval = MOVE_INTERVAL_MIN;
+          if (hasLast && isWater(x, y)) {
+            const dt = Math.max(1, t - lastT);
+            const speed = Math.hypot(x - lastX, y - lastY) / dt;
+            if (speed > 0.15 && t - lastSpawn >= moveInterval) {
+              ripples.spawn(x, y, Math.min(0.15 + speed * 0.06, 0.55), t);
+              lastSpawn = t;
+              moveInterval = Math.min(moveInterval * MOVE_BACKOFF, MOVE_INTERVAL_MAX);
+            }
+          }
+          lastX = x;
+          lastY = y;
+          lastT = t;
+          hasLast = true;
+        };
+        const onPointerDown = (e: PointerEvent) => {
+          const { x, y } = toCanvasPoint(e.clientX, e.clientY);
+          if (isWater(x, y)) {
+            ripples.spawn(x, y, 1.1);
+          }
+          lastX = x;
+          lastY = y;
+          const t = performance.now();
+          lastT = t;
+          lastSpawn = t;
+          moveInterval = MOVE_INTERVAL_MIN; // a fresh press starts frequent again
+          hasLast = true;
+        };
+        const onPointerLeave = () => {
+          hasLast = false;
+          moveInterval = MOVE_INTERVAL_MIN;
+        };
+
+        if (!reduceMotion) {
+          canvas.addEventListener("pointermove", onPointerMove);
+          canvas.addEventListener("pointerdown", onPointerDown);
+          canvas.addEventListener("pointerleave", onPointerLeave);
         }
-        // soft absorbing boundary so ripples don't bounce hard off the edges
-        V[0] *= 0.86; V[N - 1] *= 0.86;
-        H[0] = H[1] * 0.5; H[N - 1] = H[N - 2] * 0.5;
-        for (let i = 0; i < N; i++) H[i] += V[i];
 
-        // Stroke the wave
-        const baseY = h * L.baseY;
-        ctx.beginPath();
-        for (let i = 0; i < N; i++) {
-          const x = (i / (N - 1)) * w;
-          const y = baseY + H[i];
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.strokeStyle = `hsl(${L.color} / ${L.strokeAlpha})`;
-        ctx.lineWidth = L.lineWidth;
-        ctx.lineJoin = "round";
-        ctx.shadowBlur = 6;
-        ctx.shadowColor = `hsl(${L.color} / 0.6)`;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        const step = () => {
+          const now = performance.now();
 
-        // Gradient fill underneath
-        ctx.lineTo(w, h);
-        ctx.lineTo(0, h);
-        ctx.closePath();
-        const grad = ctx.createLinearGradient(0, baseY, 0, baseY + h * 0.22);
-        grad.addColorStop(0, `hsl(${L.color} / ${L.fillAlpha})`);
-        grad.addColorStop(0.55, `hsl(${L.color} / ${L.fillAlpha * 0.35})`);
-        grad.addColorStop(1, `hsl(${L.color} / 0)`);
-        ctx.fillStyle = grad;
-        ctx.fill();
-      }
+          if (now >= nextAmbient) {
+            const p = randomWaterPoint();
+            if (p) ripples.spawn(p.x, p.y, 0.2 + Math.random() * 0.18, now);
+            scheduleAmbient(now);
+          }
 
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
+          ripples.update(now);
+          drawFrame(now);
+          raf = requestAnimationFrame(step);
+        };
+
+        const resizeObserver = new ResizeObserver(resize);
+        resizeObserver.observe(section);
+        resize();
+
+        // Pause the loop when the hero is off-screen.
+        const io = new IntersectionObserver(
+          ([entry]) => {
+            if (!reduceMotion && entry.isIntersecting && !raf) {
+              raf = requestAnimationFrame(step);
+            } else if ((!entry.isIntersecting || reduceMotion) && raf) {
+              cancelAnimationFrame(raf);
+              raf = 0;
+            }
+          },
+          { threshold: 0.01 },
+        );
+        io.observe(section);
+
+        cleanup = () => {
+          io.disconnect();
+          resizeObserver.disconnect();
+          canvas.removeEventListener("pointermove", onPointerMove);
+          canvas.removeEventListener("pointerdown", onPointerDown);
+          canvas.removeEventListener("pointerleave", onPointerLeave);
+        };
+      })
+      .catch(() => {
+        /* image failed to load — the navy section background remains */
+      });
 
     return () => {
-      cancelAnimationFrame(raf);
-      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
-      ro.disconnect();
-      canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerdown", onPointerDown);
-      canvas.removeEventListener("pointerleave", onPointerLeave);
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      cleanup();
     };
   }, []);
 
   return (
-    <section className="relative overflow-hidden bg-[hsl(229_64%_9%)]">
-      {/* Ambient depth glow */}
-      <div
-        className="absolute inset-0 -z-0 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(120% 80% at 50% 0%, hsl(296 56% 28% / 0.55), transparent 60%), radial-gradient(100% 70% at 80% 30%, hsl(192 94% 35% / 0.35), transparent 65%), linear-gradient(180deg, hsl(229 64% 12%), hsl(229 64% 7%))",
-        }}
-      />
-
-      {/* Interactive water canvas */}
+    <section
+      ref={sectionRef}
+      className="relative flex h-[clamp(340px,55svh,460px)] items-center overflow-hidden bg-[hsl(var(--navy-900))] md:h-[clamp(440px,60svh,600px)]"
+    >
+      {/* Responsive sky, water texture, and interactive ripples */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-x-0 top-0 h-[70%] w-full touch-none"
-        style={{ zIndex: 1 }}
+        width={SCENE_W}
+        height={SCENE_H}
         aria-hidden="true"
-      />
-
-      {/* Fade to dark at bottom for clean transition into the marquee */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-40 pointer-events-none"
+        className="absolute inset-0 h-full w-full transition-opacity duration-700"
         style={{
-          zIndex: 2,
-          background: "linear-gradient(180deg, transparent, hsl(229 50% 6%))",
+          imageRendering: "pixelated",
+          opacity: ready ? 1 : 0,
+          zIndex: 0,
         }}
       />
 
-      <div className="container relative py-32 md:py-48 pointer-events-none" style={{ zIndex: 3 }}>
-        <div className="max-w-5xl mx-auto text-center animate-[fade-up_0.8s_ease-out] relative">
-          {/* Dark purple gradient halo behind the heading */}
-          <div
-            aria-hidden="true"
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none -z-10"
+      {/* Clouds drift independently across the generated sky. Their paths and
+          timing are configured in HERO_CLOUDS above. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 transition-opacity duration-700"
+        style={{ opacity: ready ? 1 : 0, zIndex: 2 }}
+      >
+        {HERO_CLOUDS.map((cloud) => (
+          <img
+            key={cloud.id}
+            src={cloud.src}
+            alt=""
+            draggable={false}
+            className="hero-cloud-drift absolute"
+            style={
+              {
+                imageRendering: "pixelated",
+                left: cloud.left,
+                top: cloud.top,
+                width: cloud.width,
+                animationDuration: cloud.duration,
+                animationDelay: cloud.delay,
+                "--cloud-travel": cloud.travel,
+              } as CloudStyle
+            }
+          />
+        ))}
+      </div>
+
+      {/* Small screens use a reduced, bottom-right anchored artwork group.
+          Replacement pines preserve the correct house/roof stacking order. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-0 bottom-0 aspect-[1024/951] h-[81.2%] max-h-[609px] w-auto translate-x-0 transition-opacity duration-700 min-[500px]:bottom-auto min-[500px]:top-1/2 min-[500px]:h-[101.5%] min-[500px]:translate-x-[10%] min-[500px]:-translate-y-1/2 sm:translate-x-0"
+        style={{ opacity: ready ? 1 : 0, zIndex: 5 }}
+      >
+        {HERO_TREES.filter((tree) => tree.layer === "behind").map((tree) => (
+          <img
+            key={tree.id}
+            src={TREE_SRC}
+            alt=""
+            draggable={false}
+            className="absolute"
             style={{
-              width: "min(900px, 110%)",
-              height: "min(420px, 140%)",
-              background:
-                "radial-gradient(ellipse at center, hsl(296 70% 22% / 0.85) 0%, hsl(285 65% 16% / 0.6) 35%, hsl(280 60% 10% / 0.25) 65%, transparent 80%)",
-              filter: "blur(20px)",
+              imageRendering: "pixelated",
+              left: tree.left,
+              top: tree.top,
+              width: tree.width,
+              zIndex: 2,
             }}
           />
-          <h1 className="text-6xl md:text-8xl font-semibold tracking-tight text-white leading-[1.02] drop-shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
-            What is the Open Lakehouse?
-          </h1>
+        ))}
+        <img
+          src={FOREGROUND_SRC}
+          alt=""
+          draggable={false}
+          className="absolute inset-0 h-full w-full"
+          style={{
+            imageRendering: "pixelated",
+            zIndex: 5,
+          }}
+        />
+        {HERO_TREES.filter((tree) => tree.layer === "front").map((tree) => (
+          <img
+            key={tree.id}
+            src={TREE_SRC}
+            alt=""
+            draggable={false}
+            className="absolute"
+            style={{
+              imageRendering: "pixelated",
+              left: tree.left,
+              top: tree.top,
+              width: tree.width,
+              zIndex: 6,
+            }}
+          />
+        ))}
+        {/* A separately extracted flowering bush demonstrates how supplied
+            sprites can be positioned independently over the clean scene. */}
+        <img
+          src={FLOWER_BUSH_SRC}
+          alt=""
+          draggable={false}
+          className="absolute"
+          style={{
+            imageRendering: "pixelated",
+            left: "49%",
+            top: "54%",
+            width: "8%",
+            zIndex: 7,
+          }}
+        />
+      </div>
 
-          <p className="mt-10 mx-auto max-w-2xl text-lg md:text-xl text-white/85 leading-relaxed drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
-            Your data, in open formats, on storage you control — readable by any engine you choose,
-            today and ten years from now.
+      {/* Gentle bottom fade into the marquee below */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 bottom-0 h-16 pointer-events-none md:h-24"
+        style={{
+          zIndex: 10,
+          background:
+            "linear-gradient(180deg, transparent, hsl(var(--navy-900) / 0.35))",
+        }}
+      />
+
+      <div
+        className="container relative min-w-0 pointer-events-none py-8 md:py-16"
+        style={{ zIndex: 20 }}
+      >
+        <div className="hero-copy-shadow relative min-w-0 max-w-2xl text-center animate-[fade-up_0.8s_ease-out] min-[500px]:text-left">
+          <h1 className="relative text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
+            What is the Open<br /> Lakehouse?
+          </h1>
+          <p className="relative mx-auto mt-8 hidden max-w-xl text-xl leading-relaxed text-white/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] min-[500px]:mx-0 min-[500px]:block lg:text-xl">
+            <span className="min-[800px]:hidden">
+              Your data, in open formats, on storage
+              <br />
+              you control, readable by any engine
+              <br />
+              you choose, today and ten years from now.
+            </span>
+            <span className="hidden min-[800px]:inline">
+              Your data, in open formats, on storage you control, readable by any
+              engine you choose, today and ten years from now.
+            </span>
           </p>
         </div>
       </div>
