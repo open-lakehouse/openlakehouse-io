@@ -209,11 +209,6 @@
     box-shadow: var(--shadow-card);
   }
 
-  /* Tight navy plate behind the hero subtitle on narrow viewports. */
-  .hero-mobile-copy-glow {
-    background: hsl(var(--navy-900) / 0.7);
-  }
-
   /* Extra glyph halo so the subtitle stays readable over the lakehouse. */
   .hero-mobile-text-shadow {
     text-shadow:

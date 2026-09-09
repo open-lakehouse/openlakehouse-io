@@ -544,10 +544,6 @@ export const Hero = () => {
             What is the Open Lakehouse?
           </h1>
           <div className="relative mt-5 min-w-0 w-full max-w-xl md:mt-8">
-            <div
-              aria-hidden="true"
-              className="hero-mobile-copy-glow pointer-events-none absolute -inset-x-4 -inset-y-3 rounded-2xl blur-xl md:hidden"
-            />
             <p className="relative break-words text-base md:text-lg lg:text-xl text-white/90 leading-relaxed hero-mobile-text-shadow md:drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
               Your data, in open formats, on storage you control — readable by any
               engine you choose, today and ten years from now.
