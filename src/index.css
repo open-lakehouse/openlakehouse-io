@@ -209,6 +209,12 @@
     box-shadow: var(--shadow-card);
   }
 
+  .hero-copy-shadow {
+    filter:
+      drop-shadow(0 3px 8px hsl(var(--blue-900) / 0.4))
+      drop-shadow(0 10px 22px hsl(var(--blue-900) / 0.4));
+  }
+
   .hero-cloud-drift {
     opacity: 0;
     animation-name: hero-cloud-drift;

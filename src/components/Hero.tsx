@@ -19,6 +19,7 @@ const HORIZON_Y = 254;
 const ARTWORK_W = 1024;
 const ARTWORK_H = 951;
 const ARTWORK_HEIGHT_RATIO = 1.015;
+const SMALLEST_ARTWORK_SCALE = 0.8;
 const ARTWORK_MAX_H = 609;
 const SMALL_CLOUD_SRC = "/assets/hero-cloud-small.png";
 const LARGE_CLOUD_SRC = "/assets/hero-cloud-large.png";
@@ -115,16 +116,18 @@ const getArtworkLayout = (
   width: number,
   height: number,
 ): ShorelineWaveLayout => {
+  const isSmallViewport = width < 500;
+  const responsiveScale = isSmallViewport ? SMALLEST_ARTWORK_SCALE : 1;
   const artworkHeight = Math.min(
-    height * ARTWORK_HEIGHT_RATIO,
+    height * ARTWORK_HEIGHT_RATIO * responsiveScale,
     ARTWORK_MAX_H,
   );
   const artworkWidth = artworkHeight * (ARTWORK_W / ARTWORK_H);
-  const translate = width < 400 ? 0.22 : width < 640 ? 0.1 : 0;
+  const translate = !isSmallViewport && width < 640 ? 0.1 : 0;
 
   return {
     left: width - artworkWidth + artworkWidth * translate,
-    top: (height - artworkHeight) / 2,
+    top: isSmallViewport ? height - artworkHeight : (height - artworkHeight) / 2,
     scale: artworkHeight / ARTWORK_H,
   };
 };
@@ -506,12 +509,11 @@ export const Hero = () => {
         ))}
       </div>
 
-      {/* The full artwork group is 70% of its previous size and stays pinned
-          right. Replacement pines fill or cover the source trees while keeping
-          house/roof overlap in the correct stacking order. */}
+      {/* Small screens use a reduced, bottom-right anchored artwork group.
+          Replacement pines preserve the correct house/roof stacking order. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-1/2 aspect-[1024/951] h-[101.5%] max-h-[609px] w-auto translate-x-[22%] -translate-y-1/2 transition-opacity duration-700 min-[400px]:translate-x-[10%] sm:translate-x-0"
+        className="pointer-events-none absolute right-0 bottom-0 aspect-[1024/951] h-[81.2%] max-h-[609px] w-auto translate-x-0 transition-opacity duration-700 min-[500px]:bottom-auto min-[500px]:top-1/2 min-[500px]:h-[101.5%] min-[500px]:translate-x-[10%] min-[500px]:-translate-y-1/2 sm:translate-x-0"
         style={{ opacity: ready ? 1 : 0, zIndex: 5 }}
       >
         {HERO_TREES.filter((tree) => tree.layer === "behind").map((tree) => (
@@ -588,17 +590,22 @@ export const Hero = () => {
         className="container relative min-w-0 pointer-events-none py-8 md:py-16"
         style={{ zIndex: 20 }}
       >
-        <div className="min-w-0 max-w-2xl animate-[fade-up_0.8s_ease-out]">
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
+        <div className="hero-copy-shadow relative min-w-0 max-w-2xl text-center animate-[fade-up_0.8s_ease-out] min-[500px]:text-left">
+          <h1 className="relative text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
             What is the Open<br /> Lakehouse?
           </h1>
-          <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] lg:text-xl">
-            Your data, in open formats,
-            on storage you control,
-            <br />
-            readable by any engine you choose,
-            <br />
-            today and ten years from now.
+          <p className="relative mx-auto mt-8 hidden max-w-xl text-xl leading-relaxed text-white/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] min-[500px]:mx-0 min-[500px]:block lg:text-xl">
+            <span className="min-[800px]:hidden">
+              Your data, in open formats, on storage
+              <br />
+              you control, readable by any engine
+              <br />
+              you choose, today and ten years from now.
+            </span>
+            <span className="hidden min-[800px]:inline">
+              Your data, in open formats, on storage you control, readable by any
+              engine you choose, today and ten years from now.
+            </span>
           </p>
         </div>
       </div>
