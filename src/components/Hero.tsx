@@ -462,7 +462,7 @@ export const Hero = () => {
           house/roof overlap in the correct stacking order. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-1/2 aspect-[1024/951] h-[101.5%] max-h-[609px] w-auto -translate-y-1/2 transition-opacity duration-700"
+        className="pointer-events-none absolute right-0 top-1/2 aspect-[1024/951] h-[101.5%] max-h-[609px] w-auto translate-x-[22%] -translate-y-1/2 transition-opacity duration-700 min-[400px]:translate-x-[10%] sm:translate-x-0"
         style={{ opacity: ready ? 1 : 0, zIndex: 5 }}
       >
         {HERO_TREES.filter((tree) => tree.layer === "behind").map((tree) => (
@@ -543,10 +543,19 @@ export const Hero = () => {
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
             What is the Open Lakehouse?
           </h1>
-          <div className="relative mt-5 min-w-0 w-full max-w-xl md:mt-8">
-            <p className="relative break-words text-base md:text-lg lg:text-xl text-white/90 leading-relaxed hero-mobile-text-shadow md:drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
-              Your data, in open formats, on storage you control — readable by any
-              engine you choose, today and ten years from now.
+          <div className="relative mt-6 min-w-0 w-full max-w-[13rem] md:mt-8 md:max-w-xl">
+            <p className="relative text-sm leading-relaxed text-white hero-mobile-text-shadow md:text-lg md:text-white/90 md:drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] lg:text-xl">
+              <span className="md:hidden">
+                <span className="block whitespace-nowrap">Your data, in open formats,</span>
+                <span className="block whitespace-nowrap">on storage you control —</span>
+                <span className="block whitespace-nowrap">readable by any engine</span>
+                <span className="block whitespace-nowrap">you choose, today</span>
+                <span className="block whitespace-nowrap">and ten years from now.</span>
+              </span>
+              <span className="hidden md:inline">
+                Your data, in open formats, on storage you control — readable by any
+                engine you choose, today and ten years from now.
+              </span>
             </p>
           </div>
         </div>
