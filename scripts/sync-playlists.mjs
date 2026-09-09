@@ -9,7 +9,9 @@
  *   - For each (channel, playlist), fetch every videoId via playlistItems.list.
  *   - Hydrate title + duration via videos.list (contentDetails + snippet).
  *   - Write one MDX per video at src/content/videos/<channel-slug>/<videoId>.mdx.
- *     Existing files with the same videoId are overwritten (deterministic output).
+ *     Existing files with the same videoId are overwritten, but their `visible`
+ *     value is preserved so videos can be hidden without losing that choice.
+ *   - Private/unavailable playlist entries are retained with `visible: false`.
  *   - Files in those channel dirs that are no longer in any playlist are removed,
  *     UNLESS their frontmatter has `manual: true` (placeholders / hand-curated).
  *   - Channels not present in scripts/playlists.json are left fully untouched.
@@ -65,12 +67,19 @@ async function fetchPlaylistItems(playlistId) {
   let pageToken;
   do {
     const data = await ytGet("playlistItems", {
-      part: "contentDetails",
+      part: "contentDetails,snippet,status",
       playlistId,
       maxResults: "50",
       ...(pageToken ? { pageToken } : {}),
     });
-    items.push(...data.items.map((i) => i.contentDetails.videoId));
+    items.push(
+      ...data.items.map((item) => ({
+        videoId: item.contentDetails.videoId,
+        title: item.snippet.title,
+        publishedAt: item.contentDetails.videoPublishedAt ?? item.snippet.publishedAt,
+        visible: item.status?.privacyStatus === "public",
+      })),
+    );
     pageToken = data.nextPageToken;
   } while (pageToken);
   return items;
@@ -100,13 +109,14 @@ function yamlEscape(s) {
   return `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-function renderMdx({ channel, title, duration, hue, videoId, playlist, publishedAt }) {
+function renderMdx({ channel, title, duration, hue, videoId, playlist, publishedAt, visible }) {
   const fm = [
     `channel: ${yamlEscape(channel)}`,
     `title: ${yamlEscape(title)}`,
     `duration: "${duration}"`,
     `hue: ${hue}`,
     `videoId: "${videoId}"`,
+    `visible: ${visible}`,
     playlist ? `playlist: "${playlist}"` : null,
     publishedAt ? `publishedAt: "${publishedAt}"` : null,
   ]
@@ -145,33 +155,43 @@ async function main() {
     const dir = path.join(VIDEOS_DIR, slug);
     if (!DRY_RUN) fs.mkdirSync(dir, { recursive: true });
 
-    // 1. Gather every (videoId, playlistId) for this channel.
-    const videoToPlaylist = new Map(); // first playlist wins for canonical link
+    // 1. Gather every unique video for this channel.
+    const videosById = new Map(); // first playlist wins for canonical link
     for (const playlistId of channel.playlists) {
-      const ids = await fetchPlaylistItems(playlistId);
-      for (const id of ids) if (!videoToPlaylist.has(id)) videoToPlaylist.set(id, playlistId);
+      const items = await fetchPlaylistItems(playlistId);
+      for (const item of items) {
+        if (!videosById.has(item.videoId)) videosById.set(item.videoId, { ...item, playlist: playlistId });
+      }
     }
 
-    // 2. Hydrate details for everything we don't already have.
-    const allIds = [...videoToPlaylist.keys()];
+    // 2. Hydrate public details. Private/unavailable entries fall back to
+    //    playlist metadata and remain in the content set as hidden videos.
+    const allIds = [...videosById.keys()];
     const details = await fetchVideoDetails(allIds);
 
     // 3. Write MDX files (deterministic hue based on position).
     const hueBase = channel.hueBase ?? 270;
     let i = 0;
-    for (const [videoId, playlist] of videoToPlaylist) {
-      const d = details.get(videoId);
-      if (!d) continue;
+    for (const [videoId, playlistItem] of videosById) {
+      const d = details.get(videoId) ?? playlistItem;
       const file = path.join(dir, `${videoId}.mdx`);
       const exists = fs.existsSync(file);
+      const previousFrontmatter = exists ? readFrontmatter(file) : {};
+      const visible =
+        previousFrontmatter.visible === "true"
+          ? true
+          : previousFrontmatter.visible === "false"
+            ? false
+            : playlistItem.visible;
       const next = renderMdx({
         channel: channel.name,
         title: d.title,
-        duration: d.duration,
+        duration: d.duration ?? "",
         hue: hueBase + ((i * 3) % 30) - 15, // small spread around the base
         videoId,
-        playlist,
+        playlist: playlistItem.playlist,
         publishedAt: d.publishedAt,
+        visible,
       });
       const prev = exists ? fs.readFileSync(file, "utf8") : "";
       if (prev !== next) {
@@ -190,7 +210,7 @@ async function main() {
         const file = path.join(dir, name);
         const fm = readFrontmatter(file);
         const id = fm.videoId;
-        if (id && videoToPlaylist.has(id)) continue;
+        if (id && videosById.has(id)) continue;
         if (fm.manual === "true") continue;
         if (!id) continue; // skip hand-written entries without videoId
         if (!DRY_RUN) fs.unlinkSync(file);

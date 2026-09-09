@@ -54,6 +54,9 @@ export type Post = {
   readingTime?: number;
   /** Optional explainer YouTube id rendered above the article. */
   video?: string;
+  /** Original source metadata for republished content. */
+  originalUrl?: string;
+  originalPublisher?: string;
   /** Registry key for an optional flow diagram component (see FlowDiagram.tsx). */
   flowDiagram?: string;
   /** Raw MDX source (frontmatter included) for "view as Markdown" + LLM export. */
@@ -115,6 +118,8 @@ function parsePosts(): Post[] {
       kind: (data.kind as Kind) ?? "post",
       readingTime: typeof data.readingTime === "number" ? data.readingTime : undefined,
       video: data.video ? String(data.video) : undefined,
+      originalUrl: data.originalUrl ? String(data.originalUrl) : undefined,
+      originalPublisher: data.originalPublisher ? String(data.originalPublisher) : undefined,
       flowDiagram: data.flowDiagram ? String(data.flowDiagram) : undefined,
       raw: "",
       Component: postMods[path].default,

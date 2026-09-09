@@ -9,7 +9,9 @@ retrieval and citation. Curated index: /llms.txt
 
 # Apache Iceberg 1.11.0 Release
 
-URL: https://openlakehouse.io/blog/iceberg/iceberg-1-11-0-release
+URL: https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/
+Republished at: https://openlakehouse.io/blog/iceberg/iceberg-1-11-0-release
+Original publisher: Apache Iceberg
 Date: 2026-06-16
 Category: Iceberg
 
@@ -171,7 +173,10 @@ For more information, visit the [Apache Iceberg repository](https://github.com/a
 
 ---
 
-*Originally posted on [https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/](https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/).*
+*Originally published by the Apache Iceberg community as
+[“Apache Iceberg 1.11.0 Release”](https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/)
+on the Apache Iceberg blog. Republished here with attribution to the original
+source.*
 
 ---
 

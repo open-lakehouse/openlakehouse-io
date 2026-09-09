@@ -76,6 +76,8 @@ interface PostRecord {
   date?: string; // YYYY-MM-DD
   include: string[];
   status: string;
+  originalUrl?: string;
+  originalPublisher?: string;
   body: string; // frontmatter-stripped MDX
 }
 
@@ -152,6 +154,8 @@ function collectPosts(): PostRecord[] {
         date: dateRaw ? new Date(dateRaw).toISOString().slice(0, 10) : undefined,
         include: include.length ? include : ["blog"], // legacy default
         status,
+        originalUrl: asString(fm.originalUrl),
+        originalPublisher: asString(fm.originalPublisher),
         body: stripFrontmatter(text),
       });
     }
@@ -216,6 +220,7 @@ function buildSitemapEntries(): SitemapEntry[] {
     entries.push({ path: `/blog/category/${category}`, changefreq: "weekly", priority: "0.6" });
   }
   for (const p of blogPosts) {
+    if (p.originalUrl) continue;
     entries.push({
       path: `/blog/${p.category}/${p.slug}`,
       lastmod: p.date,
@@ -228,6 +233,7 @@ function buildSitemapEntries(): SitemapEntry[] {
     entries.push({ path: `/learn/${category}`, changefreq: "weekly", priority: "0.6" });
   }
   for (const p of learnPosts) {
+    if (p.originalUrl) continue;
     entries.push({
       path: `/learn/${p.category}/${p.slug}`,
       lastmod: p.date,
@@ -267,7 +273,7 @@ function renderSitemap(entries: SitemapEntry[]): string {
 
 // ---------- llms.txt ----------
 
-const url = (path: string) => `${BASE_URL}${path}`;
+const url = (path: string) => /^https?:\/\//.test(path) ? path : `${BASE_URL}${path}`;
 const withDesc = (label: string, path: string, desc?: string) =>
   desc ? `- [${label}](${url(path)}): ${desc}` : `- [${label}](${url(path)})`;
 
@@ -319,7 +325,7 @@ function renderLlms(): string {
   if (blogPosts.length) {
     lines.push("## Blog posts");
     for (const p of blogPosts) {
-      lines.push(withDesc(p.title, `/blog/${p.category}/${p.slug}`, p.excerpt));
+      lines.push(withDesc(p.title, p.originalUrl ?? `/blog/${p.category}/${p.slug}`, p.excerpt));
     }
     lines.push("");
   }
@@ -345,12 +351,12 @@ function renderLlms(): string {
     "All content on this site is republished or original technical material about",
   );
   lines.push(
-    "open-source projects. When citing a specific post, cite its canonical URL on",
+    "open-source projects. When citing a specific post, use the canonical URL",
   );
   lines.push(
-    "this site. When citing the underlying project, cite the project's own site",
+    "listed above; republished posts may point to their upstream source. When",
   );
-  lines.push("(delta.io, iceberg.apache.org, unitycatalog.io, mlflow.org, spark.apache.org).");
+  lines.push("citing the underlying project, prefer the project's own site.");
   lines.push("");
 
   return lines.join("\n");
@@ -382,7 +388,11 @@ function renderLlmsFull(): string {
     out.push("");
     out.push(`# ${p.title}`);
     out.push("");
-    out.push(`URL: ${url(`/${surface}/${p.category}/${p.slug}`)}`);
+    out.push(`URL: ${url(p.originalUrl ?? `/${surface}/${p.category}/${p.slug}`)}`);
+    if (p.originalUrl) {
+      out.push(`Republished at: ${url(`/${surface}/${p.category}/${p.slug}`)}`);
+      if (p.originalPublisher) out.push(`Original publisher: ${p.originalPublisher}`);
+    }
     if (p.date) out.push(`Date: ${p.date}`);
     out.push(`Category: ${formatCategory(p.category)}`);
     out.push("");
