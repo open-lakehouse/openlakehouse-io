@@ -24,6 +24,7 @@ function parse(): Video[] {
   for (const path of Object.keys(mods)) {
     const fm = (mods[path].frontmatter ?? {}) as Record<string, unknown>;
     if (!fm.title || !fm.channel) continue;
+    if (fm.visible === false || fm.visible === "false") continue;
     out.push({
       channel: String(fm.channel),
       title: String(fm.title),

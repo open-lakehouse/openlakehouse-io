@@ -33,6 +33,23 @@ const BlogPost = () => {
       name: "Open Lakehouse",
       url: canonicalUrl("/"),
     },
+    ...(post.originalUrl
+      ? {
+          isBasedOn: {
+            "@type": "Article",
+            "@id": post.originalUrl,
+            url: post.originalUrl,
+            ...(post.originalPublisher
+              ? {
+                  publisher: {
+                    "@type": "Organization",
+                    name: post.originalPublisher,
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
     articleSection: formatCategory(post.category),
   };
   const breadcrumbLd = {
@@ -51,6 +68,7 @@ const BlogPost = () => {
         title={post.title}
         description={post.excerpt ?? `${post.title} — Open Lakehouse blog post`}
         path={path}
+        canonical={post.originalUrl}
         type="article"
         image={post.thumbnail}
         jsonLd={[articleLd, breadcrumbLd]}

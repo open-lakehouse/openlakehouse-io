@@ -5,6 +5,8 @@ type SeoProps = {
   title: string;
   description: string;
   path: string; // route path beginning with "/"
+  /** Override the local canonical for content republished from another site. */
+  canonical?: string;
   type?: "website" | "article" | "profile";
   image?: string;
   /** Any number of JSON-LD objects to attach to this page. */
@@ -26,13 +28,14 @@ export const Seo = ({
   title,
   description,
   path,
+  canonical,
   type = "website",
   image,
   jsonLd,
   suffix = true,
   noindex = false,
 }: SeoProps) => {
-  const url = canonicalUrl(path);
+  const url = canonical ?? canonicalUrl(path);
   const fullTitle = suffix && !title.includes(SITE_NAME) ? `${title} — ${SITE_NAME}` : title;
   const ldArr = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 

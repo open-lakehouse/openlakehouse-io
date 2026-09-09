@@ -31,7 +31,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [Iceberg posts](https://openlakehouse.io/blog/category/iceberg)
 
 ## Blog posts
-- [Apache Iceberg 1.11.0 Release](https://openlakehouse.io/blog/iceberg/iceberg-1-11-0-release): Iceberg 1.11.0 lands the biggest REST catalog upgrade since the protocol was introduced, plus encryption, geospatial types, SQL UDFs, Spark 4.1 and Flink 2.1 support, and the first foundations of Format V4.
+- [Apache Iceberg 1.11.0 Release](https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/): Iceberg 1.11.0 lands the biggest REST catalog upgrade since the protocol was introduced, plus encryption, geospatial types, SQL UDFs, Spark 4.1 and Flink 2.1 support, and the first foundations of Format V4.
 - [Integrating the Rust Delta Kernel into ClickHouse](https://openlakehouse.io/blog/delta-lake/clickhouse-delta-kernel): How the ClickHouse team adopted delta-kernel-rs to offload Delta protocol handling, unlock writes, schema evolution, time travel, CDF, and pruning — and what it took to ship a Rust library inside a C++ database.
 - [Delta Grows Up: Writes, Unity Catalog and Time Travel](https://openlakehouse.io/blog/delta-lake/duckdb-delta-grows-up): DuckDB's Delta and Unity Catalog extensions shed their experimental tags — now with INSERT writes, time travel, Unity Catalog coordination, and Catalog Managed Tables.
 - [From Black Box to Observability: Tracing OpenClaw with MLflow](https://openlakehouse.io/blog/agentic/openclaw-tracing): How to add MLflow Tracing to OpenClaw so every autonomous agent run becomes a fully inspectable execution timeline — locally, with your data on your machine.
@@ -63,6 +63,6 @@ full text of every article is mirrored in /llms-full.txt.
 
 ## Citation policy
 All content on this site is republished or original technical material about
-open-source projects. When citing a specific post, cite its canonical URL on
-this site. When citing the underlying project, cite the project's own site
-(delta.io, iceberg.apache.org, unitycatalog.io, mlflow.org, spark.apache.org).
+open-source projects. When citing a specific post, use the canonical URL
+listed above; republished posts may point to their upstream source. When
+citing the underlying project, prefer the project's own site.

@@ -17,7 +17,7 @@ import { PostLayout } from "@/components/PostLayout";
 
 // Pick representative routes across categories + surfaces.
 const SAMPLE_ROUTES = [
-  { surface: "blog" as const, category: "iceberg", slug: "getting-started" },
+  { surface: "blog" as const, category: "iceberg", slug: "iceberg-1-11-0-release" },
   { surface: "blog" as const, category: "delta-lake", slug: "delta-catalog-managed-tables" },
   { surface: "learn" as const, category: "getting-started", slug: "delta-lake" },
 ];

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, ExternalLink, Play } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { videos, type Video } from "@/content/videos";
@@ -10,22 +10,7 @@ const ytUrl = (id: string, playlist?: string) =>
 
 const FILTERS = ["All", "Open Lakehouse + AI", "Apache Spark", "Delta Lake", "Apache Iceberg", "MLflow"] as const;
 type Filter = typeof FILTERS[number];
-
-const useVisibleCount = () => {
-  const get = () => {
-    if (typeof window === "undefined") return 3;
-    if (window.innerWidth >= 1024) return 3;
-    if (window.innerWidth >= 640) return 2;
-    return 1;
-  };
-  const [n, setN] = useState(get);
-  useEffect(() => {
-    const onResize = () => setN(get());
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return n;
-};
+const PAGE_SIZE = 6;
 
 const VideoCardInner = ({ v }: { v: Video }) => (
   <>
@@ -60,69 +45,27 @@ const VideoCardInner = ({ v }: { v: Video }) => (
 export const VideosCarousel = () => {
   const isHome = useLocation().pathname === "/";
   const [filter, setFilter] = useState<Filter>("All");
-  const filteredVideos = filter === "All" ? videos : videos.filter((v) => v.channel === filter);
-  const [idx, setIdx] = useState(0);
-  const visible = useVisibleCount();
-  const [dragPx, setDragPx] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartX = useRef<number | null>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const pausedRef = useRef(false);
-  const draggedRef = useRef(false); // tracks if pointerdown turned into a real drag
+  const [currentPage, setCurrentPage] = useState(0);
   const [active, setActive] = useState<Video | null>(null);
+  const filteredVideos = filter === "All" ? videos : videos.filter((v) => v.channel === filter);
+  const pageCount = Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE));
+  const pageVideos = filteredVideos.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const windowSize = 7;
+  let pageWindowStart = Math.max(0, currentPage - Math.floor(windowSize / 2));
+  const pageWindowEnd = Math.min(pageCount, pageWindowStart + windowSize);
+  pageWindowStart = Math.max(0, pageWindowEnd - windowSize);
+  const pages = Array.from(
+    { length: pageWindowEnd - pageWindowStart },
+    (_, index) => pageWindowStart + index,
+  );
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      if (!pausedRef.current && !active && filteredVideos.length > 0)
-        setIdx((i) => (i + 1) % filteredVideos.length);
-    }, 5000);
-    return () => clearInterval(t);
-  }, [filteredVideos.length, active]);
-
-  // Reset index when filter or visible count changes
-  useEffect(() => {
-    setIdx(0);
-  }, [filter]);
-
-  useEffect(() => {
-    setIdx((i) => (filteredVideos.length ? i % filteredVideos.length : 0));
-  }, [visible, filteredVideos.length]);
-
-  const cardWidth = `calc((100% - ${(visible - 1) * 1.5}rem) / ${visible})`;
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    dragStartX.current = e.clientX;
-    draggedRef.current = false;
-    setIsDragging(true);
-    pausedRef.current = true;
+  const selectFilter = (nextFilter: Filter) => {
+    setFilter(nextFilter);
+    setCurrentPage(0);
   };
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (dragStartX.current === null) return;
-    const dx = e.clientX - dragStartX.current;
-    if (Math.abs(dx) > 8) {
-      draggedRef.current = true;
-    }
-    setDragPx(dx);
-  };
-
-  const endDrag = (e: React.PointerEvent) => {
-    if (dragStartX.current === null) return;
-    const track = trackRef.current;
-    const slideWidth = track ? (track.firstElementChild as HTMLElement | null)?.getBoundingClientRect().width ?? 0 : 0;
-    const step = slideWidth + 24; // gap-6 = 1.5rem = 24px
-    const dx = e.clientX - dragStartX.current;
-    const threshold = Math.max(40, step * 0.2);
-    let next = idx;
-    if (dx <= -threshold) next = Math.min(idx + Math.max(1, Math.round(-dx / step)), Math.max(0, filteredVideos.length - 1));
-    else if (dx >= threshold) next = Math.max(idx - Math.max(1, Math.round(dx / step)), 0);
-    setIdx(next);
-    setDragPx(0);
-    setIsDragging(false);
-    dragStartX.current = null;
-    // resume autoplay shortly after
-    setTimeout(() => { pausedRef.current = false; }, 4000);
+  const goPage = (page: number) => {
+    setCurrentPage(Math.max(0, Math.min(pageCount - 1, page)));
   };
 
   return (
@@ -140,7 +83,8 @@ export const VideosCarousel = () => {
           {FILTERS.map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => selectFilter(f)}
+              aria-pressed={filter === f}
               className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                 filter === f
                   ? "bg-primary text-primary-foreground border-primary shadow-glow"
@@ -152,171 +96,82 @@ export const VideosCarousel = () => {
           ))}
         </div>
 
-        {isHome && (filteredVideos.length <= 20 || visible === 1) ? (
-          <>
-            <div
-              className="overflow-hidden touch-pan-y select-none"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={endDrag}
-              onPointerCancel={endDrag}
-              style={{ cursor: isDragging ? "grabbing" : "grab" }}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {pageVideos.map((v) => (
+            <button
+              key={v.videoId ?? v.title}
+              type="button"
+              onClick={() => { if (v.videoId) setActive(v); }}
+              className="group text-left rounded-2xl overflow-hidden border border-border bg-card shadow-card hover:shadow-glow transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <div
-                ref={trackRef}
-                className={`flex gap-6 ${isDragging ? "" : "transition-transform duration-700 ease-out"}`}
-                style={{ transform: `translate3d(calc(-${idx} * (${cardWidth} + 1.5rem) + ${dragPx}px), 0, 0)` }}
+              <VideoCardInner v={v} />
+            </button>
+          ))}
+        </div>
+
+        {pageCount > 1 && (
+          <nav className="mt-10 flex flex-col items-center gap-3" aria-label={`${filter} videos pagination`}>
+            <div className="flex items-center gap-2">
+              <button
+                aria-label="Previous page"
+                onClick={() => goPage(currentPage - 1)}
+                disabled={currentPage === 0}
+                className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {[...filteredVideos, ...filteredVideos.slice(0, Math.min(visible, filteredVideos.length))].map((v, i) => (
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {pageWindowStart > 0 && (
+                <>
                   <button
-                    key={i}
-                    type="button"
-                    onClick={(e) => {
-                      if (draggedRef.current) { e.preventDefault(); return; }
-                      if (v.videoId) setActive(v);
-                    }}
-                    draggable={false}
-                    className="group flex-shrink-0 text-left rounded-2xl overflow-hidden border border-border bg-card shadow-card hover:shadow-glow transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    style={{ width: cardWidth }}
+                    aria-label="Go to page 1"
+                    onClick={() => goPage(0)}
+                    className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
                   >
-                    <VideoCardInner v={v} />
+                    1
                   </button>
-                ))}
-              </div>
+                  <span className="text-muted-foreground text-xs px-0.5" aria-hidden="true">…</span>
+                </>
+              )}
+              {pages.map((page) => (
+                <button
+                  key={page}
+                  aria-label={`Go to page ${page + 1}`}
+                  aria-current={page === currentPage ? "page" : undefined}
+                  onClick={() => goPage(page)}
+                  className={`h-8 min-w-8 px-2 rounded-full text-xs font-medium border transition-colors ${
+                    page === currentPage
+                      ? "bg-primary text-primary-foreground border-primary shadow-glow"
+                      : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40"
+                  }`}
+                >
+                  {page + 1}
+                </button>
+              ))}
+              {pageWindowEnd < pageCount && (
+                <>
+                  <span className="text-muted-foreground text-xs px-0.5" aria-hidden="true">…</span>
+                  <button
+                    aria-label={`Go to page ${pageCount}`}
+                    onClick={() => goPage(pageCount - 1)}
+                    className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                  >
+                    {pageCount}
+                  </button>
+                </>
+              )}
+              <button
+                aria-label="Next page"
+                onClick={() => goPage(currentPage + 1)}
+                disabled={currentPage === pageCount - 1}
+                className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
-
-            {filteredVideos.length > 0 && (
-              filteredVideos.length > 20 ? (
-                <div className="mt-8 flex items-center justify-center gap-3">
-                  <button
-                    aria-label="Previous video"
-                    onClick={() => setIdx((i) => (i - 1 + filteredVideos.length) % filteredVideos.length)}
-                    className="h-9 w-9 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <span className="text-xs font-medium tabular-nums text-muted-foreground min-w-[4rem] text-center">
-                    {idx + 1} / {filteredVideos.length}
-                  </span>
-                  <button
-                    aria-label="Next video"
-                    onClick={() => setIdx((i) => (i + 1) % filteredVideos.length)}
-                    className="h-9 w-9 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex justify-center gap-2 mt-8">
-                  {filteredVideos.map((_, i) => (
-                    <button
-                      key={i}
-                      aria-label={`Go to video ${i + 1}`}
-                      onClick={() => setIdx(i)}
-                      className={`h-1.5 rounded-full transition-all ${i === idx ? "w-8 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground"}`}
-                    />
-                  ))}
-                </div>
-              )
-            )}
-          </>
-        ) : (
-          (() => {
-            const PAGE = 6;
-            const pageCount = Math.max(1, Math.ceil(filteredVideos.length / PAGE));
-            const currentPage = Math.min(Math.floor(idx / PAGE), pageCount - 1);
-            const pageVideos = filteredVideos.slice(currentPage * PAGE, currentPage * PAGE + PAGE);
-            const goPage = (p: number) => {
-              const clamped = Math.max(0, Math.min(pageCount - 1, p));
-              setIdx(clamped * PAGE);
-            };
-            const windowSize = 7;
-            let start = Math.max(0, currentPage - Math.floor(windowSize / 2));
-            let end = Math.min(pageCount, start + windowSize);
-            start = Math.max(0, end - windowSize);
-            const pages: number[] = [];
-            for (let p = start; p < end; p++) pages.push(p);
-
-            return (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {pageVideos.map((v, i) => (
-                    <button
-                      key={`${currentPage}-${i}`}
-                      type="button"
-                      onClick={() => { if (v.videoId) setActive(v); }}
-                      className="group text-left rounded-2xl overflow-hidden border border-border bg-card shadow-card hover:shadow-glow transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                    >
-                      <VideoCardInner v={v} />
-                    </button>
-                  ))}
-                </div>
-
-                {pageCount > 1 && (
-                  <div className="mt-10 flex flex-col items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <button
-                        aria-label="Previous page"
-                        onClick={() => goPage(currentPage - 1)}
-                        disabled={currentPage === 0}
-                        className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-                      {start > 0 && (
-                        <>
-                          <button
-                            onClick={() => goPage(0)}
-                            className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                          >
-                            1
-                          </button>
-                          <span className="text-muted-foreground text-xs px-0.5">…</span>
-                        </>
-                      )}
-                      {pages.map((p) => (
-                        <button
-                          key={p}
-                          aria-label={`Go to page ${p + 1}`}
-                          aria-current={p === currentPage ? "page" : undefined}
-                          onClick={() => goPage(p)}
-                          className={`h-8 min-w-8 px-2 rounded-full text-xs font-medium border transition-colors ${
-                            p === currentPage
-                              ? "bg-primary text-primary-foreground border-primary shadow-glow"
-                              : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-primary/40"
-                          }`}
-                        >
-                          {p + 1}
-                        </button>
-                      ))}
-                      {end < pageCount && (
-                        <>
-                          <span className="text-muted-foreground text-xs px-0.5">…</span>
-                          <button
-                            onClick={() => goPage(pageCount - 1)}
-                            className="h-8 min-w-8 px-2 rounded-full text-xs font-medium border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                          >
-                            {pageCount}
-                          </button>
-                        </>
-                      )}
-                      <button
-                        aria-label="Next page"
-                        onClick={() => goPage(currentPage + 1)}
-                        disabled={currentPage === pageCount - 1}
-                        className="h-8 w-8 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground tabular-nums">
-                      Showing {currentPage * PAGE + 1}–{Math.min((currentPage + 1) * PAGE, filteredVideos.length)} of {filteredVideos.length}
-                    </p>
-                  </div>
-                )}
-              </>
-            );
-          })()
+            <p className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+              Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, filteredVideos.length)} of {filteredVideos.length}
+            </p>
+          </nav>
         )}
 
 
