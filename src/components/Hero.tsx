@@ -543,21 +543,10 @@ export const Hero = () => {
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
             What is the Open Lakehouse?
           </h1>
-          <div className="relative mt-6 min-w-0 w-full max-w-[13rem] md:mt-8 md:max-w-xl">
-            <p className="relative text-sm leading-relaxed text-white hero-mobile-text-shadow md:text-lg md:text-white/90 md:drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] lg:text-xl">
-              <span className="md:hidden">
-                <span className="block whitespace-nowrap">Your data, in open formats,</span>
-                <span className="block whitespace-nowrap">on storage you control —</span>
-                <span className="block whitespace-nowrap">readable by any engine</span>
-                <span className="block whitespace-nowrap">you choose, today</span>
-                <span className="block whitespace-nowrap">and ten years from now.</span>
-              </span>
-              <span className="hidden md:inline">
-                Your data, in open formats, on storage you control — readable by any
-                engine you choose, today and ten years from now.
-              </span>
-            </p>
-          </div>
+          <p className="mt-8 hidden max-w-xl text-lg leading-relaxed text-white/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] md:block lg:text-xl">
+            Your data, in open formats, on storage you control — readable by any
+            engine you choose, today and ten years from now.
+          </p>
         </div>
       </div>
     </section>
