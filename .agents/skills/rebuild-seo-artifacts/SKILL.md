@@ -26,7 +26,8 @@ use to discover and cite content. They are generated, never hand-edited.
   Every generated URL, the app `<head>` canonical/OG tags, and the Organization
   JSON-LD derive from it. Change the domain there.
 - **Content**: `src/content/posts/**` and `src/content/authors/*.mdx`. The
-  generator reads frontmatter (`title`, `date`, `excerpt`, `include`, `status`).
+  generator reads frontmatter (`title`, `date`, `excerpt`, `include`, `status`,
+  `originalUrl`, `originalPublisher`).
 - **Static routes**: `staticEntries`, `TECH_CATEGORIES`, and `TECH_PILLARS` in
   [scripts/generate-seo.ts](../../../scripts/generate-seo.ts) must mirror the
   routes in [src/App.tsx](../../../src/App.tsx).
@@ -45,6 +46,9 @@ It writes all three files and prints a summary line with the URL/article counts.
 ## Rules the generator follows
 
 - Only `status: published` posts are emitted (skips `draft` and `preview`).
+- Verbatim republications with `originalUrl` use that upstream URL in the LLM
+  artifacts and are omitted from the sitemap because the local page is not
+  canonical.
 - `include: [blog]` posts map to `/blog/<category>/<slug>`; `include: [learn]`
   posts map to `/learn/<category>/<slug>`. A post in both surfaces appears in
   both. Missing `include` defaults to `blog` (legacy).

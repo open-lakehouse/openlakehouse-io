@@ -19,6 +19,22 @@ rules and skills from the `.agents/` directory before doing any work:
 Re-scan `.agents/` whenever the task changes, since new rules or skills may
 have been added.
 
+## Republished content attribution
+
+When a post republishes another site's content:
+
+- Add `originalUrl` and `originalPublisher` to the MDX frontmatter.
+- Include a visible note linking to the original article and credit the named
+  author, community, or publisher exactly as the source does.
+- For a verbatim republication, use `originalUrl` as the cross-domain
+  `<link rel="canonical">` and add it to the Article JSON-LD as `isBasedOn` or
+  `citation`. If this metadata is not wired into the content and SEO types yet,
+  implement that support rather than emitting a local canonical.
+- For substantially original or adapted coverage, retain the local canonical
+  and cite the source visibly instead.
+- Preserve direct source links, and only state a reuse license after verifying
+  the source's content license.
+
 ### Current contents
 
 - `.agents/rules/branching-rule.mdc` — always create a `feat/*`/`fix/*`/etc.
