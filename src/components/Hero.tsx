@@ -5,6 +5,10 @@ import {
   type CSSProperties,
 } from "react";
 import { WaterRipples } from "./hero/waterRipples";
+import {
+  drawShorelineWaves,
+  type ShorelineWaveLayout,
+} from "./hero/shorelineWaves";
 
 // Every artwork layer uses this shared coordinate system. The scene may shrink
 // with the viewport but stops growing at 1200 CSS pixels.
@@ -12,6 +16,10 @@ const SCENE_W = 1024;
 const SCENE_H = 576;
 const SCENE_MAX_W = 1200;
 const HORIZON_Y = 254;
+const ARTWORK_W = 1024;
+const ARTWORK_H = 951;
+const ARTWORK_HEIGHT_RATIO = 1.015;
+const ARTWORK_MAX_H = 609;
 const SMALL_CLOUD_SRC = "/assets/hero-cloud-small.png";
 const LARGE_CLOUD_SRC = "/assets/hero-cloud-large.png";
 const FOREGROUND_SRC = "/assets/hero-lakehouse-foreground.png";
@@ -19,6 +27,7 @@ const FLOWER_BUSH_SRC = "/assets/hero-sprite-flower-bush.png";
 const TREE_SRC = "/assets/hero-sprite-pine-clean.png";
 
 interface HeroCloud {
+  id: string;
   src: string;
   left: string;
   top: string;
@@ -31,6 +40,7 @@ interface HeroCloud {
 // Tweak these values to change each cloud's path and pace independently.
 const HERO_CLOUDS: readonly HeroCloud[] = [
   {
+    id: "small-center",
     src: SMALL_CLOUD_SRC,
     left: "35%",
     top: "19%",
@@ -40,6 +50,7 @@ const HERO_CLOUDS: readonly HeroCloud[] = [
     travel: "22vw",
   },
   {
+    id: "large-right",
     src: LARGE_CLOUD_SRC,
     left: "58%",
     top: "9%",
@@ -47,6 +58,16 @@ const HERO_CLOUDS: readonly HeroCloud[] = [
     duration: "138s",
     delay: "-76s",
     travel: "28vw",
+  },
+  {
+    id: "small-left",
+    src: SMALL_CLOUD_SRC,
+    left: "10%",
+    top: "8%",
+    width: "clamp(70px, 9vw, 115px)",
+    duration: "122s",
+    delay: "-63s",
+    travel: "16vw",
   },
 ];
 
@@ -87,6 +108,24 @@ const getSceneLayout = (width: number, height: number): SceneLayout => {
     height,
     scale,
     horizonY: sceneTop + HORIZON_Y * scale,
+  };
+};
+
+const getArtworkLayout = (
+  width: number,
+  height: number,
+): ShorelineWaveLayout => {
+  const artworkHeight = Math.min(
+    height * ARTWORK_HEIGHT_RATIO,
+    ARTWORK_MAX_H,
+  );
+  const artworkWidth = artworkHeight * (ARTWORK_W / ARTWORK_H);
+  const translate = width < 400 ? 0.22 : width < 640 ? 0.1 : 0;
+
+  return {
+    left: width - artworkWidth + artworkWidth * translate,
+    top: (height - artworkHeight) / 2,
+    scale: artworkHeight / ARTWORK_H,
   };
 };
 
@@ -136,6 +175,10 @@ export const Hero = () => {
 
         let dpr = 1;
         let layout = getSceneLayout(
+          section.clientWidth,
+          section.clientHeight,
+        );
+        let artworkLayout = getArtworkLayout(
           section.clientWidth,
           section.clientHeight,
         );
@@ -207,7 +250,7 @@ export const Hero = () => {
                 const px = Math.round(x);
                 const py = Math.round(y);
 
-                backgroundCtx.fillStyle = tokenColor("--blue-400", 0.28);
+                backgroundCtx.fillStyle = tokenColor("--blue-400", 0.2);
                 backgroundCtx.fillRect(px, py, length, lineHeight);
 
                 if (seededFraction(seed + 31) > 0.52) {
@@ -240,6 +283,11 @@ export const Hero = () => {
               layout.height - layout.horizonY,
             );
             ctx.clip();
+            drawShorelineWaves(ctx, now, artworkLayout, {
+              shore: tokenColor("--blue-300"),
+              middle: tokenColor("--blue-500"),
+              outer: tokenColor("--blue-600"),
+            });
             ripples.draw(ctx, now);
             ctx.restore();
           }
@@ -250,6 +298,7 @@ export const Hero = () => {
           const height = Math.max(1, section.clientHeight);
           dpr = Math.min(window.devicePixelRatio || 1, 2);
           layout = getSceneLayout(width, height);
+          artworkLayout = getArtworkLayout(width, height);
 
           canvas.width = Math.round(width * dpr);
           canvas.height = Math.round(height * dpr);
@@ -412,7 +461,7 @@ export const Hero = () => {
   return (
     <section
       ref={sectionRef}
-      className="relative flex h-[clamp(300px,40svh,340px)] items-center overflow-hidden bg-[hsl(var(--navy-900))] md:h-[clamp(440px,60svh,600px)]"
+      className="relative flex h-[clamp(340px,55svh,460px)] items-center overflow-hidden bg-[hsl(var(--navy-900))] md:h-[clamp(440px,60svh,600px)]"
     >
       {/* Responsive sky, water texture, and interactive ripples */}
       <canvas
@@ -437,7 +486,7 @@ export const Hero = () => {
       >
         {HERO_CLOUDS.map((cloud) => (
           <img
-            key={cloud.src}
+            key={cloud.id}
             src={cloud.src}
             alt=""
             draggable={false}
@@ -540,12 +589,16 @@ export const Hero = () => {
         style={{ zIndex: 20 }}
       >
         <div className="min-w-0 max-w-2xl animate-[fade-up_0.8s_ease-out]">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
             What is the Open Lakehouse?
           </h1>
-          <p className="mt-8 hidden max-w-xl text-lg leading-relaxed text-white/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] md:block lg:text-xl">
-            Your data, in open formats, on storage you control — readable by any
-            engine you choose, today and ten years from now.
+          <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] lg:text-xl">
+            Your data, in open formats,
+            on storage you control,
+            <br />
+            readable by any engine you choose,
+            <br />
+            today and ten years from now.
           </p>
         </div>
       </div>
