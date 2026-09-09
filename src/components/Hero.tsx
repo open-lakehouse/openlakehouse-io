@@ -590,7 +590,7 @@ export const Hero = () => {
       >
         <div className="min-w-0 max-w-2xl animate-[fade-up_0.8s_ease-out]">
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight text-white leading-[1.03] drop-shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
-            What is the Open Lakehouse?
+            What is the Open<br /> Lakehouse?
           </h1>
           <p className="mt-8 max-w-xl text-xl leading-relaxed text-white/90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] lg:text-xl">
             Your data, in open formats,
