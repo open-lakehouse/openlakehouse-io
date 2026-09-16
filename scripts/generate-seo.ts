@@ -28,6 +28,7 @@ const staticEntries: SitemapEntry[] = [
   { path: "/technologies", changefreq: "weekly", priority: "0.9" },
   { path: "/learn", changefreq: "weekly", priority: "0.8" },
   { path: "/community", changefreq: "monthly", priority: "0.6" },
+  { path: "/authors", changefreq: "monthly", priority: "0.6" },
   { path: "/blog", changefreq: "daily", priority: "0.9" },
   { path: "/faq", changefreq: "monthly", priority: "0.8" },
 ];
@@ -38,6 +39,7 @@ const NAV_DESCRIPTIONS: Record<string, string> = {
   "/technologies": "Every open-source building block, grouped by layer.",
   "/learn": "Curated guides, talks, and tutorials.",
   "/community": "Where practitioners gather.",
+  "/authors": "Maintainers, authors, and practitioners in the Open Lakehouse community.",
   "/blog": "Release notes, deep dives, and republished posts from upstream projects.",
   "/faq": "Direct, citable Q&A about the Open Lakehouse, Delta Lake, Iceberg, Unity Catalog, MLflow, and Spark.",
 };

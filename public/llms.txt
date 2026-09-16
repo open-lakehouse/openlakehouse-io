@@ -11,6 +11,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [Technologies](https://openlakehouse.io/technologies): Every open-source building block, grouped by layer.
 - [Learn](https://openlakehouse.io/learn): Curated guides, talks, and tutorials.
 - [Community](https://openlakehouse.io/community): Where practitioners gather.
+- [Authors](https://openlakehouse.io/authors): Maintainers, authors, and practitioners in the Open Lakehouse community.
 - [Blog](https://openlakehouse.io/blog): Release notes, deep dives, and republished posts from upstream projects.
 - [FAQ](https://openlakehouse.io/faq): Direct, citable Q&A about the Open Lakehouse, Delta Lake, Iceberg, Unity Catalog, MLflow, and Spark.
 

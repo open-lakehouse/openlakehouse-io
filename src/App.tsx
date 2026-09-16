@@ -19,6 +19,7 @@ import Community from "./pages/Community.tsx";
 import Blog from "./pages/Blog.tsx";
 import BlogCategory from "./pages/BlogCategory.tsx";
 import BlogPost from "./pages/BlogPost.tsx";
+import Authors from "./pages/Authors.tsx";
 import AuthorPage from "./pages/AuthorPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -46,6 +47,7 @@ const App = () => (
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/category/:category" element={<BlogCategory />} />
             <Route path="/blog/:category/:slug" element={<BlogPost />} />
+            <Route path="/authors" element={<Authors />} />
             <Route path="/authors/:slug" element={<AuthorPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
