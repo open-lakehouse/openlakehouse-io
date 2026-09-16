@@ -53,7 +53,7 @@ const channels = [
     icon: Github,
     title: "GitHub",
     desc: "Explore the open source projects that power the Open Lakehouse.",
-    href: "https://github.com/",
+    href: "https://github.com/open-lakehouse",
     cta: "Browse repos",
   },
   {
