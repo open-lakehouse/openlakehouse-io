@@ -138,6 +138,9 @@ export const SiteHeader = () => {
               />
             </Link>
           </div>
+          <Link to="/open-source-data-engineering" className={desktopLinkClass}>
+            Data Engineering
+          </Link>
           <Link to="/blog" className={desktopLinkClass}>Blog</Link>
           <LearnLink className={desktopLinkClass} />
           <Link to="/community" className={desktopLinkClass}>Community</Link>
@@ -251,6 +254,13 @@ export const SiteHeader = () => {
             </div>
           </div>
 
+          <Link
+            to="/open-source-data-engineering"
+            className={mobileLinkClass}
+            onClick={() => setOpen(false)}
+          >
+            Data Engineering
+          </Link>
           <Link to="/blog" className={mobileLinkClass} onClick={() => setOpen(false)}>
             Blog
           </Link>
