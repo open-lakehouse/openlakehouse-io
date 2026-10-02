@@ -15,7 +15,7 @@ import { gettingStartedTopics } from "./learn/GettingStarted";
 const Index = () => (
   <div className="min-h-screen flex flex-col">
     <Seo
-      title="Open Lakehouse — Open formats, open engines, your storage"
+      title="Open Source Data Engineering — Open Lakehouse"
       description={SITE_DESCRIPTION}
       path="/"
       suffix={false}
@@ -26,6 +26,43 @@ const Index = () => (
       <Hero />
       <LogoMarquee />
       <Technologies />
+
+      {/* Query-language section. Gives the homepage a passage that matches how
+          people actually search ("open source data engineering") and links to
+          the dedicated guide for deeper citation. */}
+      <section
+        id="open-source-data-engineering"
+        aria-labelledby="open-source-data-engineering-heading"
+        className="border-t border-border/40 bg-secondary/40"
+      >
+        <div className="container py-20 md:py-24">
+          <div className="max-w-2xl">
+            <p className="text-sm font-medium uppercase tracking-widest text-primary">
+              Open source data engineering
+            </p>
+            <h2
+              id="open-source-data-engineering-heading"
+              className="mt-3 text-3xl md:text-5xl font-semibold tracking-tight"
+            >
+              Build a data platform you control.
+            </h2>
+            <p className="mt-4 text-muted-foreground text-lg leading-relaxed">
+              Open source data engineering means storing data in open formats on storage you own,
+              and reading it with any engine you choose. The stack spans Apache Spark and Apache
+              Flink for compute, Delta Lake, Apache Iceberg, and Apache Hudi for storage, Unity
+              Catalog and Apache Polaris for governance, and Apache Airflow for orchestration. No
+              proprietary table format, no proprietary catalog, no lock-in.
+            </p>
+            <Link
+              to="/open-source-data-engineering"
+              className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
+            >
+              Read the open source data engineering guide <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <VideosCarousel />
 
       {/* Getting Started */}

@@ -11,6 +11,15 @@
 import { writeFileSync, readdirSync, readFileSync, statSync } from "fs";
 import { resolve, join } from "path";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "../src/lib/seo";
+import {
+  DEFINITION as GUIDE_DEFINITION,
+  FAQS as GUIDE_FAQS,
+  PRINCIPLES as GUIDE_PRINCIPLES,
+  PROJECTS as GUIDE_PROJECTS,
+  SLUG as GUIDE_SLUG,
+  STACK as GUIDE_STACK,
+  TITLE as GUIDE_TITLE,
+} from "../src/content/open-source-data-engineering";
 
 const BASE_URL = SITE_URL;
 
@@ -26,6 +35,7 @@ interface SitemapEntry {
 const staticEntries: SitemapEntry[] = [
   { path: "/", changefreq: "weekly", priority: "1.0" },
   { path: "/technologies", changefreq: "weekly", priority: "0.9" },
+  { path: "/open-source-data-engineering", changefreq: "monthly", priority: "0.9" },
   { path: "/learn", changefreq: "weekly", priority: "0.8" },
   { path: "/community", changefreq: "monthly", priority: "0.6" },
   { path: "/authors", changefreq: "monthly", priority: "0.6" },
@@ -37,6 +47,8 @@ const staticEntries: SitemapEntry[] = [
 const NAV_DESCRIPTIONS: Record<string, string> = {
   "/": "What the Open Lakehouse is and why it matters.",
   "/technologies": "Every open-source building block, grouped by layer.",
+  "/open-source-data-engineering":
+    "What open source data engineering is, the reference stack, and the projects that make it up.",
   "/learn": "Curated guides, talks, and tutorials.",
   "/community": "Where practitioners gather.",
   "/authors": "Maintainers, authors, and practitioners in the Open Lakehouse community.",
@@ -402,6 +414,44 @@ function renderLlmsFull(): string {
     out.push("");
   }
 
+  // Hand-written pillar guide. It is a React route rather than an MDX post, so
+  // mirror its text here explicitly to keep the full-text corpus complete.
+  out.push("---");
+  out.push("");
+  out.push(`# ${GUIDE_TITLE}`);
+  out.push("");
+  out.push(`URL: ${url(GUIDE_SLUG)}`);
+  out.push("");
+  out.push(GUIDE_DEFINITION);
+  out.push("");
+  out.push("## The open source data engineering stack");
+  out.push("");
+  out.push("| Layer | What it does | Common projects |");
+  out.push("| --- | --- | --- |");
+  for (const row of GUIDE_STACK) {
+    out.push(`| ${row.layer} | ${row.purpose} | ${row.projects.join(", ")} |`);
+  }
+  out.push("");
+  out.push("## Projects in the stack");
+  out.push("");
+  for (const project of GUIDE_PROJECTS) {
+    out.push(`- **${project.name}** - ${project.blurb} (${project.href})`);
+  }
+  out.push("");
+  out.push("## Why teams choose open source data engineering");
+  out.push("");
+  for (const principle of GUIDE_PRINCIPLES) {
+    out.push(`- **${principle.title}.** ${principle.body}`);
+  }
+  out.push("");
+  out.push("## Frequently asked questions");
+  out.push("");
+  for (const faq of GUIDE_FAQS) {
+    out.push(`### ${faq.q}`);
+    out.push("");
+    out.push(faq.a);
+    out.push("");
+  }
   return out.join("\n");
 }
 

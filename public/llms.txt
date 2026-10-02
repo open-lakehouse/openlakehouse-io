@@ -1,6 +1,6 @@
 # Open Lakehouse
 
-> The Open Lakehouse: your data in open formats on storage you control, readable by any engine — today and ten years from now.
+> The Open Lakehouse: open source data engineering with Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark — your data in open formats on storage you control.
 
 This file follows the llms.txt convention (https://llmstxt.org). It lists
 the canonical pages on this site that are safe and useful to cite. The
@@ -9,6 +9,7 @@ full text of every article is mirrored in /llms-full.txt.
 ## Site
 - [Home](https://openlakehouse.io/): What the Open Lakehouse is and why it matters.
 - [Technologies](https://openlakehouse.io/technologies): Every open-source building block, grouped by layer.
+- [Open Source Data Engineering](https://openlakehouse.io/open-source-data-engineering): What open source data engineering is, the reference stack, and the projects that make it up.
 - [Learn](https://openlakehouse.io/learn): Curated guides, talks, and tutorials.
 - [Community](https://openlakehouse.io/community): Where practitioners gather.
 - [Authors](https://openlakehouse.io/authors): Maintainers, authors, and practitioners in the Open Lakehouse community.

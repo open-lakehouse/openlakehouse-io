@@ -1,6 +1,6 @@
 # Open Lakehouse — full text
 
-> The Open Lakehouse: your data in open formats on storage you control, readable by any engine — today and ten years from now.
+> The Open Lakehouse: open source data engineering with Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark — your data in open formats on storage you control.
 
 Full text of every published article on this site, concatenated for LLM
 retrieval and citation. Curated index: /llms.txt
@@ -2727,3 +2727,75 @@ Congratulations on running your first Spark application!
 # For Scala and Java, use run-example:
 ./bin/run-example SparkPi
 ```
+
+---
+
+# Open Source Data Engineering
+
+URL: https://openlakehouse.io/open-source-data-engineering
+
+Open source data engineering is the practice of building data pipelines, transformation jobs, and analytical tables on software that is freely licensed, community-governed, and portable across clouds. Instead of depending on a single vendor's proprietary engine or storage format, an open source data engineering stack stores data in open file and table formats on object storage, reads it with interchangeable compute engines, and governs access through an open catalog. The reference stack is Apache Spark and Apache Flink for compute; Delta Lake, Apache Iceberg, and Apache Hudi for table storage; Unity Catalog and Apache Polaris for governance; Apache Airflow for orchestration; and MLflow for the machine learning lifecycle. Because every layer is open, the same data can be read by Spark, Trino, DuckDB, Flink, and future engines without copying or migration.
+
+## The open source data engineering stack
+
+| Layer | What it does | Common projects |
+| --- | --- | --- |
+| Table formats | ACID tables on object storage | Delta Lake, Apache Iceberg, Apache Hudi |
+| Compute engines | Batch, SQL, and streaming transforms | Apache Spark, Apache Flink, Trino, DuckDB, Apache DataFusion |
+| Catalogs & governance | Namespaces, access control, lineage | Unity Catalog, Apache Polaris, Lakekeeper, OpenLineage |
+| Orchestration | Scheduling and dependency management | Apache Airflow, Temporal |
+| ML & AI lifecycle | Tracking, registry, evaluation, agents | MLflow |
+
+## Projects in the stack
+
+- **Apache Spark** - The most widely deployed open-source engine for large-scale batch and streaming data engineering. (https://spark.apache.org)
+- **Delta Lake** - An open table format bringing ACID transactions, time travel, and schema enforcement to Parquet on object storage. (https://delta.io)
+- **Apache Iceberg** - An open table format with wide multi-engine support and a strict separation of storage and catalog. (https://iceberg.apache.org)
+- **Apache Hudi** - An open table format designed around upserts and incremental streaming ingestion. (https://hudi.apache.org)
+- **Unity Catalog** - The open catalog for data and AI, with a three-level namespace, fine-grained access control, and lineage. (https://unitycatalog.io)
+- **Apache Polaris** - An open, Iceberg-native catalog implementing the Iceberg REST specification. (https://polaris.apache.org)
+- **Apache Flink** - A stream-processing engine for stateful, exactly-once event pipelines. (https://flink.apache.org)
+- **Apache Airflow** - The reference orchestrator for scheduling and dependency management across data pipelines. (https://airflow.apache.org)
+- **MLflow** - The open platform for the machine learning and GenAI lifecycle: tracking, registry, evaluation, and agents. (https://mlflow.org)
+
+## Why teams choose open source data engineering
+
+- **No lock-in on storage.** Tables live in open formats on object storage you control, so any compliant engine can read them.
+- **Decoupled compute and storage.** You pay object-store prices for data at rest and run compute only when a job runs.
+- **Interchangeable engines.** The same table is readable by Apache Spark, Trino, DuckDB, Flink, and engines that do not exist yet.
+- **Neutral governance.** Core projects are hosted by the Linux Foundation or the Apache Software Foundation under permissive licenses.
+- **One substrate for BI and AI.** The same tables feed SQL dashboards and model training without a copy into a separate warehouse.
+
+## Frequently asked questions
+
+### What is open source data engineering?
+
+Open source data engineering is the practice of building data pipelines, transformation jobs, and analytical tables on software that is freely licensed, community-governed, and portable across clouds. It stores data in open table formats such as Delta Lake, Apache Iceberg, and Apache Hudi on object storage, reads it with interchangeable engines such as Apache Spark, Trino, and DuckDB, and governs access through an open catalog like Unity Catalog or Apache Polaris.
+
+### What is the best open source data engineering stack?
+
+The most common open source data engineering stack combines four layers. For storage, Delta Lake, Apache Iceberg, or Apache Hudi give ACID tables on S3, ADLS, or GCS. For compute, Apache Spark handles batch and ETL while Apache Flink handles streaming; Trino and DuckDB serve SQL. For governance, Unity Catalog or Apache Polaris provide namespaces, access control, and lineage. For orchestration, Apache Airflow schedules and coordinates the pipeline. MLflow covers the ML and GenAI lifecycle. Every layer is governed by the Linux Foundation or the Apache Software Foundation.
+
+### What are the most popular open source data engineering tools?
+
+The most widely used open source data engineering tools are Apache Spark and Apache Flink for compute; Delta Lake, Apache Iceberg, and Apache Hudi for table storage; Unity Catalog and Apache Polaris for catalogs and governance; Apache Airflow for orchestration; dbt for SQL transformation; and MLflow for the ML lifecycle. This site documents each layer and how they interoperate.
+
+### Is Apache Spark open source?
+
+Yes. Apache Spark is open source under the Apache 2.0 license and is governed by the Apache Software Foundation. It was created by Matei Zaharia at UC Berkeley in 2009, open-sourced in 2010, and donated to the ASF in 2013. Spark is the most widely used engine for open source data engineering and the primary write engine for Delta Lake and Apache Iceberg tables.
+
+### Delta Lake vs Apache Iceberg: which should I pick?
+
+Both are mature open table formats. Choose Delta Lake if your stack is Spark-centric, you need first-class streaming writes, or you want Unity Catalog catalog-managed tables. Choose Apache Iceberg for the widest engine support and a strict separation of storage and catalog. Delta UniForm and Apache X-Table now publish cross-format metadata, so the choice is increasingly reversible.
+
+### How do I build an open source data platform from scratch?
+
+Start with object storage on S3, ADLS, or GCS. Add an open table format such as Delta Lake or Apache Iceberg for ACID tables. Choose a compute engine: Apache Spark for batch, Apache Flink for streaming. Put an open catalog such as Unity Catalog or Apache Polaris in front for governance and lineage. Schedule work with Apache Airflow. Track models and agents with MLflow. Each layer is independently replaceable because the formats and protocols are open.
+
+### Is open source data engineering more expensive than a proprietary warehouse?
+
+Usually it is cheaper in licensing and comparable in total cost. Storage and compute are decoupled, so you pay object-store prices for data at rest and only run compute when a job runs. There is no per-seat or per-terabyte license for the table format, catalog, or engine, and no egress penalty for reading your own Parquet files with a different engine. The trade-off is operating the stack yourself unless you use a managed distribution.
+
+### What is the Open Lakehouse and how does it relate to open source data engineering?
+
+The Open Lakehouse is the reference architecture for open source data engineering. It combines open table formats, open catalogs, open compute engines, and open ML tooling so that data written by one engine can be read by any other, on storage the organization controls. The term was popularized by the 2020 paper "Lakehouse: A New Generation of Open Platforms" and has become a default design for data and AI platforms.
