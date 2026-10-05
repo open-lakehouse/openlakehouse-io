@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
-import { posts, categories, authors, formatCategory } from "@/content/content";
+import { PostCardLink } from "@/components/PostCardLink";
+import { posts, categories, authors, formatCategory, externalLabel } from "@/content/content";
 
 const Blog = () => (
   <div className="min-h-screen flex flex-col">
@@ -54,9 +55,9 @@ const Blog = () => (
         {posts.map((p) => {
           const a = authors[p.authorSlug];
           return (
-            <Link
+            <PostCardLink
               key={`${p.category}/${p.slug}`}
-              to={`/blog/${p.category}/${p.slug}`}
+              post={p}
               className="group rounded-2xl border border-border bg-card overflow-hidden shadow-card hover:shadow-glow hover:-translate-y-0.5 transition-all flex flex-col"
             >
               {p.thumbnail && (
@@ -86,9 +87,15 @@ const Blog = () => (
                   <time dateTime={p.date}>
                     {new Date(p.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
                   </time>
+                  {p.externalUrl && (
+                    <>
+                      <span>·</span>
+                      <span>{externalLabel(p)} ↗</span>
+                    </>
+                  )}
                 </div>
               </div>
-            </Link>
+            </PostCardLink>
           );
         })}
       </div>

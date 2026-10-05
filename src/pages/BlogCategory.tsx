@@ -2,7 +2,8 @@ import { useParams, Link, Navigate } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
-import { postsByCategory, categories, authors, formatCategory } from "@/content/content";
+import { PostCardLink } from "@/components/PostCardLink";
+import { postsByCategory, categories, authors, formatCategory, externalLabel } from "@/content/content";
 
 const BlogCategory = () => {
   const { category } = useParams();
@@ -27,9 +28,9 @@ const BlogCategory = () => {
           {list.map((p) => {
             const a = authors[p.authorSlug];
             return (
-              <Link
+              <PostCardLink
                 key={p.slug}
-                to={`/blog/${p.category}/${p.slug}`}
+                post={p}
                 className="group rounded-2xl border border-border bg-card overflow-hidden shadow-card hover:shadow-glow hover:-translate-y-0.5 transition-all flex flex-col"
               >
                 {p.thumbnail && (
@@ -52,9 +53,15 @@ const BlogCategory = () => {
                   <div className="mt-5 flex items-center gap-3 text-sm text-muted-foreground">
                     {a?.avatar && <img src={a.avatar} alt="" aria-hidden="true" className="h-7 w-7 rounded-full" />}
                     <span>{a?.name ?? "Unknown"}</span>
+                    {p.externalUrl && (
+                      <>
+                        <span>·</span>
+                        <span>{externalLabel(p)} ↗</span>
+                      </>
+                    )}
                   </div>
                 </div>
-              </Link>
+              </PostCardLink>
             );
           })}
         </div>

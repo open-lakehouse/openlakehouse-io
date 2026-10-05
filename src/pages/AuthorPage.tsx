@@ -1,9 +1,10 @@
-import { useParams, Link, Navigate } from "react-router-dom";
+import { useParams, Navigate } from "react-router-dom";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { MdxProvider } from "@/components/MdxProvider";
 import { Seo } from "@/components/Seo";
-import { getAuthor, postsByAuthor, formatCategory } from "@/content/content";
+import { PostCardLink } from "@/components/PostCardLink";
+import { getAuthor, postsByAuthor, formatCategory, externalLabel } from "@/content/content";
 import { canonicalUrl } from "@/lib/seo";
 
 const AuthorPage = () => {
@@ -75,13 +76,14 @@ const AuthorPage = () => {
           <h2 className="text-2xl font-semibold tracking-tight mb-6">Posts by {author.name}</h2>
           <div className="grid gap-4">
             {list.map((p) => (
-              <Link key={`${p.category}/${p.slug}`} to={`/blog/${p.category}/${p.slug}`}
+              <PostCardLink key={`${p.category}/${p.slug}`} post={p}
                     className="group flex items-baseline justify-between gap-4 border-b border-border py-4 hover:text-primary transition-colors">
                 <span className="font-medium">{p.title}</span>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {formatCategory(p.category)} · {new Date(p.date).toLocaleDateString()}
+                  {p.externalUrl && ` · ${externalLabel(p)} ↗`}
                 </span>
-              </Link>
+              </PostCardLink>
             ))}
             {list.length === 0 && <p className="text-muted-foreground">No posts yet.</p>}
           </div>

@@ -57,6 +57,11 @@ export type Post = {
   /** Original source metadata for republished content. */
   originalUrl?: string;
   originalPublisher?: string;
+  /**
+   * Link-out entry: the post lives only at this URL. Cards open it in a new tab
+   * and the local route redirects there; there is no local copy of the body.
+   */
+  externalUrl?: string;
   /** Registry key for an optional flow diagram component (see FlowDiagram.tsx). */
   flowDiagram?: string;
   /** Raw MDX source (frontmatter included) for "view as Markdown" + LLM export. */
@@ -120,6 +125,7 @@ function parsePosts(): Post[] {
       video: data.video ? String(data.video) : undefined,
       originalUrl: data.originalUrl ? String(data.originalUrl) : undefined,
       originalPublisher: data.originalPublisher ? String(data.originalPublisher) : undefined,
+      externalUrl: data.externalUrl ? String(data.externalUrl) : undefined,
       flowDiagram: data.flowDiagram ? String(data.flowDiagram) : undefined,
       raw: "",
       Component: postMods[path].default,
@@ -145,6 +151,20 @@ export const getPost = (category: string, slug: string) =>
   allPosts.find((p) => p.category === category && p.slug === slug);
 
 export const getAuthor = (slug: string) => authors[slug];
+
+/** Local blog route for a post (link-out entries redirect from it). */
+export const blogPath = (p: Post) => `/blog/${p.category}/${p.slug}`;
+
+/** Label for where a link-out entry lives: its publisher, else its hostname. */
+export const externalLabel = (p: Post) => {
+  if (!p.externalUrl) return undefined;
+  if (p.originalPublisher) return p.originalPublisher;
+  try {
+    return new URL(p.externalUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return p.externalUrl;
+  }
+};
 
 export const postsByAuthor = (slug: string) =>
   posts.filter((p) => p.authorSlugs.includes(slug));

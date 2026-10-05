@@ -92,6 +92,7 @@ interface PostRecord {
   status: string;
   originalUrl?: string;
   originalPublisher?: string;
+  externalUrl?: string; // link-out entry: lives only at this URL
   body: string; // frontmatter-stripped MDX
 }
 
@@ -170,6 +171,7 @@ function collectPosts(): PostRecord[] {
         status,
         originalUrl: asString(fm.originalUrl),
         originalPublisher: asString(fm.originalPublisher),
+        externalUrl: asString(fm.externalUrl),
         body: stripFrontmatter(text),
       });
     }
@@ -234,7 +236,7 @@ function buildSitemapEntries(): SitemapEntry[] {
     entries.push({ path: `/blog/category/${category}`, changefreq: "weekly", priority: "0.6" });
   }
   for (const p of blogPosts) {
-    if (p.originalUrl) continue;
+    if (p.originalUrl || p.externalUrl) continue;
     entries.push({
       path: `/blog/${p.category}/${p.slug}`,
       lastmod: p.date,
@@ -247,7 +249,7 @@ function buildSitemapEntries(): SitemapEntry[] {
     entries.push({ path: `/learn/${category}`, changefreq: "weekly", priority: "0.6" });
   }
   for (const p of learnPosts) {
-    if (p.originalUrl) continue;
+    if (p.originalUrl || p.externalUrl) continue;
     entries.push({
       path: `/learn/${p.category}/${p.slug}`,
       lastmod: p.date,
@@ -339,7 +341,7 @@ function renderLlms(): string {
   if (blogPosts.length) {
     lines.push("## Blog posts");
     for (const p of blogPosts) {
-      lines.push(withDesc(p.title, p.originalUrl ?? `/blog/${p.category}/${p.slug}`, p.excerpt));
+      lines.push(withDesc(p.title, p.externalUrl ?? p.originalUrl ?? `/blog/${p.category}/${p.slug}`, p.excerpt));
     }
     lines.push("");
   }
@@ -396,6 +398,7 @@ function renderLlmsFull(): string {
   for (const p of ordered) {
     const key = `${p.category}/${p.slug}`;
     if (seen.has(key)) continue;
+    if (p.externalUrl) continue; // no local text; listed in llms.txt instead
     seen.add(key);
     const surface = p.include.includes("blog") ? "blog" : "learn";
     out.push("---");

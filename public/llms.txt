@@ -29,10 +29,19 @@ full text of every article is mirrored in /llms-full.txt.
 
 ## Blog categories
 - [Agentic posts](https://openlakehouse.io/blog/category/agentic)
+- [Apache Spark posts](https://openlakehouse.io/blog/category/apache-spark)
 - [Delta Lake posts](https://openlakehouse.io/blog/category/delta-lake)
 - [Iceberg posts](https://openlakehouse.io/blog/category/iceberg)
 
 ## Blog posts
+- [An Idiot's Guide to Spark Connect Clients](https://systemsnull.net/posts/data-engineering-ai/idiots-guide-spark-connect-clients): Everything you need to go from “what is Spark?” to running jobs on a Spark Connect server from Python, Scala, Go, Rust or Swift, and working out what went wrong when it doesn't work.
+- [TUTORIAL: How to Build an Open Lakehouse on Your Laptop](https://systemsnull.net/posts/data-engineering-ai/open-lakehouse-on-your-laptop): A self-contained tutorial that builds a complete open lakehouse in an empty folder, one layer at a time, from S3-compatible storage and Delta tables through Unity Catalog, Iceberg readers,…
+- [Hosting an Entire Open Lakehouse on Port 8080](https://systemsnull.net/posts/data-engineering-ai/lakehouse-at-home-demos): How lakehouse-at-home grew from a question about whether my desktop could run a real lakehouse into a composable, agent-first stack for testing new Spark and Iceberg releases before I demo them, one…
+- [Spark's Modules, Seen Through Spark Connect](https://systemsnull.net/posts/data-engineering-ai/state-of-spark-libraries): Which Apache Spark modules are thriving and which are fading, as of Spark 4.2 with 4.3 on the way, and the one test that sorts them: can you reach the module from a thin Python client over Spark…
+- [Most PySpark Tuning Advice Starts in the Wrong Place](https://systemsnull.net/posts/data-engineering-ai/python-performance-in-spark): PySpark runs DataFrame code in the JVM at native speed, and almost everything that makes it slow happens where data crosses into Python.
+- [Stop Blaming Serialization for Slow Python UDFs](https://systemsnull.net/posts/data-engineering-ai/pyspark-udf-showdown): Spark uses the word Arrow for a pandas conversion setting, a UDF transport and operator, and a data type your function receives.
+- [AUTO_CDC: Turning an event log into current state with Spark Declarative Pipelines](https://systemsnull.net/posts/data-engineering-ai/auto-cdc-declarative-pipelines): Most data arrives as a record of what happened, and most questions are about what is true now.
+- [Explaining the Python-JVM Boundary in Spark, and What Arrow Changed](https://systemsnull.net/posts/data-engineering-ai/arrow-and-spark): Every place data crosses between Spark's JVM and Python used to be a pickle bottleneck.
 - [Apache Iceberg 1.11.0 Release](https://iceberg.apache.org/blog/apache-iceberg-1.11.0-release/): Iceberg 1.11.0 lands the biggest REST catalog upgrade since the protocol was introduced, plus encryption, geospatial types, SQL UDFs, Spark 4.1 and Flink 2.1 support, and the first foundations of Format V4.
 - [Integrating the Rust Delta Kernel into ClickHouse](https://openlakehouse.io/blog/delta-lake/clickhouse-delta-kernel): How the ClickHouse team adopted delta-kernel-rs to offload Delta protocol handling, unlock writes, schema evolution, time travel, CDF, and pruning — and what it took to ship a Rust library inside a C++ database.
 - [Delta Grows Up: Writes, Unity Catalog and Time Travel](https://openlakehouse.io/blog/delta-lake/duckdb-delta-grows-up): DuckDB's Delta and Unity Catalog extensions shed their experimental tags — now with INSERT writes, time travel, Unity Catalog coordination, and Catalog Managed Tables.
@@ -55,6 +64,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [Ben Fleis](https://openlakehouse.io/authors/ben-fleis)
 - [Benjamin Mathew](https://openlakehouse.io/authors/benjamin-mathew)
 - [Kseniia Sumarokova](https://openlakehouse.io/authors/kseniia-sumarokova)
+- [Lisa Cao](https://openlakehouse.io/authors/lisa-cao)
 - [Melvyn Peignon](https://openlakehouse.io/authors/melvyn-peignon)
 - [MLflow Team](https://openlakehouse.io/authors/mlflow-team)
 - [Raul Marin](https://openlakehouse.io/authors/raul-marin)
