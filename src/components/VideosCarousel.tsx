@@ -3,6 +3,7 @@ import { ArrowRight, ChevronLeft, ChevronRight, ExternalLink, Play } from "lucid
 import { Link, useLocation } from "react-router-dom";
 import { videos, type Video } from "@/content/videos";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 
 const ytUrl = (id: string, playlist?: string) =>
@@ -44,13 +45,15 @@ const VideoCardInner = ({ v }: { v: Video }) => (
 
 export const VideosCarousel = () => {
   const isHome = useLocation().pathname === "/";
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState<Filter>("All");
   const [currentPage, setCurrentPage] = useState(0);
   const [active, setActive] = useState<Video | null>(null);
   const filteredVideos = filter === "All" ? videos : videos.filter((v) => v.channel === filter);
   const pageCount = Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE));
   const pageVideos = filteredVideos.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  const windowSize = 7;
+  // With prev/next and first/last, a 7-page window is ~480px; a 320px phone only fits the current page.
+  const windowSize = isMobile ? 1 : 7;
   let pageWindowStart = Math.max(0, currentPage - Math.floor(windowSize / 2));
   const pageWindowEnd = Math.min(pageCount, pageWindowStart + windowSize);
   pageWindowStart = Math.max(0, pageWindowEnd - windowSize);
@@ -129,7 +132,9 @@ export const VideosCarousel = () => {
                   >
                     1
                   </button>
-                  <span className="text-muted-foreground text-xs px-0.5" aria-hidden="true">…</span>
+                  {pageWindowStart > 1 && (
+                    <span className="text-muted-foreground text-xs px-0.5" aria-hidden="true">…</span>
+                  )}
                 </>
               )}
               {pages.map((page) => (
@@ -149,7 +154,9 @@ export const VideosCarousel = () => {
               ))}
               {pageWindowEnd < pageCount && (
                 <>
-                  <span className="text-muted-foreground text-xs px-0.5" aria-hidden="true">…</span>
+                  {pageWindowEnd < pageCount - 1 && (
+                    <span className="text-muted-foreground text-xs px-0.5" aria-hidden="true">…</span>
+                  )}
                   <button
                     aria-label={`Go to page ${pageCount}`}
                     onClick={() => goPage(pageCount - 1)}

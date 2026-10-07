@@ -45,10 +45,10 @@ const AuthorPage = () => {
           {author.avatar && (
             <img src={author.avatar} alt={`Portrait of ${author.name}, author at Open Lakehouse Guide Hub`} className="h-24 w-24 rounded-full border border-border" />
           )}
-          <div>
+          <div className="min-w-0 break-words">
             <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">{author.name}</h1>
             {author.role && <p className="mt-1 text-muted-foreground">{author.role}</p>}
-            <div className="mt-3 flex gap-4 text-sm">
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm [&>a]:min-w-0">
               {author.twitter && (
                 <a href={`https://x.com/${author.twitter}`} target="_blank" rel="noreferrer"
                    className="text-primary hover:underline">@{author.twitter}</a>
