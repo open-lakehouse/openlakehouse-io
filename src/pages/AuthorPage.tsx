@@ -41,14 +41,16 @@ const AuthorPage = () => {
       />
       <SiteHeader />
       <main className="flex-1 container py-16 md:py-24 max-w-4xl">
-        <div className="flex items-center gap-6">
-          {author.avatar && (
-            <img src={author.avatar} alt={`Portrait of ${author.name}, author at Open Lakehouse Guide Hub`} className="h-24 w-24 rounded-full border border-border" />
-          )}
-          <div className="min-w-0 break-words">
-            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight">{author.name}</h1>
-            {author.role && <p className="mt-1 text-muted-foreground">{author.role}</p>}
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm [&>a]:min-w-0">
+        <div className="break-words">
+          <div className="flex items-center gap-4 md:gap-5">
+            {author.avatar && (
+              <img src={author.avatar} alt={`Portrait of ${author.name}, author at Open Lakehouse Guide Hub`} className="h-16 w-16 md:h-20 md:w-20 shrink-0 rounded-full border border-border" />
+            )}
+            <h1 className="min-w-0 text-4xl md:text-5xl font-semibold tracking-tight">{author.name}</h1>
+          </div>
+          <div className="mt-4">
+            {author.role && <p className="text-muted-foreground">{author.role}</p>}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm [&>a]:min-w-0">
               {author.twitter && (
                 <a href={`https://x.com/${author.twitter}`} target="_blank" rel="noreferrer"
                    className="text-primary hover:underline">@{author.twitter}</a>
