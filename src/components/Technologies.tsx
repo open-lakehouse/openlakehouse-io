@@ -75,74 +75,81 @@ export const Technologies = () => {
   }, [isMobile]);
 
   return (
-    <section id="technologies" className="container py-20 md:py-28">
+    <section
+      id="technologies"
+      className={`container py-20 md:py-28 ${isHome ? "lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-x-8 lg:pb-12" : ""}`}
+    >
       <div className="max-w-2xl mb-12">
         <p className="text-sm font-medium text-primary uppercase tracking-widest">The stack</p>
         <h2 className="mt-3 text-3xl md:text-5xl font-bold tracking-tight">Open Lakehouse Technologies</h2>
         <p className="mt-4 text-muted-foreground text-lg">The interoperable building blocks of a vendor-neutral data platform.</p>
       </div>
 
-      <div className={isHome ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-8" : undefined}>
-        {isHome && <PodcastSidebar className="lg:order-last" />}
+      {/* Spans every row so the sticky card stays pinned until the section ends; only sticks when
+          the viewport is tall enough to show the whole card below the site header. */}
+      {isHome && (
+        <div className="mb-6 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-3">
+          <PodcastSidebar className="lg:top-24 lg:[@media(min-height:720px)]:sticky" />
+        </div>
+      )}
 
-        {isMobile ? (
-          <div>
-            <div
-              ref={scrollerRef}
-              className="-mx-4 px-4 flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-px-4 pb-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-              aria-label="Technology categories carousel"
-            >
-              {categories.map((cat) => (
-                <div
-                  key={cat.slug}
-                  className="snap-start shrink-0 w-[85%] rounded-2xl border border-border bg-card shadow-card overflow-hidden"
-                >
-                  <CategoryCard {...cat} />
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-4">
-              <button
-                type="button"
-                aria-label="Previous"
-                onClick={() => scrollByCard(-1)}
-                disabled={activeIdx === 0}
-                className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <div className="flex gap-1.5">
-                {categories.map((_, i) => (
-                  <span
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all ${i === activeIdx ? "w-6 bg-primary" : "w-1.5 bg-border"}`}
-                  />
-                ))}
-              </div>
-              <button
-                type="button"
-                aria-label="Next"
-                onClick={() => scrollByCard(1)}
-                disabled={activeIdx >= categories.length - 1}
-                className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        ) : (
+      {isMobile ? (
+        <div>
           <div
-            className={`grid grid-cols-1 sm:grid-cols-2 ${isHome ? "" : "lg:grid-cols-3"} gap-px bg-border rounded-2xl overflow-hidden shadow-card border border-border`}
+            ref={scrollerRef}
+            className="-mx-4 px-4 flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-px-4 pb-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            aria-label="Technology categories carousel"
           >
             {categories.map((cat) => (
-              <CategoryCard key={cat.slug} {...cat} />
+              <div
+                key={cat.slug}
+                className="snap-start shrink-0 w-[85%] rounded-2xl border border-border bg-card shadow-card overflow-hidden"
+              >
+                <CategoryCard {...cat} />
+              </div>
             ))}
           </div>
-        )}
-      </div>
+          <div className="mt-4 flex items-center justify-between gap-4">
+            <button
+              type="button"
+              aria-label="Previous"
+              onClick={() => scrollByCard(-1)}
+              disabled={activeIdx === 0}
+              className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="flex gap-1.5">
+              {categories.map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-1.5 rounded-full transition-all ${i === activeIdx ? "w-6 bg-primary" : "w-1.5 bg-border"}`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              aria-label="Next"
+              onClick={() => scrollByCard(1)}
+              disabled={activeIdx >= categories.length - 1}
+              className="h-10 w-10 inline-flex items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 ${isHome ? "" : "lg:grid-cols-3"} gap-px bg-border rounded-2xl overflow-hidden shadow-card border border-border`}
+        >
+          {categories.map((cat) => (
+            <CategoryCard key={cat.slug} {...cat} />
+          ))}
+        </div>
+      )}
 
       {isHome && (
-        <div className="mt-10 flex justify-center">
+        <div className="mt-10 flex justify-center lg:pb-16">
           <Link
             to="/technologies"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
