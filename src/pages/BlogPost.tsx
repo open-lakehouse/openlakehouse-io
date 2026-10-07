@@ -3,6 +3,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { PostLayout } from "@/components/PostLayout";
 import { Seo } from "@/components/Seo";
+import { ExternalPostRedirect } from "@/components/ExternalPostRedirect";
 import { getPost, getAuthor, formatCategory } from "@/content/content";
 import { canonicalUrl } from "@/lib/seo";
 
@@ -10,6 +11,7 @@ const BlogPost = () => {
   const { category, slug } = useParams();
   const post = category && slug ? getPost(category, slug) : null;
   if (!post || !post.include.includes("blog")) return <Navigate to="/blog" replace />;
+  if (post.externalUrl) return <ExternalPostRedirect post={post} />;
 
   const authorsList = post.authorSlugs.map(getAuthor).filter(Boolean) as ReturnType<typeof getAuthor>[];
   const path = `/blog/${post.category}/${post.slug}`;

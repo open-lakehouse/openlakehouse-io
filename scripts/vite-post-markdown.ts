@@ -59,7 +59,8 @@ export function postMarkdownPlugin(): Plugin {
         if (!file) return next();
         const raw = fs.readFileSync(file, "utf8");
         const { include, status, body } = parse(raw);
-        if (status === "draft" || !include.includes(surface)) return next();
+        // Link-out entries (externalUrl) have no body to export.
+        if (status === "draft" || !include.includes(surface) || !body.trim()) return next();
         res.setHeader("Content-Type", "text/markdown; charset=utf-8");
         res.end(body);
       });
@@ -77,7 +78,7 @@ export function postMarkdownPlugin(): Plugin {
         const slug = last === "index" && parts.length >= 3 ? parts[parts.length - 2] : last;
         const raw = fs.readFileSync(file, "utf8");
         const { include, status, body } = parse(raw);
-        if (status === "draft") continue;
+        if (status === "draft" || !body.trim()) continue;
         for (const surface of include) {
           if (surface !== "blog" && surface !== "learn") continue;
           const target = path.join(outDir, surface, category, `${slug}.md`);
