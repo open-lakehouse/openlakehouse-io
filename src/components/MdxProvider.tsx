@@ -8,6 +8,8 @@ import { Steps, Step } from "./mdx/Steps";
 import { FlowDiagram } from "./mdx/FlowDiagram";
 import { PromptBlock } from "./mdx/PromptBlock";
 import { Tabs, Tab } from "./mdx/Tabs";
+import { LikeC4View } from "./mdx/LikeC4View";
+import { TrestleView } from "./mdx/TrestleView";
 
 const components = {
   // Available in every .mdx file — no import needed.
@@ -20,6 +22,9 @@ const components = {
   PromptBlock,
   Tabs,
   Tab,
+  // Diagrams from docs-factory posts; their bundles live under public/.
+  LikeC4View,
+  TrestleView,
   pre: CodeBlock,
 };
 

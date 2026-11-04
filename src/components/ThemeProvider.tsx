@@ -29,3 +29,6 @@ export const useTheme = () => {
   if (!c) throw new Error("useTheme must be inside ThemeProvider");
   return c;
 };
+
+/** The active light/dark theme, or "light" outside a ThemeProvider (e.g. SSR tests). */
+export const useResolvedTheme = () => useContext(ThemeCtx)?.resolved ?? "light";
