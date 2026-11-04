@@ -1,3 +1,6 @@
-# Welcome to your Lovable project
+# Welcome to the Open Lakehouse
+This website includes [AGENTS.md](./AGENTS.md) to help ensure the experience building the website, authoring new content, is all streamlined.
 
-TODO: Document your project here
+Take a peak at the [RULES and SKILLS](./agents) to see what you can use from day one.
+
+We're glad you are here.
