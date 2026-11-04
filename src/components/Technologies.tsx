@@ -170,28 +170,28 @@ const RoofTile = ({ slug, title, tagline, icon: Icon, items }: Category) => (
   <Link
     to={`/technologies/${slug}`}
     className={cn(
-      "group relative block w-full rounded-xl [--roof-inset:7%] sm:[--roof-inset:12%] transition-[transform,opacity] duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      tileLink,
       spotlight,
+      "flex-col gap-4 p-5 pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6 sm:pt-7",
     )}
   >
-    <span
-      aria-hidden="true"
-      className="clip-roof absolute inset-0 bg-gradient-to-r from-green-800 via-green-700 to-blue-800 transition-[filter] duration-300 group-hover:brightness-110"
-    />
-    <div className="relative mx-auto flex max-w-lg flex-col items-center px-10 pb-6 pt-7 text-center text-white sm:px-16">
-      <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/25">
+    <span aria-hidden="true" className="bg-shingles absolute inset-0 opacity-60" />
+    <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-green-700 via-green-600 to-blue-500" />
+    <div className="relative flex min-w-0 items-start gap-4">
+      <span
+        aria-hidden="true"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-green-700 to-green-600 text-white"
+      >
         <Icon className="h-5 w-5" />
       </span>
-      <h3 className="mt-3 inline-flex items-center gap-1.5 font-semibold tracking-tight text-white">
-        {title}
-        <ArrowRight
-          aria-hidden="true"
-          className="h-4 w-4 opacity-0 -translate-x-1 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
-        />
-      </h3>
-      <p className="mt-1 text-sm text-white/85">{tagline}</p>
-      <ProjectList items={items} className="mt-3 justify-center" chipClassName="border-white/30 bg-white/10 text-white" />
+      <div className="min-w-0 pr-6 sm:pr-0">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Top of the stack</p>
+        <h3 className="mt-1 font-semibold tracking-tight">{title}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{tagline}</p>
+      </div>
     </div>
+    <ProjectList items={items} className="relative pl-14 sm:shrink-0 sm:justify-end sm:pl-0 sm:pr-6" />
+    <HoverArrow />
   </Link>
 );
 
