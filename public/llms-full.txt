@@ -175,7 +175,7 @@ Or, if we configure through SQL or table properties rather than code:
 | `flink-maintenance.convert-equality-deletes.schedule.commit-count` | Trigger after N commits | `1` |
 | `flink-maintenance.convert-equality-deletes.schedule.interval-second` | Trigger after a time interval, in seconds | not set |
 
-Before we turn any of this on, the constraints deserve a careful read, because two of them are disqualifying rather than inconvenient. The table must be **format version 3 or higher**, validated at job startup. Every partition column must also be an equality field. And **row lineage is not preserved** through conversion, so if we depend on `_row_id` or `_last_updated_sequence_number`, this feature is not for us yet. That last one is the red tape I’d put in front of the team before anyone gets excited.
+Before we turn any of this on, the constraints deserve a careful read. There are three, and two of them are disqualifying rather than inconvenient. The table must be **format version 3 or higher**, validated at job startup. And **row lineage is not preserved** through conversion, so if we depend on `_row_id` or `_last_updated_sequence_number`, this feature is not for us yet. The third is the inconvenient one: every partition column must also be an equality field. Row lineage is the red tape I’d put in front of the team before anyone gets excited.
 
 There is a correctness fix here worth naming, because it was open until quite recently and caused real growing pains: [deleted rows could reappear after a failed conversion cycle](https://github.com/apache/iceberg/pull/17630). Resolving an equality delete consumes index entries, and a cycle that failed _after_ resolving one never restored them, because the target branch never moved, _but the task still reported success_. Silent resurrection of deleted rows with a green task checkmark is a big reason to upgrade.
 
@@ -335,7 +335,7 @@ If we configure S3 remote signing, the `s3.signer.*` properties are removed and 
 
 ### Performance improvements to Hive catalog table listings
 
-And a genuinely useful one to close on: [Hive catalog table listing](https://github.com/apache/iceberg/pull/17317) no longer loads every table object into client memory. The old path timed out at roughly 46,000 tables even with a 900-second socket timeout. The same namespace now lists in about five seconds. If we run a large Hive Metastore, that is the number to bring to the upgrade conversation.
+That covers the breaking changes. On to the improvements, starting with a genuinely useful one: [Hive catalog table listing](https://github.com/apache/iceberg/pull/17317) no longer loads every table object into client memory. The old path timed out at roughly 46,000 tables even with a 900-second socket timeout. The same namespace now lists in about five seconds. If we run a large Hive Metastore, that is the number to bring to the upgrade conversation.
 
 ### Fix for unbounded row groups
 
