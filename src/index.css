@@ -215,6 +215,15 @@
       drop-shadow(0 10px 22px hsl(var(--blue-900) / 0.4));
   }
 
+  /* Architectural-drawing hatch used for cross-cutting "wall" layers. */
+  .bg-hatch {
+    background-image: repeating-linear-gradient(
+      135deg,
+      hsl(var(--border)) 0 1px,
+      transparent 1px 9px
+    );
+  }
+
   .hero-cloud-drift {
     opacity: 0;
     animation-name: hero-cloud-drift;
@@ -244,6 +253,11 @@
     opacity: 0;
     transform: translate3d(var(--cloud-travel), 0, 0);
   }
+}
+
+@keyframes lake-streak {
+  0%, 100% { transform: translateX(0); opacity: 0.5; }
+  50% { transform: translateX(10px); opacity: 1; }
 }
 
 @keyframes float-slow {
