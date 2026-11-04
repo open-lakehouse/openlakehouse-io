@@ -215,15 +215,6 @@
       drop-shadow(0 10px 22px hsl(var(--blue-900) / 0.4));
   }
 
-  /* Horizontal roofline texture for the top layer of the technologies stack. */
-  .bg-shingles {
-    background-image: repeating-linear-gradient(
-      180deg,
-      hsl(var(--border)) 0 1px,
-      transparent 1px 8px
-    );
-  }
-
   /* Architectural-drawing hatch used for cross-cutting "wall" layers. */
   .bg-hatch {
     background-image: repeating-linear-gradient(

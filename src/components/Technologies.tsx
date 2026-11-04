@@ -172,26 +172,28 @@ const RoofTile = ({ slug, title, tagline, icon: Icon, items }: Category) => (
     className={cn(
       tileLink,
       spotlight,
-      "flex-col gap-4 p-5 pt-6 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6 sm:pt-7",
+      "flex-col gap-4 border-transparent bg-gradient-to-b from-green-800 to-green-600 p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-6",
     )}
   >
-    <span aria-hidden="true" className="bg-shingles absolute inset-0 opacity-60" />
-    <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-green-700 via-green-600 to-blue-500" />
-    <div className="relative flex min-w-0 items-start gap-4">
+    <div className="flex min-w-0 items-start gap-4">
       <span
         aria-hidden="true"
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-green-700 to-green-600 text-white"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/25"
       >
         <Icon className="h-5 w-5" />
       </span>
       <div className="min-w-0 pr-6 sm:pr-0">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Top of the stack</p>
-        <h3 className="mt-1 font-semibold tracking-tight">{title}</h3>
-        <p className="mt-1 text-sm text-muted-foreground">{tagline}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-green-200">Top of the stack</p>
+        <h3 className="mt-1 font-semibold tracking-tight text-white">{title}</h3>
+        <p className="mt-1 text-sm text-white/80">{tagline}</p>
       </div>
     </div>
-    <ProjectList items={items} className="relative pl-14 sm:shrink-0 sm:justify-end sm:pl-0 sm:pr-6" />
-    <HoverArrow />
+    <ProjectList
+      items={items}
+      className="pl-14 sm:shrink-0 sm:justify-end sm:pl-0 sm:pr-6"
+      chipClassName="border-white/30 bg-white/10 text-white"
+    />
+    <HoverArrow className="text-white" />
   </Link>
 );
 
