@@ -41,6 +41,8 @@ export type Post = {
   slug: string;
   category: string;
   title: string;
+  /** Optional deck rendered under the title on the post page. */
+  subtitle?: string;
   date: string;
   authorSlug: string;
   authorSlugs: string[];
@@ -112,6 +114,7 @@ function parsePosts(): Post[] {
       slug,
       category,
       title: data.title ?? slug,
+      subtitle: data.subtitle ? String(data.subtitle) : undefined,
       date: data.date ? new Date(data.date).toISOString() : new Date().toISOString(),
       authorSlug: authorList[0] ?? "",
       authorSlugs: authorList,
