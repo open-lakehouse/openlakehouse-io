@@ -268,57 +268,64 @@ export const Technologies = () => {
   const [houseRef, inView] = useInView<HTMLDivElement>();
 
   return (
-    <section id="technologies" className="container py-20 md:py-28">
+    <section
+      id="technologies"
+      className={`container py-20 md:py-28 ${isHome ? "lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-x-8 lg:pb-12" : ""}`}
+    >
       <div className="max-w-2xl mb-12">
         <p className="text-sm font-medium text-primary uppercase tracking-widest">The stack</p>
         <h2 className="mt-3 text-3xl md:text-5xl font-bold tracking-tight">Open Lakehouse Technologies</h2>
         <p className="mt-4 text-muted-foreground text-lg">The interoperable building blocks of a vendor-neutral data platform.</p>
       </div>
 
-      <div className={isHome ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-8" : undefined}>
-        {isHome && <PodcastSidebar className="lg:order-last" />}
+      {/* Spans every row so the sticky card stays pinned until the section ends; only sticks when
+          the viewport is tall enough to show the whole card below the site header. */}
+      {isHome && (
+        <div className="mb-6 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-3">
+          <PodcastSidebar className="lg:top-24 lg:[@media(min-height:720px)]:sticky" />
+        </div>
+      )}
 
-        {/* Foundation first, then each floor upward, the walls, and finally the roof. */}
-        <div
-          ref={houseRef}
-          className="group/house grid grid-cols-2 gap-3 lg:grid-cols-[9rem_minmax(0,1fr)_9rem] xl:grid-cols-[10rem_minmax(0,1fr)_10rem]"
-        >
-          <Reveal show={inView} delay={480} from="above" className="col-span-2 -mx-2 sm:-mx-3 lg:col-span-3">
-            <RoofTile {...roof} />
-          </Reveal>
+      {/* Foundation first, then each floor upward, the walls, and finally the roof. */}
+      <div
+        ref={houseRef}
+        className="group/house grid grid-cols-2 gap-3 lg:grid-cols-[9rem_minmax(0,1fr)_9rem] xl:grid-cols-[10rem_minmax(0,1fr)_10rem]"
+      >
+        <Reveal show={inView} delay={480} from="above" className="col-span-2 -mx-2 sm:-mx-3 lg:col-span-3">
+          <RoofTile {...roof} />
+        </Reveal>
 
-          <div className="col-span-2 flex flex-col gap-3 lg:col-span-1 lg:col-start-2 lg:row-start-2">
-            {floors.map((floor, i) => (
-              <Reveal
-                key={floor.slug}
-                show={inView}
-                delay={(floors.length - i) * 90}
-                className="group/floor relative flex-1 lg:before:absolute lg:before:right-full lg:before:top-1/2 lg:before:h-0.5 lg:before:w-3 lg:before:bg-border lg:after:absolute lg:after:left-full lg:after:top-1/2 lg:after:h-0.5 lg:after:w-3 lg:after:bg-border lg:before:transition-colors lg:after:transition-colors lg:group-hover/floor:before:bg-primary lg:group-hover/floor:after:bg-primary"
-              >
-                <FloorTile {...floor} wide={!isHome} />
-              </Reveal>
-            ))}
-          </div>
-
-          <Reveal show={inView} delay={0} className="col-span-2 lg:col-span-3 lg:row-start-3">
-            <Foundation />
-          </Reveal>
-
-          {pillars.map((pillar, i) => (
+        <div className="col-span-2 flex flex-col gap-3 lg:col-span-1 lg:col-start-2 lg:row-start-2">
+          {floors.map((floor, i) => (
             <Reveal
-              key={pillar.slug}
+              key={floor.slug}
               show={inView}
-              delay={360}
-              className={i === 0 ? "lg:col-start-1 lg:row-start-2" : "lg:col-start-3 lg:row-start-2"}
+              delay={(floors.length - i) * 90}
+              className="group/floor relative flex-1 lg:before:absolute lg:before:right-full lg:before:top-1/2 lg:before:h-0.5 lg:before:w-3 lg:before:bg-border lg:after:absolute lg:after:left-full lg:after:top-1/2 lg:after:h-0.5 lg:after:w-3 lg:after:bg-border lg:before:transition-colors lg:after:transition-colors lg:group-hover/floor:before:bg-primary lg:group-hover/floor:after:bg-primary"
             >
-              <PillarTile {...pillar} />
+              <FloorTile {...floor} wide={!isHome} />
             </Reveal>
           ))}
         </div>
+
+        <Reveal show={inView} delay={0} className="col-span-2 lg:col-span-3 lg:row-start-3">
+          <Foundation />
+        </Reveal>
+
+        {pillars.map((pillar, i) => (
+          <Reveal
+            key={pillar.slug}
+            show={inView}
+            delay={360}
+            className={i === 0 ? "lg:col-start-1 lg:row-start-2" : "lg:col-start-3 lg:row-start-2"}
+          >
+            <PillarTile {...pillar} />
+          </Reveal>
+        ))}
       </div>
 
       {isHome && (
-        <div className="mt-10 flex justify-center">
+        <div className="mt-10 flex justify-center lg:pb-16">
           <Link
             to="/technologies"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
