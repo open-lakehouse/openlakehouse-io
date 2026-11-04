@@ -54,6 +54,9 @@ When a post republishes another site's content:
   commit host-specific resolution fields.
 - `.agents/skills/rebuild-seo-artifacts/SKILL.md` — regenerate `sitemap.xml`,
   `llms.txt`, and `llms-full.txt` from `src/content` for SEO/GEO/AEO.
+- `.agents/skills/import-substack-post/SKILL.md` — republish a Substack
+  article as an MDX blog post with its images and original-source
+  attribution.
 
 ### Adding new guidance
 
