@@ -24,7 +24,7 @@ export const Callout = ({
   return (
     <aside className={cn("not-prose my-6 flex gap-3 rounded-xl border p-4", classes)}>
       <Icon className="h-5 w-5 mt-0.5 shrink-0 text-primary" />
-      <div className="flex-1 text-sm leading-relaxed [&>p]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+      <div className="flex-1 text-sm leading-relaxed [&>p]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&>ul]:my-2 [&>ul]:list-disc [&>ul]:pl-5 [&>ol]:my-2 [&>ol]:list-decimal [&>ol]:pl-5 [&_li]:my-1">
         {title && <div className="font-semibold mb-1">{title}</div>}
         {children}
       </div>
