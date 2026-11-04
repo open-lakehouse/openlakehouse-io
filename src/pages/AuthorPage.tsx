@@ -82,7 +82,7 @@ const AuthorPage = () => {
                     className="group flex items-baseline justify-between gap-4 border-b border-border py-4 hover:text-primary transition-colors">
                 <span className="font-medium">{p.title}</span>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {formatCategory(p.category)} · {new Date(p.date).toLocaleDateString()}
+                  {formatCategory(p.category)} · {new Date(p.date).toLocaleDateString(undefined, { timeZone: "UTC" })}
                   {p.externalUrl && ` · ${externalLabel(p)} ↗`}
                 </span>
               </PostCardLink>

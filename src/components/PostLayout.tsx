@@ -55,6 +55,9 @@ export const PostLayout = ({ post, surface }: { post: Post; surface: PostLayoutS
       )}
 
       <h1 className="mt-4 text-4xl md:text-5xl font-semibold tracking-tight">{post.title}</h1>
+      {post.subtitle && (
+        <p className="mt-4 text-lg md:text-xl text-muted-foreground leading-relaxed">{post.subtitle}</p>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
         {authorsList.map((a, i) => (
@@ -68,7 +71,7 @@ export const PostLayout = ({ post, surface }: { post: Post; surface: PostLayoutS
         ))}
         {authorsList.length > 0 && <span>·</span>}
         <time dateTime={post.date}>
-          {new Date(post.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+          {new Date(post.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })}
         </time>
         {post.readingTime && (
           <>

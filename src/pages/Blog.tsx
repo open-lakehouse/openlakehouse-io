@@ -85,7 +85,7 @@ const Blog = () => (
                   <span>{a?.name ?? "Unknown"}</span>
                   <span>·</span>
                   <time dateTime={p.date}>
-                    {new Date(p.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                    {new Date(p.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })}
                   </time>
                   {p.externalUrl && (
                     <>

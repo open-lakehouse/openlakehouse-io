@@ -1,0 +1,400 @@
+---
+title: "A Field Guide to Apache Iceberg 1.12"
+subtitle: "This release is a consolidation effort that focuses on correctness, stability, and paving the path for V4 readiness."
+date: 2026-10-01
+authors: [scott-haines]
+excerpt: "This release is a consolidation effort that focuses on correctness, stability, and paving the path for V4 readiness."
+tags: [apache-iceberg, release, v4, flink, variant, kafka-connect]
+include: [blog]
+kind: post
+originalUrl: https://datacircus.substack.com/p/a-field-guide-to-apache-iceberg-112
+originalPublisher: Distributed Thoughts
+---
+
+*Originally published on [Distributed Thoughts](https://datacircus.substack.com/p/a-field-guide-to-apache-iceberg-112), Scott Haines's Substack.*
+
+Anyone who has lived through a home renovation knows the gap between what looks like progress and what actually is progress. There is scaffolding across the front of the house, a permit taped to the window, and framing going up for a new addition that won’t be ready til next year. Meanwhile, it seems that every week there is another unexpected road block or unknown unknown. The addition is what we tell people about. The work that went into it rarely is.
+
+Apache Iceberg 1.12 is part of the Table Format V4 renovation. There is an enormous amount of visible framing going up with roughly forty pull requests touching V4 internals, but just like a renovation in progress, we simply can’t use any of it yet. The work that will actually change our lives is behind the scenes: a cluster of bugs that were returning wrong answers without telling anyone, a real solution to Flink’s equality-delete problem, and Variant finally gaining the speed up we all knew it was capable of.
+
+So, without further ado, let’s take a look at the 1.12 release, and look at what’s new, what’s been fixed, and more specifically what to upgrade for, what to check before we upgrade, and which features are releasing with a little bit of red tape.
+
+## The Road to V4
+
+There are roughly forty pull requests in this release touching V4 internals. `TrackedFile` is the unified manifest entry that collapses the `DataFile`/`DeleteFile` split that defined Iceberg until now. [Relative paths](https://github.com/apache/iceberg/pull/15630) land in the spec with [resolution in the V4 manifest reader](https://github.com/apache/iceberg/pull/17434), and for anyone who has ever wanted to simplify copying a table from one location to another, this is the light at the end of the V4 tunnel. [Content stats](https://github.com/apache/iceberg/pull/14234) were also merged, with a genuinely elegant compatibility bridge living within the `ContentStatsBackedMap`, that presents typed columnar stats to a decade of existing code as the legacy bounds map, lazily, allocating nothing on point reads.
+
+So can we use V4? The short answer is “not at this point”. It is also worth pointing out that V4 and adaptive metadata trees are not both synonymous.
+
+The adaptive metadata tree (AMT) replaces manifest lists with a small root manifest, inlines small commits, and provides a tree shape adapting to an individual workload. While this is work in progress, it isn’t ready for prime time, as at the time of writing the read path itself is still not wired into place, with the V4 scan task planner still sitting as an open pull request. The write direction wrappers are also still open, with changes requested as recently as this month (September). The spec itself says Version 4 is under active development and has not been formally adopted.
+
+What 1.12 contains is the **vocabulary** of V4. The entry struct, typed statistics, relative paths, manifest encoding, and the compatibility bridges. What is missing is the adaptive metadata tree, a scan that can traverse it, or a committer that can build it. It is simply not a feature we can turn on at this point in time.
+
+It is tempting to say V4 is safely gated off. It is not. On main, `TableMetadata` carries:
+
+```java
+static final int SUPPORTED_TABLE_FORMAT_VERSION = 4;
+```
+
+So this is accepted, not rejected:
+
+```sql
+-- Accepted in 1.12. But please don't use it yet.
+ALTER TABLE db.my_table SET TBLPROPERTIES ('format-version' = '4');
+```
+
+We should treat `format-version=4` in 1.12 as untested territory and not set it for now. For now, we can watch as V4 becomes something that we can begin to run tests against, but treat this as something wonderful that is coming in the future.
+
+## Formal expressions spec baselined
+
+Also contributing to the V4 scaffolding, the expressions spec was baselined and will be leveraged by future V4 features like constraints and default value expressions.
+
+> **Take a read through the [baselined expressions specification here](https://github.com/apache/iceberg/pull/16652)** .
+
+So why is this important? Iceberg has had ad-hoc expression serialization for years. The intention of this spec is to replace the ad-hoc implementations, with a real recursive grammar, as defined in [expression-spec.md](https://github.com/apache/iceberg/blob/main/format/expressions-spec.md).
+
+Value expressions first:
+
+```text
+EXPR: LITERAL | REFERENCE | APPLY
+
+REFERENCE: BOUND_REF | UNBOUND_REF
+BOUND_REF:   { "type": "reference", "id": ID }
+UNBOUND_REF: { "type": "reference", "name": NAME }
+
+APPLY: { "type": "apply", "function": FUNC_REF, "arguments": [ FUNC_ARG* ] }
+```
+
+Then predicates compose them:
+
+```text
+PREDICATE: true | false
+    | { “type”: “not”,      “child”: PREDICATE }
+    | { “type”: BINARY_OP,  “left”: PREDICATE, “right”: PREDICATE }
+    | { “type”: UNARY_OP,   “child”: EXPR }
+    | { “type”: CMP_OP,     “left”: EXPR, “right”: EXPR }
+    | { “type”: SET_OP,     “child”: EXPR, “values”: LITERALS }
+    | DEPRECATED_PREDICATE
+
+BINARY_OP: “and” | “or”
+UNARY_OP:  “is-null” | “not-null” | “is-nan” | “not-nan”
+CMP_OP:    “lt” | “lt-eq” | “gt” | “gt-eq” | “eq” | “not-eq”
+         | “starts-with” | “not-starts-with”
+SET_OP:    “in” | “not-in”
+```
+
+Why does this matter enough to call out? Server-side scan planning means shipping predicates to a catalog for push-down, and without a standard serialization every implementation invents its own, and that is how we end up with a protocol that works only between two vendors who happened to test against each other.
+
+The implementation detail worth remembering is the **reference**. It either serializes **by field id** or **by name**, and that encodes _when_ a column’s identity gets decided. Stored expressions like `CHECK` constraints use ids, so a rename cannot orphan them; query filters use names, resolved against the current schema on every run. The spec is explicit that _server-side planning uses unbound named references_, so the client half of scan planning sends names, not ids. Older term-based forms still parse, so clients and catalog servers can each move on their own schedule rather than having to cut over together.
+
+> We’ll keep you updated on updates around the expression spec and as we continue to watch the progress being made on the road to V4.
+
+## Variant grows up
+
+V3 gave us the Variant type. 1.11 gave us shredded writes in Spark. 1.12 is where Variant really enters center stage, and the reason is [vectorized Parquet reads](https://github.com/apache/iceberg/pull/16292).
+
+> Note: This support is available today for unshredded variant, with shredded support still pending as of the 1.12 release.
+
+Before this, a single Variant column forced the _entire table_ into row-at-a-time reads. Not the column, but the entire table. If we adopted Variant in 1.11 and concluded that semi-structured data on Iceberg was slow, this is why, and the fix comes in 1.12. Arrow readers now compose over the metadata and value children with per-file shredded detection.
+
+The best part of this change is that there is zero additional config to enable it. It is on by default for non-shredded Variant columns, with transparent fallback to row-based reads for shredded files or when the metrics mode is `none` or `counts`. No new table property, or flag to flip. Just upgrade and watch the performance of Variant scans take off.
+
+Shredding on the write side does have a knob though, and it remains opt-in for 1.12:
+
+```sql
+ALTER TABLE db.my_table SET TBLPROPERTIES (
+  'write.parquet.shred-variants' = 'true'
+);
+```
+
+Around that headline sit roughly eighteen changes: [Flink can write shredded Variant](https://github.com/apache/iceberg/pull/15596), [Kafka Connect and generic Record writes](https://github.com/apache/iceberg/pull/17520) gain shredding, and a stack of allocation work — [reduced allocation in construction](https://github.com/apache/iceberg/pull/16818), [caching of adjacent identical metadata](https://github.com/apache/iceberg/pull/16852), [precomputed sorted entries](https://github.com/apache/iceberg/pull/17114). There is also [hardening against malformed variant binary](https://github.com/apache/iceberg/pull/16568), which matters more than it sounds like if we are ingesting semi-structured data from anywhere we do not fully control.
+
+## Function endpoints arrive
+
+Alongside it, REST catalog **function endpoints** arrive to the IRC specification:
+
+```http
+GET /v1/{prefix}/namespaces/{namespace}/functions
+GET /v1/{prefix}/namespaces/{namespace}/functions/{name}
+```
+
+[Those endpoints are defined](https://github.com/apache/iceberg/pull/15180) and what ships is the OpenAPI specification and generated models. Iceberg’s own Java catalog implementations do **not** implement the function endpoints in this release.
+
+Remote signing also becomes complete rather than half-specified. [The `remote-signing-config` object](https://github.com/apache/iceberg/pull/16822) on `LoadTableResult` is joined by [the client implementation](https://github.com/apache/iceberg/pull/17709), which also removes the legacy `s3.signer.*` properties. Signing configuration moves from our client config to whatever the catalog hands back, which is a migration item, and we will come back to it.
+
+## Flink finally gets an answer to equality deletes
+
+Anyone running Flink upsert at volume can understand the pain of equality deletes. Equality deletes are cheap to write and expensive to read. Every query has to join data files against delete files to work out what is actually gone. On a continuously upserting table, that compounds until read latency is dominated by delete resolution and nobody can explain to the analytics team why the dashboard got slow.
+
+1.12 ships `ConvertEqualityDeletes`, a maintenance task that rewrites those equality deletes into deletion vectors. It landed across six pull requests — [data model and key serialization](https://github.com/apache/iceberg/pull/16831), [the reader and primary-key index](https://github.com/apache/iceberg/pull/16844), [the DV writer](https://github.com/apache/iceberg/pull/16858), [the committer](https://github.com/apache/iceberg/pull/16874), [the planner](https://github.com/apache/iceberg/pull/16889), and [the public API](https://github.com/apache/iceberg/pull/16948), which is a shows the level of effort to come up with a battle hardened solution for something this delicate.
+
+There are two ways to run it, and the choice matters more than it looks.
+
+The explicit route wires the task into a `TableMaintenance` pipeline:
+
+```java
+TableMaintenance.forTable(env, tableLoader)
+    .add(
+        ConvertEqualityDeletes.builder()
+            .stagingBranch("staging")
+            .targetBranch("main")
+            .equalityFieldColumns(ImmutableList.of("id"))
+            .scheduleOnEqDeleteFileCount(10)
+            .parallelism(4))
+    .append();
+```
+
+Walking that through:
+
+1. We begin by binding the maintenance pipeline to a table, handing it the Flink execution environment and a `TableLoader` (the same loader our sink already uses).
+2. We then stage conversion work on a separate branch. The staging branch is where the converter accumulates its work before it lands, which keeps partially-converted state away from readers on `main`.
+3. We name the target branch the conversion commits to. It defaults to `SnapshotRef.MAIN_BRANCH`, so leaving it off gives us in-place conversion.
+4. We declare the equality field columns. **These must match what the writer is actually using** or this operation will fail.
+5. We give it a trigger. Here the task fires once ten equality delete files have accumulated; `scheduleOnCommitCount(int)` and `scheduleOnInterval(Duration)` are the alternatives.
+6. Finally we set parallelism and append the task to the pipeline.
+
+The second route is the easiest because it removes step four’s failure mode entirely. [The `IcebergSink` integration](https://github.com/apache/iceberg/pull/17142) derives the equality fields from the sink’s own resolved equality field identifiers, so they _cannot_ drift out of sync with the writer:
+
+```java
+IcebergSink.forRowData(stream)
+    .tableLoader(tableLoader)
+    .equalityFieldColumns(ImmutableList.of("id"))
+    .convertEqualityDeletes()   // equality fields derived from the sink
+    .append();
+```
+
+Or, if we configure through SQL or table properties rather than code:
+
+| Property | Description | Default |
+| --- | --- | --- |
+| `flink-maintenance.convert-equality-deletes.enabled` | Enable converting equality deletes to deletion vectors (requires equality fields and format version >= 3) | `false` |
+| `flink-maintenance.convert-equality-deletes.target-branch` | Branch the converted deletion vectors are committed to | not set (in place) |
+| `flink-maintenance.convert-equality-deletes.schedule.commit-count` | Trigger after N commits | `1` |
+| `flink-maintenance.convert-equality-deletes.schedule.interval-second` | Trigger after a time interval, in seconds | not set |
+
+Before we turn any of this on, the constraints deserve a careful read, because two of them are disqualifying rather than inconvenient. The table must be **format version 3 or higher**, validated at job startup. Every partition column must also be an equality field. And **row lineage is not preserved** through conversion, so if we depend on `_row_id` or `_last_updated_sequence_number`, this feature is not for us yet. That last one is the red tape I’d put in front of the team before anyone gets excited.
+
+There is a correctness fix here worth naming, because it was open until quite recently and it caused growing pains after delete. Namely, [deleted rows could reappear after a failed conversion cycle](https://github.com/apache/iceberg/pull/17630). Resolving an equality delete consumes index entries, and a cycle that failed _after_ resolving one never restored them, because the target branch never moved, _but the task still reported success_. Silent resurrection of deleted rows, with a green task checkmark is a big reason to upgrade.
+
+While we are in Flink, two duplicate-row bugs got fixed that have nothing to do with the new feature and everything to do with everyday upsert. In [RANGE distribution](https://github.com/apache/iceberg/pull/17276), Iceberg consulted `schema.identifierFieldIds()` instead of the equality fields we actually configured, so explicitly-configured equality fields on a schema without identifier fields were simply ignored. In [HASH mode](https://github.com/apache/iceberg/pull/16243), identifier-only records were round-robined while the writer still emitted equality deletes. Both are the same underlying failure: records sharing an equality key reached different writers, so the delete never suppressed the old row and the duplicate survived. If we run Flink upsert with explicitly configured equality fields, these two are the reason to upgrade.
+
+One more that will save somebody a very bad afternoon: [savepoint restore was impossible](https://github.com/apache/iceberg/pull/17210) for jobs using `TableMaintenance`, because the builder derived its operator ID suffix from a random UUID. Operator IDs changed on every submission, so no savepoint could ever be restored. It is now derived from the table name.
+
+> Expect a one-time operator ID change on upgrade, and plan for it rather than discovering it.
+
+Lastly, [reading Iceberg views from Flink SQL](https://github.com/apache/iceberg/pull/17859) arrives here too, [backported](https://github.com/apache/iceberg/pull/18104) across 2.2, 2.1, and 1.20.
+
+## Correctness fixes and squashed bugs
+
+Most release notes lead with features. This one shouldn’t, because 1.12 fixes a cluster of bugs that produced _silently wrong results_. Not exceptions, not failed jobs, just answers that were confidently incorrect, so if you were thinking about skipping the 1.12 release, the following are real good reasons why you should be thinking to upgrade instead.
+
+### Deletion vector indexes
+
+There was a bug with [deletion vector indexing](https://github.com/apache/iceberg/pull/17497) that is now resolved in 1.12. The problem was that scan planning indexes deletion vectors (DVs) by data file location alone, but a single Puffin file can hold DVs for many data files. Every DV in that file resolves to the _last_ index. So, if we were to run DVs at any scale (and after 1.11 many of us do) this means incorrect rows returned, or deleted rows quietly came back to life.
+
+### Metadata table query filtering
+
+Adjacent to the DVs bug. [Metadata table queries filtering on `data_file.content`](https://github.com/apache/iceberg/pull/17440) pruned delete manifests they shouldn’t have, because a single delete manifest could store both positional and equality deletes, so even if you were auditing your tables, any tooling built to support runtime checks for your tables could also be returning incomplete answers (depending on the table and if you supported deletes). In the same family, [negated filters on `all_manifests`](https://github.com/apache/iceberg/pull/17346) pruned every snapshot and returned zero rows even when matching delete manifests that existed. The query that bit people looks completely innocent:
+
+```sql
+-- Spark parses this as Not(EqualTo), which pruned every snapshot.
+-- Before 1.12 this returned zero rows even when delete manifests existed.
+SELECT * FROM db.my_table.all_manifests WHERE content != 0;
+```
+
+An empty result set looks a lot like “nothing to worry about,” which is exactly the problem.
+
+### Time travel on tables with clock skew
+
+`SnapshotUtil` assumed the snapshot log was in chronological order. The spec makes no such promise and explicitly allows skew, so `AS OF` queries against write-audit-publish (WAP) or cherry-pick workflows could read the wrong snapshot entirely. The change introduced in [time travel on tables with clock skew](https://github.com/apache/iceberg/pull/17360) looks for the entry with the maximum timestamp &lt;= requested timestamp, rather than finding the last entries timestamp.
+
+### Fixed resource leaks
+
+Resource leaks are traditionally challenging to find in large distributed systems, and they are the kind that degrade a long-running service rather than failing immediately. Both the [`HadoopCatalog` and `HiveCatalog` leaked `FileIO` on every `close()`, while the `BigQueryMetastoreCatalog` had no `close()` at all](https://github.com/apache/iceberg/pull/16862). This results in slow-motion resource exhaustion for any service that creates catalogs.
+
+[Vectorized row-lineage reads never released their off-heap Arrow vectors](https://github.com/apache/iceberg/pull/17296), which is direct-memory exhaustion in long-running Spark and Flink scans.
+
+If we take one thing from this section, the resource leaks alone justify this upgrade, before we look at a single feature.
+
+### Issues that the upgrade won’t fix automatically
+
+Let’s assume that a a fixed writer can never repair what a broken writer already wrote. This is always left to the data engineering teams, or to agents to mitigate.
+
+Three of the fixes in 1.12 correct _metrics bounds_, which ate the min/max values stored in the manifest metadata that drive predicate pushdown and file skipping. Bounds are written once and persist. Upgrading corrects the code that writes them going forward. It does absolutely nothing about the bounds already sitting in our manifests. And because those bounds decide which files a query can safely skip, a wrong bound means a query silently skips a file that _does_ contain matching rows.
+
+The specifics are narrow, and that is the good news:
+
+- [Variant BINARY fields](https://github.com/apache/iceberg/pull/16880) with values over 16 bytes, where the stored upper bound could come out _smaller_ than a value actually in the file. Written badly by 1.9.0, 1.10.0, and 1.11.0.
+- [Variant STRING fields](https://github.com/apache/iceberg/pull/17397), where bounds were merged using Java string ordering rather than UTF-8 byte order, so bounds could invert on non-BMP characters — emoji being the obvious case. Written badly by 1.10.0 and 1.11.0.
+- [ORC `timestamp_ns`](https://github.com/apache/iceberg/pull/16922), where statistics were converted to microseconds while bounds serialize as nanoseconds, making bounds roughly 1000x too small. The affected version range is not stated on the pull request, and I could not determine it.
+
+Both Variant fixes were backported to 1.9.x, 1.10.x, and 1.11.x, which tells us how seriously the community took them. Non-Variant binary and string columns were never affected given the standard path used the right comparator.
+
+So what do we actually do? The first step is fairly simple, and just requires us to test to find out whether we are exposed to the problem in the first place. For most teams, you won’t be.
+
+```sql
+-- Step 1: does this table even have an at-risk column type?
+DESCRIBE TABLE db.my_table;
+-- Looking for: VARIANT columns (binary or string fields inside them),
+-- or TIMESTAMP_NS columns on ORC-backed tables.
+
+-- Step 2: which Iceberg versions have written to this table?
+-- Snapshot summaries carry the writer's environment context.
+SELECT snapshot_id, committed_at, summary
+FROM db.my_table.snapshots
+ORDER BY committed_at;
+```
+
+For the second query, reading writer provenance out of snapshot summaries is an _approach_, but it isn’t a documented recipe (so there may be better ways to find this information within your setup). What keys appear in `summary` depends on what the writing engine populated, so treat this as a starting point for investigation rather than a reliable filter. If the schema check from step one comes back clean, none of this matters and we can move on with a clear conscience.
+
+If we _are_ exposed, the remediation is to rewrite the affected files so metrics get recomputed:
+
+```sql
+-- Rewriting recomputes metrics, which replaces the bad bounds.
+CALL system.rewrite_data_files(
+  table => 'db.my_table',
+  options => map('rewrite-all', 'true')
+);
+```
+
+> Note: zero pull requests in this release propose a repair path. Not one mentions rewriting manifests, rewriting data files, or a bounds escape hatch. Rewrite the affected files is an available approach given how metrics are computed, but remember to test and validate. Until the affected files are rewritten, treat query results over those columns as untrustworthy.
+
+For contrast, [nanosecond timestamp pushdown in Parquet](https://github.com/apache/iceberg/pull/16619) , where a `timestamp_ns` predicate matched every row, is read-side only. Nothing bad actually persisted, and upgrading fully fixes it. _Remember to always think about where a bug lives, is it in code or on disk?_
+
+## Kafka Connect
+
+Through August, the Kafka Connect sink carried two open data-integrity issues that would have been big red flags. The first was a data-loss path that triggered on _default configuration_: a coordinator could enter a zombie state — thread alive, partitions revoked — and keep re-committing a stale control-topic offset. Nothing errored. The task looked healthy. When that offset eventually aged out of the control topic’s retention, a newly elected coordinator sought to an offset that no longer existed and, because the reset policy defaults to `latest`, skipped every record in between.
+
+The second was duplicate file commits after task restart.
+
+```java
+// Before — an unconditional put let the tracked position move BACKWARDS
+// when a control topic partition was re-read.
+controlTopicOffsets.put(record.partition(), record.offset() + 1);
+
+// After — keep the highest position ever seen.
+// kafka-connect/.../connect/channel/Channel.java
+controlTopicOffsets.merge(record.partition(), record.offset() + 1, Long::max);
+```
+
+That map feeds the snapshot’s `kafka.connect.offsets` watermark. Once the watermark regressed, replayed `DataWritten` envelopes passed the minimum-offset filter and the same data files got committed again — and `distinctByKey` only deduplicates within a single commit, so nothing downstream caught it. The production report behind [the fix](https://github.com/apache/iceberg/pull/17933) is worth looking at for scale: 149 double-referenced files and roughly 112,000 duplicated rows.
+
+[The zombie-coordinator path](https://github.com/apache/iceberg/pull/17552) is closed too, by making the coordinator commit offsets only when they are greater than existing ones.
+
+Worth knowing: the duplicate-commit fix explicitly does _not_ include the content-level backstop that was discussed — a bounded set of recently committed file locations — which was left for a follow-up. So the mechanism that caused the regression is fixed; a second, independent check against the same class of problem is not there yet.
+
+## Upgrading to 1.12
+
+Every consolidation release has a gotcha, and this one is mostly a deprecation purge that has been coming for a while.
+
+### We say goodbye to Spark 3.4
+
+Spark 3.4 is removed entirely. The `spark/v3.4` module is deleted and `iceberg-spark-runtime-3.4_2.12` will not be published. Supported versions move to 3.5.9, 4.0.4, and 4.1.3. There is no path here except upgrading Spark.
+
+`SparkFilters` **is gone** across Spark 3.5, 4.0, and 4.1 and is replaced with `SparkV2Filters`:
+
+```java
+// Before — removed in 1.12
+import org.apache.iceberg.spark.SparkFilters;
+
+// After — DSv2 Predicate[] instead of the old Filter API
+import org.apache.iceberg.spark.SparkV2Filters;
+```
+
+**The core removals** are the ones with the widest blast radius. Here is the migration table information:
+
+| Removed | Replacement |
+| --- | --- |
+| `SystemProperties` (class) | `SystemConfigs` |
+| `ThreadPools.newWorkerPool(String)`, `newWorkerPool(String, int)` | `newExitingWorkerPool` for long-lived pools, `newFixedThreadPool` for short-lived |
+| `SnapshotUtil.newFiles`, `newFilesBetween` | `SnapshotChanges` with `ancestorsBetween` |
+| `TableScanUtil.hasDeletes(CombinedScanTask)`, `hasEqDeletes(CombinedScanTask)` | the `FileScanTask` overloads |
+| `BaseScan.io()` | `table().io()` |
+
+That `ThreadPools` split is the one most likely to be waved through in review, because the old call site still reads fine in the diff:
+
+```java
+// Before
+ExecutorService pool = ThreadPools.newWorkerPool("my-pool", 8);
+
+// After — pick based on lifetime, which is the point of the split
+ExecutorService longLived  = ThreadPools.newExitingWorkerPool("my-pool", 8);
+ExecutorService shortLived = ThreadPools.newFixedThreadPool("my-pool", 8);
+```
+
+### Writing position deletes with row data is no longer supported
+
+This sounds more alarming than it is: [writes are rejected while reads are preserved](https://github.com/apache/iceberg/pull/17706), so it is not a compatibility break for existing tables. Concretely, `buildPositionWriter()` in Avro, ORC, and Parquet now throws `UnsupportedOperationException` when a row schema is set, `PositionDelete.set(CharSequence, long, R)` and the `row()` getter are removed, and Flink’s `FlinkAppenderFactory` — whose position delete path was built entirely on row data — is gone. The sharp edge is that maintenance operations encountering existing such files will now fail loudly rather than silently dropping the row column, which is the correct behavior and still a surprise if we hit it during a rewrite at 2 a.m.
+
+### S3 remote signing
+
+If we configure S3 remote signing, the `s3.signer.*` properties are removed and that configuration moves server-side, per the `remote-signing-config` work above.
+
+### Performance improvements to Hive catalog table listings
+
+And a genuinely useful one to close on: [Hive catalog table listing](https://github.com/apache/iceberg/pull/17317) no longer loads every table object into client memory. The old path timed out at roughly 46,000 tables even with a 900-second socket timeout. The same namespace now lists in about five seconds. If we run a large Hive Metastore, that is the number to bring to the upgrade conversation.
+
+### Fix for unbounded row groups
+
+Most of the performance work in 1.12 is opt-in, which means we get none of it by default. This one is worth opting into.
+
+```sql
+-- Enforce the row-group target against uncompressed size. Without this,
+-- GZIP/ZSTD tables compare compressed bytes to an uncompressed target
+-- and row groups grow unbounded.
+ALTER TABLE db.my_table SET TBLPROPERTIES (
+  'write.parquet.row-group-size-track-uncompressed' = 'true'
+);
+```
+
+### Performance improvements for small-files and metadata-heavy workloads
+
+For parquet based tables, the read path automatically gets a huge improvement for free. Opening a Parquet file normally means several round trips: one for the footer length, one for the footer body, then one per row group. `EagerInputFile` collapses all those calls into a single fetch, and [it is now wired into the Parquet read path](https://github.com/apache/iceberg/pull/17284). This is especially important for small-file and metadata-heavy workloads since the compaction, manifest reads, scan planning, and streaming polls all pay that footer latency linearly in file count.
+
+> This integration lives in the `parquet` module rather than in any engine tree, so **it is not a Spark thing or a Flink thing** — every engine reading Parquet through Iceberg gets it. Second, there is no property to tune. The threshold is a private constant:
+>
+> ```java
+> // From parquet/src/main/java/org/apache/iceberg/parquet/Parquet.java
+> private static final long EAGER_FETCH_THRESHOLD_BYTES = 1024 * 1024;   // 1 MB
+>
+> private static boolean canEagerFetch(long fileLength) {
+>   return fileLength > 0 && fileLength <= EAGER_FETCH_THRESHOLD_BYTES;
+> }
+> ```
+>
+> So files at or below 1 MB are fetched eagerly and everything larger behaves as before. We do not opt in, and we cannot tune it upward for a workload that might benefit from a larger window (at this point)
+
+### Opting into Hilbert-curve clustering
+
+Compaction gets a new option. [Hilbert-curve clustering](https://github.com/apache/iceberg/pull/16827) joins Z-order, preserving locality more consistently for multidimensional data (where points close together in space stay close along the curve, without the large jumps Z-order produces at certain boundaries):
+
+```sql
+CALL system.rewrite_data_files(
+  table => 'db.tbl',
+  strategy => 'sort',
+  sort_order => 'hilbert(c1, c2)'
+);
+```
+
+Because it is expressed as a sort order rather than a new strategy, adopting it is a one-line change to an existing rewrite rather than a new maintenance job.
+
+### Flink version support changes
+
+The `flink/v2.0` module is gone now, with **2.2 and 2.3 support added**. The matrix is now 1.20, 2.1, 2.2, and 2.3. If you were on 2.0, upgrading will now will make supporting equality deletes so much easier.
+
+## Where that leaves us
+
+1.12 is a consolidation release paving the way for V4. The V4 commits are numerous, visible, and not yet usable. The release is concentrated in four places: a cluster of correctness repairs, a real solution to Flink equality deletes, Variant becoming fast, and the arrival of a formal expressions specification that the REST catalog ecosystem is going to lean on for years.
+
+As a side note, before we upgrade, one checklist item that nothing else will catch for us: if we have Variant binary or string columns, or ORC `timestamp_ns` columns, written by 1.9 through 1.11, those bounds are already wrong on disk and the upgrade will not repair them. A fixed writer never repairs what a broken writer already wrote.
+
+---
+
+Thanks to all the [Apache Iceberg contributors](https://iceberg.apache.org/releases/#1120-release) who helped make this release a success. Also, a shout out to [Jason Reid](https://www.linkedin.com/in/jasonreid/), [Daniel Weeks](https://www.linkedin.com/in/daniel-weeks-a1946860/), and [Anoop Johnson](https://www.linkedin.com/in/anoopjohnson/) from [Databricks](https://www.linkedin.com/company/databricks/posts/?feedView=all), and to [Neelesh Salian](https://www.linkedin.com/in/neeleshsalian/) who all helped with the technical review of this post, and a special thanks to Neelesh who was release manager for the 1.12 release.
+
+---
+
+*This post was originally published by Scott Haines as
+[“A Field Guide to Apache Iceberg 1.12”](https://datacircus.substack.com/p/a-field-guide-to-apache-iceberg-112)
+on [Distributed Thoughts](https://datacircus.substack.com/). Republished here with attribution to the original
+source.*
+
