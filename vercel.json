@@ -1,5 +1,4 @@
 {
-  "installCommand": "bun install --frozen-lockfile",
   "rewrites": [
     { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/index.html" }
   ]
