@@ -10,7 +10,10 @@
  *   - Hydrate title + duration via videos.list (contentDetails + snippet).
  *   - Write one MDX per video at src/content/videos/<channel-slug>/<videoId>.mdx.
  *     Existing files with the same videoId are overwritten, but their `visible`
- *     value is preserved so videos can be hidden without losing that choice.
+ *     value is preserved so videos can be hidden without losing that choice,
+ *     and their `hue` is preserved so new uploads don't recolour every card.
+ *   - Prints one `+` / `~` / `-` line per added / updated / removed video,
+ *     followed by a summary line (used as the daily content-sync PR body).
  *   - Private/unavailable playlist entries are retained with `visible: false`.
  *   - Files in those channel dirs that are no longer in any playlist are removed,
  *     UNLESS their frontmatter has `manual: true` (placeholders / hand-curated).
@@ -183,11 +186,12 @@ async function main() {
           : previousFrontmatter.visible === "false"
             ? false
             : playlistItem.visible;
+      const previousHue = Number.parseInt(previousFrontmatter.hue, 10);
       const next = renderMdx({
         channel: channel.name,
         title: d.title,
         duration: d.duration ?? "",
-        hue: hueBase + ((i * 3) % 30) - 15, // small spread around the base
+        hue: Number.isNaN(previousHue) ? hueBase + ((i * 3) % 30) - 15 : previousHue, // small spread around the base
         videoId,
         playlist: playlistItem.playlist,
         publishedAt: d.publishedAt,
@@ -198,6 +202,7 @@ async function main() {
         if (!DRY_RUN) fs.writeFileSync(file, next);
         if (exists) updated++;
         else added++;
+        console.log(`${exists ? "~" : "+"} [${channel.name}] ${d.title} (${videoId})`);
       }
       i++;
     }
@@ -215,6 +220,7 @@ async function main() {
         if (!id) continue; // skip hand-written entries without videoId
         if (!DRY_RUN) fs.unlinkSync(file);
         removed++;
+        console.log(`- [${channel.name}] ${fm.title ?? name} (${id})`);
       }
     }
   }

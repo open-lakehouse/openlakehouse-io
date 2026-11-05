@@ -1,0 +1,83 @@
+name: Content sync
+
+# Daily refresh of externally sourced content (YouTube playlists today; blogs
+# and other feeds later). Each source is one step that writes into src/content
+# and appends a section to the report, which becomes the PR description. All
+# changes land in a single rolling PR that is updated on every run and closed
+# automatically when there is nothing left to sync.
+
+on:
+  schedule:
+    - cron: "17 14 * * *" # 14:17 UTC daily (~6-7am US Pacific)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: content-sync
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REPORT: content-sync-report.md
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
+      - name: Start report
+        run: |
+          {
+            echo "Automated content sync from the [Content sync workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            echo
+            echo "Review the new content, then merge. Re-running the workflow rebuilds this branch from \`main\`."
+          } > "$RUNNER_TEMP/$REPORT"
+
+      - name: Sync YouTube playlists
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          node scripts/sync-playlists.mjs | tee "$RUNNER_TEMP/youtube.log"
+          {
+            echo
+            echo "## YouTube playlists"
+            echo
+            echo "Sources: \`scripts/playlists.json\`"
+            echo
+            echo '```diff'
+            cat "$RUNNER_TEMP/youtube.log"
+            echo '```'
+          } >> "$RUNNER_TEMP/$REPORT"
+
+      - name: Open or update pull request
+        id: pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: chore/daily-content-sync
+          delete-branch: true
+          add-paths: |
+            src/content
+          commit-message: "chore(content): daily content sync"
+          title: "chore(content): daily content sync"
+          body-path: ${{ runner.temp }}/${{ env.REPORT }}
+
+      - name: Summary
+        env:
+          PR_URL: ${{ steps.pr.outputs.pull-request-url }}
+          PR_OPERATION: ${{ steps.pr.outputs.pull-request-operation }}
+        run: |
+          cat "$RUNNER_TEMP/$REPORT" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$PR_URL" ]; then
+            printf '\nPull request (%s): %s\n' "$PR_OPERATION" "$PR_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
