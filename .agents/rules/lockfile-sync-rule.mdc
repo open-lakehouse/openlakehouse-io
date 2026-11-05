@@ -1,0 +1,35 @@
+---
+description: Any dependency change must update both bun.lock and package-lock.json in the same commit; never let package-lock.json drift from package.json.
+alwaysApply: true
+---
+
+# Keep Both Lockfiles in Sync
+
+This repo commits two lockfiles and both are load-bearing:
+
+| Lockfile | Used by |
+|----------|---------|
+| `bun.lock` | Local development (`bun install`, `bun run …`) |
+| `package-lock.json` | Vercel builds (`npm install`, chosen because the file exists) |
+
+If `package.json` gains a dependency that `package-lock.json` doesn't pin,
+Vercel resolves it fresh from the public registry on every build. A new
+upstream release can then break the deploy with no change in this repo (e.g.
+`npm error code ERESOLVE`).
+
+## Rules
+
+- **Any change to `dependencies` or `devDependencies` in `package.json` must
+  update `bun.lock` and `package-lock.json` in the same commit.** Follow the
+  [`update-lockfiles` skill](../skills/update-lockfiles/SKILL.md).
+- Never delete or stop updating either lockfile.
+- Before opening a PR that touches `package.json` or a lockfile, both must
+  pass:
+  - `npm ls --package-lock-only` (package-lock.json matches package.json)
+  - `bun run strip-lock-proxy:check` (no proxy URLs — see
+    [`bun-clean-lock-rule.mdc`](bun-clean-lock-rule.mdc))
+- Do not hand-edit lockfiles beyond what `scripts/strip-bun-lock-proxy.ts`
+  does.
+
+The pre-commit hook in `.githooks/pre-commit` enforces the `npm ls` check
+whenever `package.json` or `package-lock.json` is staged.

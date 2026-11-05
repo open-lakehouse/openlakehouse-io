@@ -50,13 +50,18 @@ When a post republishes another site's content:
 - `.agents/rules/branching-rule.mdc` — always create a `feat/*`/`fix/*`/etc.
   branch before changes; never commit directly to `main`.
 - `.agents/rules/bun-clean-lock-rule.mdc` — before opening a PR, strip registry
-  proxy URLs from `bun.lock` (`bun run strip-lock-proxy` / `:check`); never
-  commit host-specific resolution fields.
+  proxy URLs from `bun.lock` and `package-lock.json`
+  (`bun run strip-lock-proxy` / `:check`); never commit host-specific
+  resolution fields.
+- `.agents/rules/lockfile-sync-rule.mdc` — any dependency change updates
+  `bun.lock` and `package-lock.json` (used by Vercel) in the same commit.
 - `.agents/skills/rebuild-seo-artifacts/SKILL.md` — regenerate `sitemap.xml`,
   `llms.txt`, and `llms-full.txt` from `src/content` for SEO/GEO/AEO.
 - `.agents/skills/import-substack-post/SKILL.md` — republish a Substack
   article as an MDX blog post with its images and original-source
   attribution.
+- `.agents/skills/update-lockfiles/SKILL.md` — update both lockfiles after a
+  dependency change, strip proxy URLs, and verify the npm install Vercel runs.
 
 ### Adding new guidance
 

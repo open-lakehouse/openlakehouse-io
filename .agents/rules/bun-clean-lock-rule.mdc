@@ -1,23 +1,25 @@
 ---
-description: Before opening a PR, strip registry proxy URLs from bun.lock so the resolution field is empty.
+description: Before opening a PR, strip registry proxy URLs from bun.lock and package-lock.json so no host-specific URL is committed.
 alwaysApply: true
 ---
 
-# bun.lock Proxy Stripping
+# Lockfile Proxy Stripping
 
 Local installs may route through a private npm proxy/registry, which bakes the
-proxy URL into the resolution (second) field of each package entry in
-`bun.lock`. That host-specific URL must never land in a PR.
+proxy URL into every package entry of **both** lockfiles. That host-specific URL
+must never land in a PR: Vercel builds with `npm install` from
+`package-lock.json` and cannot reach the proxy.
 
 ## Before Creating Any PR
 
-1. **Always** clear the proxy/resolution field in `bun.lock` first.
-2. Do **not** match on a specific host name — clear the field for **any** npm
-   registry tarball URL, leaving it as `""` (the value Bun uses for the default
-   registry).
-3. Stage the cleaned `bun.lock` before opening the PR.
+1. **Always** strip proxy URLs from `bun.lock` and `package-lock.json` first.
+2. Do **not** match on a specific host name — normalize **any** npm registry
+   tarball URL.
+3. Stage the cleaned lockfiles before opening the PR.
 
 ## What to Strip
+
+### `bun.lock`
 
 Each package entry is an array of the form:
 
@@ -26,7 +28,8 @@ Each package entry is an array of the form:
 ```
 
 The **second element** is the resolution/proxy field. When it points at a
-registry tarball it must be reset to an empty string.
+registry tarball it must be reset to an empty string (the value Bun uses for
+the default registry).
 
 - With proxy:
 
@@ -40,12 +43,31 @@ registry tarball it must be reset to an empty string.
 "readdirp/picomatch": ["picomatch@2.3.2", "", {}, "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA=="]
 ```
 
+### `package-lock.json`
+
+Each `packages` entry has a `resolved` tarball URL. When it points at a proxy,
+it is rewritten to the public npm registry — exactly what npm writes with the
+default registry. npm's default `replace-registry-host=npmjs` maps it back to
+the configured registry on local installs, so proxied machines still work.
+
+- With proxy:
+
+```
+"resolved": "https://proxy.npm.your-company.com/@adobe/css-tools/-/css-tools-4.5.0.tgz",
+```
+
+- After stripping:
+
+```
+"resolved": "https://registry.npmjs.org/@adobe/css-tools/-/css-tools-4.5.0.tgz",
+```
+
 ## How to Strip
 
 Use the project's TypeScript script (run by Bun). It is host-agnostic: it
-matches any `http(s)` registry tarball URL (`.../-/<name>-<version>.tgz`)
-sitting in the resolution slot and replaces only that URL with `""`. Git,
-GitHub, file, and already-empty resolutions are left untouched.
+matches any `http(s)` registry tarball URL (`.../-/<name>-<version>.tgz`) and
+only rewrites that URL. Git, GitHub, file, and already-clean resolutions are
+left untouched.
 
 ```bash
 bun run strip-lock-proxy
@@ -54,7 +76,7 @@ bun run strip-lock-proxy
 The logic lives in [`scripts/strip-bun-lock-proxy.ts`](../../scripts/strip-bun-lock-proxy.ts).
 
 Verify nothing remains before committing (exits non-zero if any proxy URL is
-still present, so it doubles as a CI / pre-PR gate):
+still present in either lockfile, so it doubles as a CI / pre-PR gate):
 
 ```bash
 bun run strip-lock-proxy:check
@@ -62,15 +84,16 @@ bun run strip-lock-proxy:check
 
 ## Automated via Git Hook
 
-A committed pre-commit hook does this automatically whenever `bun.lock` is
-staged. It lives at [`.githooks/pre-commit`](../../.githooks/pre-commit) and
-delegates to any globally-configured hooks first (e.g. anything set globally on your machine) so those are preserved.
+A committed pre-commit hook strips both lockfiles whenever either is staged,
+and blocks the commit if `package-lock.json` is out of sync with
+`package.json`. It lives at [`.githooks/pre-commit`](../../.githooks/pre-commit)
+and delegates to any globally-configured hooks first (e.g. anything set
+globally on your machine) so those are preserved.
 
-Activate it once per clone (also runs automatically on `bun install` via the
-`prepare` script):
+Activate it once per clone:
 
 ```bash
-bun run setup-hooks   # git config core.hooksPath .githooks
+git config core.hooksPath .githooks
 ```
 
 The hook is a safety net, not a replacement for the rule — still run the strip
@@ -78,8 +101,9 @@ and `:check` before opening a PR.
 
 ## Rules
 
-- **Never open a PR with proxy URLs in `bun.lock`.**
+- **Never open a PR with proxy URLs in `bun.lock` or `package-lock.json`.**
 - Keep the strip logic host-agnostic — do not hardcode a proxy hostname.
-- Only the resolution field is cleared; names, versions, dependency maps, and
-  integrity hashes are never modified.
-
+- Only the resolution / `resolved` field is changed; names, versions,
+  dependency maps, and integrity hashes are never modified.
+- Keeping the lockfiles in sync with `package.json` is covered by
+  [`lockfile-sync-rule.mdc`](lockfile-sync-rule.mdc).
