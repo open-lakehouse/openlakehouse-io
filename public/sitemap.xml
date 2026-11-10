@@ -96,6 +96,11 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/blog/category/unity-catalog</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/blog/delta-lake/clickhouse-delta-kernel</loc>
     <lastmod>2026-05-18</lastmod>
     <changefreq>monthly</changefreq>
@@ -214,6 +219,11 @@
   </url>
   <url>
     <loc>https://openlakehouse.io/authors/raul-marin</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/authors/robert-pack</loc>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
