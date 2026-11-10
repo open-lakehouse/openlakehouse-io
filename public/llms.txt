@@ -32,8 +32,10 @@ full text of every article is mirrored in /llms-full.txt.
 - [Apache Spark posts](https://openlakehouse.io/blog/category/apache-spark)
 - [Delta Lake posts](https://openlakehouse.io/blog/category/delta-lake)
 - [Iceberg posts](https://openlakehouse.io/blog/category/iceberg)
+- [Unity Catalog posts](https://openlakehouse.io/blog/category/unity-catalog)
 
 ## Blog posts
+- [Unity Catalog Volumes: Unstructured Data for the Agentic Lakehouse](https://www.unitycatalog.io/blogs/uc-volumes/): Volumes govern unstructured data in Unity Catalog. Open one in a marimo
 - [An Idiot's Guide to Spark Connect Clients](https://systemsnull.net/posts/data-engineering-ai/idiots-guide-spark-connect-clients): Everything you need to go from “what is Spark?” to running jobs on a Spark Connect server from Python, Scala, Go, Rust or Swift, and working out what went wrong when it doesn't work.
 - [A Field Guide to Apache Iceberg 1.12](https://datacircus.substack.com/p/a-field-guide-to-apache-iceberg-112): This release is a consolidation effort that focuses on correctness, stability, and paving the path for V4 readiness.
 - [TUTORIAL: How to Build an Open Lakehouse on Your Laptop](https://systemsnull.net/posts/data-engineering-ai/open-lakehouse-on-your-laptop): A self-contained tutorial that builds a complete open lakehouse in an empty folder, one layer at a time, from S3-compatible storage and Delta tables through Unity Catalog, Iceberg readers,…
@@ -69,6 +71,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [Melvyn Peignon](https://openlakehouse.io/authors/melvyn-peignon)
 - [MLflow Team](https://openlakehouse.io/authors/mlflow-team)
 - [Raul Marin](https://openlakehouse.io/authors/raul-marin)
+- [Robert Pack](https://openlakehouse.io/authors/robert-pack)
 - [Scott Haines](https://openlakehouse.io/authors/scott-haines)
 - [Scott Sandre](https://openlakehouse.io/authors/scottsandre)
 - [Yuki Watanabe](https://openlakehouse.io/authors/yuki-watanabe)
