@@ -1,7 +1,6 @@
 import { ArrowRight, BookOpen, Bot, Cpu, Layers, ShieldCheck, Waves, Workflow, type LucideIcon } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { PodcastSidebar } from "@/components/PodcastSidebar";
 import { cn } from "@/lib/utils";
 
 type Category = {
@@ -197,7 +196,7 @@ const RoofTile = ({ slug, title, tagline, icon: Icon, items }: Category) => (
   </Link>
 );
 
-const FloorTile = ({ slug, title, tagline, icon: Icon, items, tone, wide }: Floor & { wide: boolean }) => (
+const FloorTile = ({ slug, title, tagline, icon: Icon, items, tone }: Floor) => (
   <Link to={`/technologies/${slug}`} className={cn(tileLink, spotlight, "items-start gap-4 p-4 pl-5 sm:p-5 sm:pl-6")}>
     <span aria-hidden="true" className={cn("absolute inset-y-0 left-0 w-1 bg-gradient-to-b", tone)} />
     <span
@@ -206,12 +205,12 @@ const FloorTile = ({ slug, title, tagline, icon: Icon, items, tone, wide }: Floo
     >
       <Icon className="h-5 w-5" />
     </span>
-    <div className={cn("min-w-0 flex-1 pr-6", wide && "xl:flex xl:items-center xl:justify-between xl:gap-6")}>
+    <div className="min-w-0 flex-1 pr-6 xl:flex xl:items-center xl:justify-between xl:gap-6">
       <div>
         <h3 className="font-semibold tracking-tight">{title}</h3>
         <p className="mt-1 text-sm text-muted-foreground">{tagline}</p>
       </div>
-      <ProjectList items={items} className={cn("mt-3", wide && "xl:mt-0 xl:shrink-0 xl:justify-end")} />
+      <ProjectList items={items} className="mt-3 xl:mt-0 xl:shrink-0 xl:justify-end" />
     </div>
     <HoverArrow />
   </Link>
@@ -268,23 +267,12 @@ export const Technologies = () => {
   const [houseRef, inView] = useInView<HTMLDivElement>();
 
   return (
-    <section
-      id="technologies"
-      className={`container py-20 md:py-28 ${isHome ? "lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-x-8 lg:pb-12" : ""}`}
-    >
+    <section id="technologies" className="container py-20 md:py-28">
       <div className="max-w-2xl mb-12">
         <p className="text-sm font-medium text-primary uppercase tracking-widest">The stack</p>
         <h2 className="mt-3 text-3xl md:text-5xl font-bold tracking-tight">Open Lakehouse Technologies</h2>
         <p className="mt-4 text-muted-foreground text-lg">The interoperable building blocks of a vendor-neutral data platform.</p>
       </div>
-
-      {/* Spans every row so the sticky card stays pinned until the section ends; only sticks when
-          the viewport is tall enough to show the whole card below the site header. */}
-      {isHome && (
-        <div className="mb-6 lg:mb-0 lg:col-start-2 lg:row-start-1 lg:row-span-3">
-          <PodcastSidebar className="lg:top-24 lg:[@media(min-height:720px)]:sticky" />
-        </div>
-      )}
 
       {/* Foundation first, then each floor upward, the walls, and finally the roof. */}
       <div
@@ -303,7 +291,7 @@ export const Technologies = () => {
               delay={(floors.length - i) * 90}
               className="group/floor relative flex-1 lg:before:absolute lg:before:right-full lg:before:top-1/2 lg:before:h-0.5 lg:before:w-3 lg:before:bg-border lg:after:absolute lg:after:left-full lg:after:top-1/2 lg:after:h-0.5 lg:after:w-3 lg:after:bg-border lg:before:transition-colors lg:after:transition-colors lg:group-hover/floor:before:bg-primary lg:group-hover/floor:after:bg-primary"
             >
-              <FloorTile {...floor} wide={!isHome} />
+              <FloorTile {...floor} />
             </Reveal>
           ))}
         </div>
@@ -325,7 +313,7 @@ export const Technologies = () => {
       </div>
 
       {isHome && (
-        <div className="mt-10 flex justify-center lg:pb-16">
+        <div className="mt-10 flex justify-center">
           <Link
             to="/technologies"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"

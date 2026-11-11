@@ -6,6 +6,7 @@ import { LogoMarquee } from "@/components/LogoMarquee";
 import { Technologies } from "@/components/Technologies";
 import { VideosCarousel } from "@/components/VideosCarousel";
 import { FAQ } from "@/components/FAQ";
+import { PodcastSection } from "@/components/PodcastSection";
 import { Seo } from "@/components/Seo";
 import { organizationJsonLd, websiteJsonLd, SITE_DESCRIPTION } from "@/lib/seo";
 import { Link } from "react-router-dom";
@@ -26,6 +27,7 @@ const Index = () => (
       <Hero />
       <LogoMarquee />
       <Technologies />
+      <PodcastSection />
 
       {/* Query-language section. Gives the homepage a passage that matches how
           people actually search ("open source data engineering") and links to
