@@ -94,6 +94,13 @@
       hsl(var(--blue-600)) 75%,
       hsl(var(--blue-400)) 100%);
     --gradient-hero: linear-gradient(180deg, hsl(var(--navy-700)) 0%, hsl(var(--navy-900)) 100%);
+    /* Blog: soft Green + Blue wash behind the index hero, and the CTA band glow. */
+    --gradient-aurora:
+      radial-gradient(ellipse 55% 85% at 12% 0%, hsl(var(--green-200) / 0.6), transparent 70%),
+      radial-gradient(ellipse 50% 75% at 88% 0%, hsl(var(--blue-200) / 0.7), transparent 70%);
+    --gradient-cta:
+      radial-gradient(ellipse 80% 120% at 0% 50%, hsl(var(--green-500) / 0.16), transparent 55%),
+      radial-gradient(ellipse 70% 120% at 100% 50%, hsl(var(--blue-500) / 0.14), transparent 55%);
 
     --shadow-glow: 0 20px 60px -15px hsl(var(--green-600) / 0.35);
     --shadow-card: 0 8px 30px -8px hsl(var(--navy-800) / 0.12);
@@ -152,6 +159,12 @@
       hsl(var(--blue-500)) 75%,
       hsl(var(--blue-300)) 100%);
     --gradient-hero: linear-gradient(180deg, hsl(var(--navy-800)) 0%, hsl(var(--navy-900)) 100%);
+    --gradient-aurora:
+      radial-gradient(ellipse 55% 85% at 12% 0%, hsl(var(--green-700) / 0.35), transparent 70%),
+      radial-gradient(ellipse 50% 75% at 88% 0%, hsl(var(--blue-700) / 0.45), transparent 70%);
+    --gradient-cta:
+      radial-gradient(ellipse 80% 120% at 0% 50%, hsl(var(--green-500) / 0.18), transparent 55%),
+      radial-gradient(ellipse 70% 120% at 100% 50%, hsl(var(--blue-500) / 0.2), transparent 55%);
 
     --shadow-glow: 0 20px 60px -15px hsl(var(--blue-500) / 0.35);
     --shadow-card: 0 8px 30px -8px hsl(0 0% 0% / 0.5);
@@ -196,6 +209,12 @@
   .bg-brand-gradient {
     background: var(--gradient-brand);
   }
+  .bg-aurora {
+    background: var(--gradient-aurora);
+  }
+  .bg-cta-glow {
+    background: var(--gradient-cta), hsl(var(--card));
+  }
   .text-brand-gradient {
     background: var(--gradient-brand);
     -webkit-background-clip: text;
@@ -238,6 +257,99 @@
       animation: none;
       transform: none;
     }
+  }
+}
+
+/* Long-form article body (PostLayout). Layered on `.prose` for spacing; colors
+   come from brand tokens instead of a typography color theme, so light + dark
+   follow the palette. The doubled class outranks `.prose :where(...)` rules. */
+@layer components {
+  .prose.post-article {
+    --tw-prose-body: hsl(var(--navy-700));
+    --tw-prose-headings: hsl(var(--primary-deep));
+    --tw-prose-lead: hsl(var(--muted-foreground));
+    --tw-prose-links: hsl(var(--primary));
+    --tw-prose-bold: hsl(var(--foreground));
+    --tw-prose-counters: hsl(var(--muted-foreground));
+    --tw-prose-bullets: hsl(var(--navy-300));
+    --tw-prose-hr: hsl(var(--border));
+    --tw-prose-quotes: hsl(var(--foreground));
+    --tw-prose-quote-borders: hsl(var(--primary));
+    --tw-prose-captions: hsl(var(--muted-foreground));
+    --tw-prose-code: hsl(var(--accent));
+    --tw-prose-th-borders: hsl(var(--border));
+    --tw-prose-td-borders: hsl(var(--border));
+    max-width: 44rem;
+    font-size: 1.125rem;
+    line-height: 1.75;
+    overflow-wrap: break-word;
+  }
+  .dark .prose.post-article {
+    --tw-prose-body: hsl(var(--navy-200));
+    --tw-prose-headings: hsl(var(--foreground));
+    --tw-prose-bullets: hsl(var(--navy-500));
+  }
+  @media (max-width: 768px) {
+    .prose.post-article {
+      font-size: 1.0625rem;
+    }
+  }
+
+  .post-article :is(h1, h2, h3, h4) {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    scroll-margin-top: 6rem;
+  }
+  /* rehype-autolink-headings wraps heading text in a self-link. */
+  .post-article :is(h1, h2, h3, h4) a {
+    color: inherit;
+    font-weight: inherit;
+    text-decoration: none;
+  }
+
+  .post-article a {
+    font-weight: 500;
+    text-decoration-line: underline;
+    text-decoration-color: hsl(var(--primary) / 0.35);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.15s ease;
+  }
+  .post-article a:hover {
+    text-decoration-color: hsl(var(--primary));
+  }
+
+  .post-article blockquote {
+    border-left-width: 3px;
+    font-weight: 400;
+  }
+  .post-article blockquote p:first-of-type::before,
+  .post-article blockquote p:last-of-type::after {
+    content: none;
+  }
+
+  .post-article :not(pre) > code {
+    padding: 0.1em 0.4em;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.3rem;
+    background: hsl(var(--muted));
+    font-size: 0.875em;
+    font-weight: 500;
+  }
+  .post-article :not(pre) > code::before,
+  .post-article :not(pre) > code::after {
+    content: none;
+  }
+
+  .post-article img {
+    border-radius: var(--radius);
+  }
+
+  .post-article thead th {
+    background: hsl(var(--muted));
+    color: hsl(var(--foreground));
+  }
+  .post-article :is(thead th, tbody td) {
+    padding: 0.75rem 1rem;
   }
 }
 

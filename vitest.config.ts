@@ -4,6 +4,8 @@ import mdx from "@mdx-js/rollup";
 import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
+import rehypeSlug from "rehype-slug";
+import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import path from "path";
 
 export default defineConfig({
@@ -15,6 +17,9 @@ export default defineConfig({
       development: false,
       providerImportSource: "@mdx-js/react",
       remarkPlugins: [remarkGfm, remarkFrontmatter, [remarkMdxFrontmatter, { name: "frontmatter" }]],
+      // Same heading ids + self-links as vite.config.ts; the post table of
+      // contents is built from them.
+      rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
     }) } as any,
     react(),
   ],
