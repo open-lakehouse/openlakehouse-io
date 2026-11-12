@@ -111,6 +111,14 @@ a default semantic role — reach for `yellow-*` when you need it.
 - `--gradient-brand` — Green → Blue → light Blue. Utilities:
   `bg-brand-gradient`, `text-brand-gradient`.
 - `--gradient-hero` — Navy canvas gradient. Utility: `bg-hero-gradient`.
+- `--gradient-aurora` — soft Green + Blue wash that fades from the top of a
+  page, behind the blog index hero. Utility: `bg-aurora`.
+- `--gradient-cta` — Green/Blue glow at the edges of a callout band (the blog's
+  "Stay in the loop"). Utility: `bg-cta-glow`, which layers it over `--card`.
+- Long-form article bodies (`PostLayout`) use `.prose.post-article`, which
+  maps the typography plugin's colors to these tokens: Navy body text,
+  `--primary-deep` headings, `--primary` links and quote borders, and
+  `--accent` inline code.
 - `--shadow-glow` (Green in light / Blue in dark) and `--shadow-card`.
   Utilities: `shadow-glow`, `shadow-card`.
 

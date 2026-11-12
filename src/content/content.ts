@@ -158,6 +158,38 @@ export const getAuthor = (slug: string) => authors[slug];
 /** Local blog route for a post (link-out entries redirect from it). */
 export const blogPath = (p: Post) => `/blog/${p.category}/${p.slug}`;
 
+/** Local route for a post on the given surface. */
+export const postPath = (p: Post, surface: Surface = "blog") =>
+  surface === "learn" ? `/learn/${p.category}/${p.slug}` : blogPath(p);
+
+/** "Nov 10, 2026" (short) or "November 10, 2026" (long), always in UTC. */
+export const formatPostDate = (iso: string, style: "short" | "long" = "short") =>
+  new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: style,
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/**
+ * Up to `limit` posts from `pool` most like `post`: same category first, then
+ * shared tags and authors, newest first on ties.
+ */
+export const relatedPosts = (post: Post, pool: Post[], limit = 3) => {
+  const tags = new Set(post.tags);
+  const people = new Set(post.authorSlugs);
+  const score = (p: Post) =>
+    (p.category === post.category ? 3 : 0) +
+    p.tags.filter((t) => tags.has(t)).length +
+    p.authorSlugs.filter((a) => people.has(a)).length;
+  return pool
+    .filter((p) => !(p.category === post.category && p.slug === post.slug))
+    .map((p) => ({ p, s: score(p) }))
+    .sort((a, b) => b.s - a.s || (a.p.date < b.p.date ? 1 : -1))
+    .slice(0, limit)
+    .map(({ p }) => p);
+};
+
 /** Label for where a link-out entry lives: its publisher, else its hostname. */
 export const externalLabel = (p: Post) => {
   if (!p.externalUrl) return undefined;
