@@ -4,7 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
 import { PostLayout } from "@/components/PostLayout";
 import { getPost, getAuthor, formatCategory } from "@/content/content";
-import { canonicalUrl } from "@/lib/seo";
+import { absoluteUrl, canonicalUrl } from "@/lib/seo";
 
 const LearnPost = () => {
   const { category, slug } = useParams();
@@ -23,7 +23,7 @@ const LearnPost = () => {
     datePublished: post.date,
     dateModified: post.date,
     url: canonicalUrl(path),
-    image: post.thumbnail,
+    image: absoluteUrl(post.thumbnail),
     learningResourceType: post.kind,
     timeRequired: post.readingTime ? `PT${post.readingTime}M` : undefined,
     author: authorsList.map((a) => ({

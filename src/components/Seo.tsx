@@ -1,5 +1,5 @@
 import { Helmet } from "react-helmet-async";
-import { canonicalUrl, SITE_NAME } from "@/lib/seo";
+import { absoluteUrl, canonicalUrl, SITE_NAME } from "@/lib/seo";
 
 type SeoProps = {
   title: string;
@@ -36,6 +36,7 @@ export const Seo = ({
   noindex = false,
 }: SeoProps) => {
   const url = canonical ?? canonicalUrl(path);
+  const imageUrl = absoluteUrl(image);
   const fullTitle = suffix && !title.includes(SITE_NAME) ? `${title} — ${SITE_NAME}` : title;
   const ldArr = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 
@@ -50,11 +51,11 @@ export const Seo = ({
       <meta property="og:url" content={url} />
       <meta property="og:type" content={type} />
       <meta property="og:site_name" content={SITE_NAME} />
-      {image && <meta property="og:image" content={image} />}
-      <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
+      {imageUrl && <meta property="og:image" content={imageUrl} />}
+      <meta name="twitter:card" content={imageUrl ? "summary_large_image" : "summary"} />
       <meta name="twitter:title" content={fullTitle} />
       <meta name="twitter:description" content={description} />
-      {image && <meta name="twitter:image" content={image} />}
+      {imageUrl && <meta name="twitter:image" content={imageUrl} />}
       {ldArr.map((obj, i) => (
         <script key={i} type="application/ld+json">
           {JSON.stringify(obj)}

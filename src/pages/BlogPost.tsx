@@ -5,7 +5,7 @@ import { PostLayout } from "@/components/PostLayout";
 import { Seo } from "@/components/Seo";
 import { ExternalPostRedirect } from "@/components/ExternalPostRedirect";
 import { getPost, getAuthor, formatCategory } from "@/content/content";
-import { canonicalUrl } from "@/lib/seo";
+import { absoluteUrl, canonicalUrl } from "@/lib/seo";
 
 const BlogPost = () => {
   const { category, slug } = useParams();
@@ -23,7 +23,7 @@ const BlogPost = () => {
     datePublished: post.date,
     dateModified: post.date,
     url: canonicalUrl(path),
-    image: post.thumbnail,
+    image: absoluteUrl(post.thumbnail),
     author: authorsList.map((a) => ({
       "@type": "Person",
       name: a!.name,
