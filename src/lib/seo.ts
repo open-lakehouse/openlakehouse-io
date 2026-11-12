@@ -51,6 +51,12 @@ export const SITE_KNOWS_ABOUT = [
 export const canonicalUrl = (path: string) =>
   `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 
+// og:image, twitter:image, and JSON-LD `image` must be absolute. Local assets
+// (e.g. a colocated post thumbnail) resolve to "/assets/..." paths, so prefix
+// those with the site origin; absolute URLs pass through unchanged.
+export const absoluteUrl = (url?: string) =>
+  !url ? undefined : /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : canonicalUrl(url);
+
 // Schema.org Organization used sitewide. The `sameAs` graph encodes the
 // open-source projects (and their origin orgs) that make up the lakehouse —
 // machine-readable provenance for LLMs and search engines.
