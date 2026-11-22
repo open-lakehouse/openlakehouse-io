@@ -3492,3 +3492,1592 @@ Usually it is cheaper in licensing and comparable in total cost. Storage and com
 ### What is the Open Lakehouse and how does it relate to open source data engineering?
 
 The Open Lakehouse is the reference architecture for open source data engineering. It combines open table formats, open catalogs, open compute engines, and open ML tooling so that data written by one engine can be read by any other, on storage the organization controls. The term was popularized by the 2020 paper "Lakehouse: A New Generation of Open Platforms" and has become a default design for data and AI platforms.
+
+---
+
+# Data Engineering Reference Architectures
+
+URL: https://openlakehouse.io/reference-architectures
+
+An open reference architecture is a documented, runnable blueprint for a data platform in which every layer is open source and every interface between layers is an open format or protocol: Parquet files in an open table format such as Delta Lake or Apache Iceberg, an open catalog API such as Unity Catalog or the Iceberg REST specification, and open engine protocols such as Spark Connect or Arrow Flight SQL. Because the interfaces are open, any box in the diagram can be swapped for another project that speaks the same interface, and the whole architecture can run on a laptop, a Kubernetes cluster or any cloud.
+
+### What is a reference architecture in data engineering?
+
+A reference architecture is a reusable blueprint that names the layers of a data platform (sources, ingestion, storage, table format, catalog, compute, orchestration, serving and governance), the component in each layer, and how data flows between them. Teams start from it instead of designing a platform from a blank page.
+
+### What makes a reference architecture open?
+
+Every component is open source and every interface between components is an open format or protocol, so any box can be replaced by another project that speaks the same interface without migrating the data.
+
+### What is the best open source data engineering stack?
+
+There is no single best stack; it depends on the workload. A common open baseline is Apache Spark for compute, Delta Lake or Apache Iceberg for tables, Unity Catalog OSS or an Iceberg REST catalog for governance, Apache Kafka for events, Apache Airflow for orchestration and MLflow for models. The architectures on this page show which combination fits batch, streaming, real-time, sharing and AI workloads.
+
+### Can I run these reference architectures myself?
+
+Yes. Every architecture links to at least one public repository with the versions it pins and the commands from its README, and most run on a laptop with Docker.
+
+### How are these different from vendor reference architectures?
+
+Vendor reference architectures keep the vendor's platform fixed in the middle and vary the industry around it. Here the middle is also open: you can swap the table format, catalog, engine or orchestrator, and each choice is backed by code you can run.
+
+### Is there a machine-readable version?
+
+Yes. /reference-architectures.json contains every architecture, component and industry lens, and each architecture page has a Markdown twin at the same path with a .md suffix.
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/batch-medallion
+
+# Batch medallion with Spark Declarative Pipelines: Spark 4.3, Apache Iceberg and Unity Catalog with bronze, silver and gold
+
+> Declare the tables, let Spark work out the order, keep every layer in an open format.
+
+A batch medallion architecture organizes lakehouse tables into three layers: bronze holds raw records as they arrived, silver holds cleaned and conformed records, and gold holds aggregates shaped for a specific use. In this open reference architecture, Spark Declarative Pipelines (Spark 4.1 and later) defines each layer as a table or materialized view, Spark resolves the dependency graph and runs it, the tables are Apache Iceberg in Unity Catalog OSS 0.7 on S3-compatible storage, Apache Airflow schedules and backfills the runs, and DuckDB reads the gold tables through the catalog's Iceberg REST endpoint.
+
+## When to use it
+- Your sources arrive as files, extracts or database snapshots on a schedule.
+- You want idempotent bronze loads and reproducible silver and gold tables.
+- You want to change a transformation without hand-ordering every downstream job.
+
+## When not to
+- Sub-second latency: use the real-time streaming pattern.
+- Teams that need a released Iceberg runtime for Spark 4.3 today: the course builds one from an open Iceberg pull request as a temporary step.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Order-event generator and batch extracts | Daily and hourly files |  |
+| Ingestion and streaming | Idempotent bronze loader | Appends each batch once, keyed so reruns do not duplicate |  |
+| Ingestion and streaming | AUTO CDC (Spark Declarative Pipelines) | Applies change feeds as SCD type 1 or 2 |  |
+| Object storage | SeaweedFS | s3://lakehouse/warehouse | 4.51 |
+| Open table format | Apache Iceberg | Bronze, silver and gold tables | runtime 4.3_2.13 built from apache/iceberg#18749 |
+| Catalog | Unity Catalog OSS | Writable Iceberg REST catalog | 0.7.0 |
+| Compute engines | Apache Spark | Runs the pipeline over Spark Connect | 4.3.0 |
+| Compute engines | Spark Declarative Pipelines | Declares bronze to silver to gold and resolves order | pyspark[pipelines]==4.3.0 |
+| Orchestration | Apache Airflow | DAG with schedules and backfills | 3.3.2 |
+| ML and AI | MLflow | Logs the gold snapshot id with each model run | 3.1.0 |
+| Serving | DuckDB | Reads gold through Iceberg REST | 1.5.6 |
+| Consumers | Analysts and notebooks | Query gold tables |  |
+
+## How data flows
+1. **Land bronze once.** Each batch is appended to a bronze Iceberg table with a key that makes reruns idempotent.
+2. **Declare silver and gold.** A Spark Declarative Pipelines spec declares silver as cleaned bronze and gold as aggregates over silver.
+3. **Spark plans the graph.** spark-pipelines run resolves dependencies, creates or updates each table in Unity Catalog and records the run.
+4. **Airflow schedules.** An Airflow DAG triggers the pipeline on a schedule and replays past intervals for backfills.
+5. **Serve from the same tables.** DuckDB attaches the Unity Catalog Iceberg REST endpoint and queries gold without copying it.
+
+## Run it
+
+### [open-lakehouse/lakehouse-masterclass](https://github.com/open-lakehouse/lakehouse-masterclass)
+
+Chapters 6 to 11 build this pattern: Iceberg through Unity Catalog, idempotent bronze, the SDP medallion, Airflow backfills and DuckDB serving.
+
+### [open-lakehouse/open-lakehouse](https://github.com/open-lakehouse/open-lakehouse)
+
+An open reference architecture for the lakehouse that runs on Docker, deploys to AWS, and is designed so an AI agent can set it up and tear it down.
+
+```bash
+git clone https://github.com/open-lakehouse/open-lakehouse
+cd open-lakehouse
+
+cp .env.example .env       # fill in POSTGRES_*, S3_* placeholders
+./lakehouse setup          # validate env, install deps, download ~860MB of JARs
+./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
+./lakehouse start unity-catalog
+./lakehouse start mlflow
+./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)
+```
+
+### [lisancao/spark-demos](https://github.com/lisancao/spark-demos)
+
+Demo 16 includes an AUTO CDC flow that writes SCD type 2 into Iceberg on Spark 4.3.0.
+
+## Caveats
+- There is no released Iceberg Spark runtime for Spark 4.3 yet; the course's chapter 5.5 builds it from apache/iceberg#18749 as a temporary step.
+- Unity Catalog 0.7 or later is required for Iceberg writes through its REST catalog.
+- Older SeaweedFS releases have an S3A _temporary rename bug; the course pins 4.51.
+
+## Industry use cases
+- **Payments and fintech: Ledger reconciliation.** Match gateway, processor and bank files every day and surface the breaks.
+- **Healthcare providers: FHIR bulk export to OMOP.** Land FHIR NDJSON in bronze and transform it into the OMOP common data model.
+- **Manufacturing: Quality and scrap analytics.** Join MES quality checks with ERP orders every shift to find where scrap comes from.
+- **Energy and utilities: Meter data at scale.** Process billions of interval reads a day through bronze, VEE silver and billing gold.
+
+## Frequently asked questions
+
+### What is a medallion architecture?
+
+A layout of lakehouse tables in three layers: bronze for raw data as it arrived, silver for cleaned and conformed data, and gold for aggregates built for a specific consumer.
+
+### Do I need Databricks to use declarative pipelines?
+
+No. Spark Declarative Pipelines is part of open source Apache Spark from 4.1, run with the spark-pipelines CLI against a Spark Connect server.
+
+### Can DuckDB read tables that Spark writes?
+
+Yes, when both go through the same catalog. In the masterclass, DuckDB attaches Unity Catalog's Iceberg REST endpoint and reads the gold Iceberg tables Spark wrote.
+
+## Sources
+- [lakehouse-masterclass COURSE.md](https://github.com/open-lakehouse/lakehouse-masterclass)
+- [Spark Declarative Pipelines guide](https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/batch-medallion
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/change-data-capture
+
+# Change data capture with SCD type 2: AUTO CDC in Spark Declarative Pipelines, from a Kafka change feed into Apache Iceberg
+
+> Keep the current state and every past version of each row, without hand-written MERGE logic.
+
+Change data capture (CDC) with slowly changing dimensions type 2 turns a feed of row-level changes from an operational system into a table that holds both the current state and the full history of each row. In open source Apache Spark 4.3, an AUTO CDC flow in Spark Declarative Pipelines reads the change feed, orders events by a sequence column, applies inserts, updates and deletes by key, and stores the result as SCD type 2: a change to a tracked column closes the old version and opens a new one, while changes to untracked columns update the current version in place. The target must support row-level operations, which Apache Iceberg provides.
+
+## When to use it
+- An operational database or service emits change events and you need its tables in the lakehouse.
+- Auditors or analysts ask what a row looked like at a past point in time.
+- You want to stop maintaining hand-written MERGE statements for every replicated table.
+
+## When not to
+- Targets without row-level operations: AUTO CDC needs a DSv2 table that supports them.
+- Spark releases before 4.3 for this exact flow; the reference demo is verified on Spark 4.3.0.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Operational database or service | Emits one event per insert, update or delete |  |
+| Ingestion and streaming | Debezium | Turns database transaction logs into change events |  |
+| Ingestion and streaming | Apache Kafka | The change feed topic (menu-changes in the demo) | apache/kafka 4.0.0 image |
+| Object storage | Local filesystem | Iceberg warehouse directory in the demo |  |
+| Open table format | Apache Iceberg | SCD type 2 target with row-level operations | Spark 4.3 runtime built from source |
+| Catalog | Iceberg hadoop catalog | Declared in the pipeline spec |  |
+| Compute engines | Spark Declarative Pipelines | Runs the pipeline with spark-pipelines run | pyspark==4.3.0 |
+| Compute engines | AUTO CDC (Spark Declarative Pipelines) | KEYS, SEQUENCE BY, APPLY AS DELETE WHEN, STORED AS SCD TYPE 2 |  |
+| Consumers | Analysts and audit queries | Read current rows or any past version |  |
+
+## How data flows
+1. **Changes are published.** Each insert, update or delete arrives on a Kafka topic as one JSON event with a key, a sequence number and an operation.
+2. **Read the feed.** A Python table in the pipeline reads the topic with Structured Streaming and parses each event.
+3. **Apply by key, in order.** The AUTO CDC flow groups events by key and orders them by the sequence column, so late or out-of-order events land correctly.
+4. **Track history.** A change to a tracked column (price or station in the demo) closes the current version and opens a new one; a change to another column updates the current version in place; a delete closes the row's window.
+5. **Query any point in time.** The Iceberg table holds every version with its validity window, so you can read the current state or the state at any past sequence.
+
+## Run it
+
+### [lisancao/spark-demos](https://github.com/lisancao/spark-demos)
+
+Demo 16 (Spark 4.3 guide), scd2/ folder: a ghost-kitchen menu change feed on Kafka applied with AUTO CDC as SCD type 2 into Iceberg.
+
+```bash
+scd2/reset.sh       # Kafka up, an empty menu-changes topic, no table, no checkpoints
+scd2/publish.sh scd2/incoming/batch-1.json && scd2/run.sh && scd2/history.sh
+scd2/publish.sh scd2/incoming/batch-2.json && scd2/run.sh && scd2/history.sh
+scd2/publish.sh scd2/incoming/batch-3.json && scd2/run.sh && scd2/history.sh
+docker compose -f scd2/compose.yaml down -v   # when done
+```
+
+## Caveats
+- Iceberg has not published a Spark 4.3 runtime (Maven Central stops at iceberg-spark-runtime-4.1); the demo builds iceberg-spark-runtime-4.3_2.13 from an Iceberg checkout with Spark 4.3 support.
+- AUTO CDC needs a target that implements DSv2 row-level operations.
+- The jars and spark.sql.extensions are static configs, so they are passed to spark-pipelines run, not set in the pipeline spec.
+- Pipeline storage must be an absolute URI.
+
+## Industry use cases
+- **Banking: Core banking CDC into the lakehouse.** Keep a current and historical (SCD type 2) view of accounts without full nightly reloads.
+
+## Frequently asked questions
+
+### What is SCD type 2?
+
+Slowly changing dimension type 2 keeps every version of a row: when a tracked attribute changes, the current version is closed and a new one is opened, so the table answers both what is true now and what was true at any earlier time.
+
+### Can open source Spark do CDC without hand-written MERGE?
+
+Yes. Spark Declarative Pipelines in Spark 4.3 has AUTO CDC flows: you declare the keys, the sequence column, the delete condition and STORED AS SCD TYPE 1 or 2, and Spark applies the change feed.
+
+### How does AUTO CDC handle out-of-order events?
+
+It orders events per key by the SEQUENCE BY column, so an event that arrives late is applied in sequence order rather than arrival order.
+
+## Sources
+- [spark-demos demo 16 README](https://github.com/lisancao/spark-demos/tree/main/demos/16_spark_43_guide)
+- [menu.sql (the AUTO CDC flow)](https://github.com/lisancao/spark-demos/blob/main/demos/16_spark_43_guide/scd2/transformations/menu.sql)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/change-data-capture
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/streaming-medallion
+
+# Streaming medallion: Kafka, Spark Structured Streaming and Delta Lake in Unity Catalog
+
+> Events in, governed tables out, minutes or seconds behind the source.
+
+A streaming medallion architecture applies the bronze, silver and gold layout to event streams. Apache Kafka buffers events, an Apache Spark Structured Streaming job appends them to a bronze Delta Lake table with exactly-once checkpointing, and downstream streaming or declarative pipelines keep silver and gold tables up to date. Because the tables are open and registered in Unity Catalog OSS, batch jobs, BI tools and other engines read the same data the stream writes.
+
+## When to use it
+- Sources emit events continuously and consumers want tables, not topics.
+- Latency of seconds to minutes is enough.
+- You want one copy of history that both streaming and batch jobs read.
+
+## When not to
+- Request-path latency in milliseconds: see the real-time streaming pattern.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Applications, devices and CDC | Emit events |  |
+| Ingestion and streaming | Debezium | Turns database changes into Kafka events |  |
+| Ingestion and streaming | Apache Kafka | Durable event buffer | Confluent 7.5.0 images |
+| Object storage | SeaweedFS | Tables and streaming checkpoints | 3.80 |
+| Open table format | Delta Lake | Bronze, silver and gold tables | 4.3.1 |
+| Catalog | Unity Catalog OSS | Registers every layer | 0.6.0 |
+| Compute engines | Apache Spark | Structured Streaming from Kafka to bronze | 4.1.0 |
+| Compute engines | Spark Declarative Pipelines | Silver and gold derived from bronze |  |
+| Orchestration | Apache Airflow | Runs the batch side and maintenance | 3.1.6 |
+| Serving | Spark Connect | Remote query access |  |
+| Consumers | Next.js dashboard | Live views over gold |  |
+
+## How data flows
+1. **Buffer events.** Producers write JSON events to Kafka topics.
+2. **Append to bronze.** A Structured Streaming query reads Kafka and appends to a bronze Delta table; its checkpoint makes the write exactly-once.
+3. **Clean and deduplicate.** Silver applies a watermark and dropDuplicates so late and repeated events are handled deterministically.
+4. **Aggregate.** Gold computes windowed aggregates, such as one-minute counts, and joins static dimension tables.
+5. **Read anywhere.** Because every layer is a catalog table, batch jobs and other engines read the same data.
+
+## Run it
+
+### [open-lakehouse/open-lakehouse](https://github.com/open-lakehouse/open-lakehouse)
+
+An open reference architecture for the lakehouse that runs on Docker, deploys to AWS, and is designed so an AI agent can set it up and tear it down.
+
+```bash
+git clone https://github.com/open-lakehouse/open-lakehouse
+cd open-lakehouse
+
+cp .env.example .env       # fill in POSTGRES_*, S3_* placeholders
+./lakehouse setup          # validate env, install deps, download ~860MB of JARs
+./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
+./lakehouse start unity-catalog
+./lakehouse start mlflow
+./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)
+```
+
+### [open-lakehouse/lakehouse-masterclass](https://github.com/open-lakehouse/lakehouse-masterclass)
+
+Chapter 9 builds Kafka to Structured Streaming to bronze on the course stack.
+
+## Caveats
+- Match the Kafka connector to your Spark version exactly; a spark-sql-kafka build for one Spark minor version can fail with NoSuchMethodError on another.
+- Kafka is not registered in the catalog in the open-lakehouse stack; only the tables are.
+
+## Industry use cases
+- **Payments and fintech: Streaming payment history into tables.** Land every gateway event in a bronze table and keep silver current within seconds.
+- **Manufacturing: Telemetry into tables.** Land MQTT and OPC UA readings in bronze and keep asset-level silver current.
+- **Retail and e-commerce: Real-time inventory.** Keep stock positions current from POS and warehouse events so online orders do not oversell.
+- **Retail and e-commerce: Clickstream to sessions.** Sessionize web and app events with watermarks and land them as tables for funnel analysis.
+- **Telecommunications: CDR processing.** Process mediation files into rated usage tables every few minutes.
+- **Cybersecurity: Security data lake.** Normalize every source to OCSF in silver and keep years of history cheaply.
+
+## Frequently asked questions
+
+### How do I stream Kafka into Delta Lake with open source tools?
+
+Run an Apache Spark Structured Streaming query with the Kafka source and a Delta sink with a checkpoint location; register the table in Unity Catalog OSS so other engines can find it.
+
+### Is the Kafka to Delta write exactly-once?
+
+Yes for the table: Structured Streaming records Kafka offsets in its checkpoint and commits each micro-batch to the Delta log atomically, so a restarted query neither skips nor duplicates batches.
+
+## Sources
+- [open-lakehouse docs/architecture.md](https://github.com/open-lakehouse/open-lakehouse/blob/main/docs/architecture.md)
+- [Structured Streaming + Kafka integration](https://spark.apache.org/docs/latest/streaming/structured-streaming-kafka-integration.html)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/streaming-medallion
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/real-time-streaming
+
+# Real-time streaming with Spark Real-Time Mode: Kafka in, Kafka out, milliseconds in between
+
+> Continuous processing for fraud, recommendations and live boards, measured end to end.
+
+Real-time streaming is the architecture for decisions that must happen while an event is still in flight: score a payment, update a recommendation, move a leaderboard. In open source Apache Spark, Real-Time Mode is a Structured Streaming trigger that processes records continuously instead of in micro-batches. The reference pipelines read from Kafka, transform or keep state with transformWithState, and write back to Kafka or a key-value store, with latency measured from producer timestamp to consumer.
+
+## When to use it
+- Your SLA is in tens or hundreds of milliseconds, not seconds.
+- You are porting Apache Flink jobs and want to know which ones move to Spark.
+- You already run Spark for batch and want one engine for both.
+
+## When not to
+- Writing large analytical tables: use the streaming medallion pattern and keep this path thin.
+- Python UDFs in the hot path: Real-Time Mode does not support them.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Payments, clicks, game events | Producers with event timestamps |  |
+| Ingestion and streaming | Apache Kafka | Input topic, 16 partitions in the reference runs | Confluent 7.6.0 image |
+| Compute engines | Spark Real-Time Mode | Continuous processing trigger | Spark 4.1 to 4.3 |
+| Compute engines | Apache Spark | transformWithState for keyed state, on RocksDB | 4.3.0 |
+| Compute engines | Apache Flink | The engine being compared or migrated from |  |
+| Serving | Kafka sink topic | Output and latency topics |  |
+| Serving | Redis | Latest state for applications |  |
+| Open table format | Delta Lake | Optional history table written by a separate query |  |
+| Consumers | Fraud engine, app UI, live board | Read results within milliseconds |  |
+
+## How data flows
+1. **Produce with timestamps.** A generator writes keyed events to Kafka with the send time embedded.
+2. **Process continuously.** A Structured Streaming query with the real-time trigger processes each record as it arrives instead of waiting for a micro-batch.
+3. **Keep state.** Stateful steps such as deduplication, windows or a custom transformWithState processor keep per-key state in RocksDB.
+4. **Emit.** Results go to an output Kafka topic or a key-value store.
+5. **Measure.** A consumer subtracts the embedded send time from arrival time and reports p50, p95 and p99.
+
+## Run it
+
+### [lisancao/spark-rtm-quickstart](https://github.com/lisancao/spark-rtm-quickstart)
+
+Five Real-Time Mode pipelines on Spark 4.1 with Kafka and a latency consumer, compared against micro-batch.
+
+```bash
+# Start Kafka + Spark
+docker compose up -d
+
+# Create Kafka topics
+docker exec kafka kafka-topics --bootstrap-server localhost:9092 \
+    --create --topic rtm-input --partitions 16 --if-not-exists
+docker exec kafka kafka-topics --bootstrap-server localhost:9092 \
+    --create --topic rtm-output --partitions 16 --if-not-exists
+docker exec kafka kafka-topics --bootstrap-server localhost:9092 \
+    --create --topic rtm-latency --partitions 16 --if-not-exists
+
+# Start the data generator (in a separate terminal)
+python data_generator/producer.py --rate 1000 --keys 100
+
+# Run a pipeline
+docker exec spark spark-submit /opt/spark-data/pipelines/01_stateless_passthrough.py
+```
+
+### [lisancao/spark-demos](https://github.com/lisancao/spark-demos)
+
+Demo 14 (bookshop recommender, Spark 4.3.0) and demo 10 (chained transformWithState lobby board) compare micro-batch with Real-Time Mode and commit the numbers in NOTES.md.
+
+### [lisancao/flink-to-spark-rtm](https://github.com/lisancao/flink-to-spark-rtm)
+
+Four streaming patterns (stateless, tumbling window, sliding window, keyed state) written for both Flink 1.20 and Spark 4.1 Real-Time Mode, with migration notes.
+
+## Caveats
+- Open source Spark 4.1 Real-Time Mode is stateless only; stateful queries need a later release (the stateful demos run on Spark 4.3).
+- Python UDFs are not supported in Real-Time Mode.
+- PySpark 4.1 has no trigger(realTime=...) argument; the quickstart uses a Py4J helper.
+- transformWithState requires the RocksDB state store provider.
+- Size task slots to source partitions plus shuffles times shuffle partitions, or the query stalls.
+
+## Industry use cases
+- **Banking: Real-time card fraud scoring.** Score each authorization against recent account behaviour before the switch times out.
+- **Payments and fintech: Sub-second fraud features.** Maintain velocity counters per card and device and serve them while the payment is still in flight.
+- **Payments and fintech: Migrating a Flink fraud job to Spark.** Port keyed state and windows to Spark and measure whether latency holds.
+- **Healthcare providers: Real-time deterioration alerts.** Score streaming vitals against early-warning rules and push alerts to care teams.
+- **Manufacturing: Predictive maintenance.** Compute rolling sensor features per asset and score failure risk continuously.
+- **Energy and utilities: Outage detection from streaming telemetry.** Correlate last-gasp meter events and SCADA alarms within seconds.
+- **Retail and e-commerce: In-session recommendations.** Update product recommendations while the shopper is still browsing.
+- **Telecommunications: Service assurance.** Correlate alarms and KPI drops across cells within seconds.
+- **Cybersecurity: Streaming detections.** Evaluate detection rules on normalized events within seconds of arrival.
+
+## Frequently asked questions
+
+### How fast is Spark Real-Time Mode?
+
+In the spark-rtm-quickstart run committed in results/latency-results.md (stateless, 500 events per second, 16 cores), end-to-end p50 was 17 ms and p99 was 21 to 26 ms across six runs. In spark-demos demo 14 on Spark 4.3.0, a stateless enrichment step measured p50 0 ms and p99 1 ms in real-time mode against 115 ms and 204 ms in micro-batch.
+
+### Can Spark replace Flink for low-latency streaming?
+
+For many stateless and windowed jobs, yes; flink-to-spark-rtm writes the same four patterns for both engines. Keyed state with timers is where migrations need the most care, since Spark expresses it through transformWithState.
+
+### Does Real-Time Mode support stateful queries?
+
+Not in open source Spark 4.1. The stateful reference demos (transformWithState, dedup and windows) run on Spark 4.3.
+
+## Sources
+- [spark-rtm-quickstart results/latency-results.md](https://github.com/lisancao/spark-rtm-quickstart/blob/main/results/latency-results.md)
+- [spark-demos demo 14 NOTES.md](https://github.com/lisancao/spark-demos/blob/main/demos/14_real_time_mode/NOTES.md)
+- [spark-demos demo 10 NOTES.md](https://github.com/lisancao/spark-demos/blob/main/demos/10_stateful_streaming/NOTES.md)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/real-time-streaming
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/multi-engine-catalog
+
+# One catalog, many engines: Unity Catalog OSS with Spark, DuckDB, PyIceberg and Trino on Delta and Iceberg
+
+> Write once, read from whatever engine fits the question.
+
+A multi-engine catalog architecture puts an open catalog between the tables and every engine that uses them. Unity Catalog OSS stores table metadata in Postgres, exposes Delta tables through its own API and Iceberg tables through the Iceberg REST catalog specification, and vends short-lived storage credentials per table. Apache Spark, DuckDB, PyIceberg and Trino then read and write the same data without copies, and access is decided once, in the catalog.
+
+## When to use it
+- Different teams prefer different engines for the same data.
+- You want to stop copying data into a warehouse per tool.
+- You want storage credentials vended per table instead of shared keys.
+
+## When not to
+- Expecting identical feature support in every engine: write support differs by engine, format and catalog version.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Pipelines and notebooks | Create and update tables |  |
+| Object storage | RustFS | S3-compatible storage with STS credentials | 1.0.0 |
+| Open table format | Delta Lake | Catalog-managed Delta tables |  |
+| Open table format | Apache Iceberg | Native Iceberg tables through Iceberg REST |  |
+| Catalog | Unity Catalog OSS | Delta API, Iceberg REST catalog and credential vending | 0.7.0 |
+| Catalog | PostgreSQL | Catalog metadata | 16.3 |
+| Compute engines | Apache Spark | Delta notebooks on Spark 4.2.0; Iceberg notebooks on Spark 4.1.3 | 4.2.0 / 4.1.3 |
+| Compute engines | PyIceberg | JVM-free Iceberg reads and writes |  |
+| Compute engines | DuckDB | Attaches the Iceberg REST endpoint for SQL reads |  |
+| Compute engines | Trino | Distributed SQL over the same catalog |  |
+| Consumers | marimo | Reactive notebooks on :2718 and :2719 |  |
+
+## How data flows
+1. **Create through the catalog.** A Spark session configured with the Unity Catalog connector creates a managed Delta table, or an Iceberg table through the Iceberg REST endpoint.
+2. **Catalog records metadata.** Unity Catalog stores the table, its location and its format in Postgres.
+3. **Credentials are vended.** When an engine loads a table, the catalog returns short-lived storage credentials scoped to that table's path.
+4. **Another engine reads.** DuckDB or PyIceberg connects to the same Iceberg REST endpoint and reads the table directly from object storage.
+
+## Run it
+
+### [open-lakehouse/unitycatalog-playground](https://github.com/open-lakehouse/unitycatalog-playground)
+
+Unity Catalog OSS on your machine with Spark, Delta and Iceberg in marimo notebooks, Postgres for metadata and RustFS for storage.
+
+```bash
+git clone https://github.com/open-lakehouse/unitycatalog-playground.git
+cd unitycatalog-playground
+just uc=local start
+```
+
+### [open-lakehouse/unitycatalog-rs](https://github.com/open-lakehouse/unitycatalog-rs)
+
+A Rust implementation of the same catalog APIs, useful when you want a single binary or Helm chart.
+
+```bash
+pip install 'unitycatalog-rs[all]'   # the Python client, the uc CLI, the server and the web UI
+uc dev                               # a server on http://localhost:8080, with the web UI
+uc catalog list                      # upstream's bin/uc commands
+```
+
+### [open-lakehouse/lakehouse-masterclass](https://github.com/open-lakehouse/lakehouse-masterclass)
+
+Chapter 11 has DuckDB read the Spark-written Iceberg tables through Unity Catalog 0.7's Iceberg REST endpoint.
+
+## Caveats
+- iceberg-spark-runtime exists only for Spark 4.0 and 4.1 at the time of writing, which is why the playground's Iceberg notebook runs Spark 4.1.3.
+- The RustFS STS credential in the playground expires after 12 hours; refresh it with just uc=local rotate-creds.
+- The playground needs at least 4 GB of Docker memory and is not for production.
+
+## Industry use cases
+- **Telecommunications: Network planning on many engines.** Run heavy jobs in Spark and interactive exploration in Trino against one catalog.
+- **Cybersecurity: Threat hunting with any engine.** Hunt in DuckDB or Trino over the same tables that Spark writes.
+
+## Frequently asked questions
+
+### What is an Iceberg REST catalog?
+
+An HTTP API defined by the Apache Iceberg project for creating, loading and committing Iceberg tables. Any engine that speaks it can use any catalog that implements it, including Unity Catalog OSS, Apache Polaris and Lakekeeper.
+
+### Can Spark and DuckDB share the same tables?
+
+Yes. Point both at the same catalog: Spark through the Unity Catalog connector or Iceberg REST, DuckDB through its Iceberg extension attached to the Iceberg REST endpoint.
+
+### What is credential vending?
+
+The catalog hands an engine short-lived storage credentials scoped to one table's location when the engine loads it, so engines never hold long-lived bucket keys.
+
+## Sources
+- [unitycatalog-playground README](https://github.com/open-lakehouse/unitycatalog-playground#readme)
+- [Iceberg REST catalog spec](https://iceberg.apache.org/rest-catalog-spec/)
+- [Unity Catalog OSS](https://github.com/unitycatalog/unitycatalog)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/multi-engine-catalog
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/governed-ai-agents
+
+# Governed AI agents for data engineering: Spark Declarative Pipelines, Spark Connect, Kubernetes and a governed Iceberg REST catalog
+
+> Agents write pipeline specs; the platform decides what they are allowed to touch.
+
+Governed AI data engineering is an architecture in which AI agents author data pipelines but never hold direct power over data. The agent writes declarative Spark Declarative Pipelines specs as a pull request; CI dry-runs them against the real catalog; a controller applies approved changes. Each tenant reaches Spark only through one identity-pinned Spark Connect ingress behind mTLS, executors run as Kubernetes pods, and a governed Iceberg REST catalog authorizes every request and vends storage credentials scoped to that tenant. Each layer owns one job, so a mistake in one does not become a breach in another.
+
+## When to use it
+- You want AI agents to build or change pipelines without giving them production credentials.
+- You need per-tenant isolation on shared Spark infrastructure.
+- You want defects caught before any data is processed.
+
+## When not to
+- A single-user sandbox: the masterclass's local agent chapter is the lighter starting point.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | AI coding agent | Writes inert pipeline specs as a pull request |  |
+| Orchestration | GitOps CI gate | PR-only output, dry run against the real catalog, reconcile |  |
+| Compute engines | Spark Declarative Pipelines | Declarative authoring: specs, not imperative jobs | Spark 4.1.2 |
+| Governance, lineage and policy | Envoy | mTLS on :15009; routes each client certificate to its tenant | 1.31.5 |
+| Serving | Spark Connect | The single identity-pinned ingress per tenant | 4.1.2 |
+| Orchestration | Kubernetes | Client-mode driver plus executor pods on EKS | EKS 1.31 |
+| Compute engines | Apache Spark | Executors do the work | 4.1.2 |
+| Open table format | Apache Iceberg | Tables under per-tenant prefixes | 1.11.0 |
+| Catalog | Lakekeeper | Governed Iceberg REST catalog with per-principal authorization and credential vending | 0.13.1 |
+| Governance, lineage and policy | OpenFGA | Authorization model behind the catalog | 1.14.0 |
+| Object storage | Amazon S3 | Data under per-tenant prefixes with STS-scoped credentials |  |
+| ML and AI | Omnigent | Agent harness with tools and policies |  |
+| ML and AI | Ollama | Local model for the course's agent chapter |  |
+| Consumers | Reviewers and downstream jobs | Approve PRs, read the governed tables |  |
+
+## How data flows
+1. **Agent proposes.** The agent writes Spark Declarative Pipelines specs and opens a pull request; it has no direct write path.
+2. **CI dry-runs.** CI runs the pipeline in dry-run mode against the real catalog, catching structural defects before any data is processed.
+3. **Identity-pinned ingress.** The tenant's client certificate reaches Envoy, which routes by its SPIFFE URI SAN to that tenant's Spark Connect server.
+4. **Executors run.** Kubernetes schedules executor pods that do the work.
+5. **Catalog authorizes.** Lakekeeper with OpenFGA authorizes each table operation and vends STS credentials scoped to the tenant's prefix.
+
+## Run it
+
+### [open-lakehouse/safe-spark-agents-paper](https://github.com/open-lakehouse/safe-spark-agents-paper)
+
+Working paper, reproducible study and open reference architecture for safe, governed AI data engineering on Apache Spark.
+
+```bash
+cd study
+python3 analysis/analyze.py results/results.powered.AB.n12.final.jsonl --tasks config/TASKS.lock.json --assume-backend local
+```
+
+### [open-lakehouse/lakehouse-masterclass](https://github.com/open-lakehouse/lakehouse-masterclass)
+
+Chapter 3 runs an agent on Omnigent with a local Ollama model, MCP tools and ALLOW, DENY and ASK policies; chapter 13 has a coding agent operate the stack through AGENTS.md.
+
+### [open-lakehouse/lakehouse-agent-kit](https://github.com/open-lakehouse/lakehouse-agent-kit)
+
+Early-stage agent skills for the open lakehouse, driven by a connection profile instead of hardcoded hosts (lakehouse-core ships today).
+
+## Caveats
+- The isolation proof runs on one Spark Connect server per tenant; a shared-server design is described as frontier work in the paper.
+- The five isolation links are proven one at a time, not as one composed request.
+- Unity Catalog OSS 0.5.0, evaluated as an alternate catalog, could not do per-principal authorization on its Iceberg REST path.
+
+## Industry use cases
+- **Payments and fintech: Governed agent for merchant support.** Let an agent answer settlement questions with tools limited by policy.
+- **Cybersecurity: Investigation agents.** Let an agent query logs and draft incident timelines under strict tool policy.
+
+## Frequently asked questions
+
+### How do you let AI agents build data pipelines safely?
+
+Give them a declarative output and no direct path to data: the agent writes Spark Declarative Pipelines specs as a pull request, CI dry-runs them against the real catalog, and execution happens through an identity-pinned Spark Connect ingress with a catalog that authorizes every table operation.
+
+### Do declarative pipelines catch more agent mistakes?
+
+In the safe-spark-agents study (528 runs: 22 tasks, 12 seeds, 2 arms), the Spark Declarative Pipelines dry run caught 79 structural defects before any data was processed, against 0 for the imperative arm. SDP output was 49% fewer lines at about 2.3 times the tokens.
+
+## Sources
+- [safe-spark-agents-paper](https://github.com/open-lakehouse/safe-spark-agents-paper)
+- [Paper site](https://open-lakehouse.github.io/safe-spark-agents-paper/)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/governed-ai-agents
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/open-data-sharing
+
+# Open data sharing: Delta Sharing servers over Unity Catalog and open tables
+
+> Share live tables with another organization without copying them or sending files.
+
+Open data sharing is an architecture for giving another organization read access to live lakehouse tables through an open protocol instead of file exports. A Delta Sharing server authenticates the recipient, checks which shares and tables they may read, and returns short-lived URLs or credentials for the underlying files; the recipient reads them with any Delta Sharing client, including pandas, Spark and other engines. Data stays in the provider's storage and the recipient always sees the current version.
+
+## When to use it
+- Partners, customers or regulators need recurring access to the same tables.
+- You want to stop running file-drop jobs.
+- Recipients use different tools than you do.
+
+## When not to
+- Write access for recipients: the protocol is read-only.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Provider pipelines | Maintain the tables to share |  |
+| Object storage | Amazon S3 | Provider's bucket; data never moves |  |
+| Open table format | Delta Lake | Shared tables |  |
+| Catalog | Unity Catalog OSS | Source of shares and table locations |  |
+| Serving | Delta Sharing | Open REST protocol for recipients | server 1.3.10 in open-lakehouse |
+| Serving | distributary | Composable Rust sharing server with Postgres or SQLite stores |  |
+| Compute engines | Apache Spark | Provider-side writes |  |
+| Consumers | Recipients: pandas, Spark, BI tools | Read with a bearer token profile |  |
+
+## How data flows
+1. **Define a share.** The provider groups tables into a share and grants it to a recipient.
+2. **Issue a profile.** The recipient receives a profile file with the server endpoint and a bearer token.
+3. **Recipient queries.** The client lists shares and tables and asks to read one, optionally with predicate hints.
+4. **Server returns file URLs.** The server checks the grant and returns short-lived URLs for the current table files.
+5. **Read directly.** The client reads Parquet files from the provider's storage; nothing is copied into the recipient's platform.
+
+## Run it
+
+### [open-lakehouse/distributary](https://github.com/open-lakehouse/distributary)
+
+OpenSharing and Delta Sharing in Rust: protocol models, client, admin API and a composable sharing server.
+
+```bash
+cargo check --workspace --all-features
+cargo nextest run --workspace --all-features
+```
+
+### [open-lakehouse/unitycatalog-rs](https://github.com/open-lakehouse/unitycatalog-rs)
+
+A catalog that serves a Delta Sharing server alongside the Unity Catalog, Delta and Iceberg REST APIs.
+
+```bash
+pip install 'unitycatalog-rs[all]'   # the Python client, the uc CLI, the server and the web UI
+uc dev                               # a server on http://localhost:8080, with the web UI
+uc catalog list                      # upstream's bin/uc commands
+```
+
+### [open-lakehouse/open-lakehouse](https://github.com/open-lakehouse/open-lakehouse)
+
+Ships an opt-in Delta Sharing server (1.3.10) on :8443 next to the rest of the stack.
+
+```bash
+git clone https://github.com/open-lakehouse/open-lakehouse
+cd open-lakehouse
+
+cp .env.example .env       # fill in POSTGRES_*, S3_* placeholders
+./lakehouse setup          # validate env, install deps, download ~860MB of JARs
+./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
+./lakehouse start unity-catalog
+./lakehouse start mlflow
+./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)
+```
+
+## Caveats
+- distributary's README gives developer commands only; its architecture document plans presigned-URL queries, change data feed and recipient tokens.
+
+## Industry use cases
+- **Healthcare providers: Research data sharing.** Share de-identified cohorts with a university partner as live tables.
+- **Manufacturing: Supplier data exchange.** Share quality and demand tables with suppliers as live tables.
+- **Energy and utilities: Regulator and partner sharing.** Share reliability metrics with regulators as live tables.
+- **Retail and e-commerce: Supplier collaboration.** Share sell-through and stock tables with suppliers instead of sending reports.
+
+## Frequently asked questions
+
+### What is Delta Sharing?
+
+An open REST protocol, governed with Delta Lake under the Linux Foundation, for sharing live tables across organizations. Recipients read the provider's files through short-lived URLs with any compatible client.
+
+### Do recipients need the same platform as the provider?
+
+No. Clients exist for pandas, Apache Spark and other tools, and the open-lakehouse repos include Rust implementations of the server and client.
+
+## Sources
+- [Delta Sharing protocol](https://github.com/delta-io/delta-sharing/blob/main/PROTOCOL.md)
+- [distributary](https://github.com/open-lakehouse/distributary)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/open-data-sharing
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/laptop-open-lakehouse
+
+# The open lakehouse on a laptop: Spark, Delta Lake, Unity Catalog, Kafka, Airflow and MLflow in Docker
+
+> The whole stack, one command at a time, on the machine in front of you.
+
+The open lakehouse on a laptop is a reference architecture that runs every layer of an open source data platform in Docker on one machine: SeaweedFS as S3-compatible object storage, Delta Lake tables registered in Unity Catalog OSS, Apache Spark 4.1 behind a Spark Connect server, Apache Kafka for events, Apache Airflow 3 for orchestration and MLflow 3 for tracking. It exists so that a data engineer, a student or an AI agent can build, test and tear down a real lakehouse without a cloud account, and then point the same code at a cloud deployment.
+
+## When to use it
+- You want to learn how the layers of an open lakehouse fit together by running them.
+- You need a local integration environment where pipelines run against a real catalog and object store before they reach production.
+- You want an AI coding agent to have a full, disposable stack to work against.
+
+## When not to
+- Production workloads: the repo states that production hardening is out of scope.
+- Writing Iceberg tables through the catalog: Unity Catalog OSS 0.6.0 accepts Delta writes only, and its Iceberg REST adapter is read-only.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Event producers and sample data | Generate order events for the demos |  |
+| Ingestion and streaming | Apache Kafka | Event bus on :9092 | Confluent 7.5.0 images |
+| Object storage | SeaweedFS | S3 API on :8333, bucket s3://lakehouse | 3.80 |
+| Open table format | Delta Lake | The write path; every demo writes Delta into Unity Catalog | 4.3.1 |
+| Open table format | Apache Iceberg | Read surface for other engines through Unity Catalog's Iceberg REST endpoint | 1.10.0 |
+| Catalog | Unity Catalog OSS | The only catalog, on :8081 | 0.6.0 |
+| Catalog | PostgreSQL | Unity Catalog metadata store | 16 |
+| Compute engines | Apache Spark | Batch and Structured Streaming jobs, Connect-first | 4.1.0 (Scala 2.13, Java 21) |
+| Compute engines | Spark Declarative Pipelines | Derives silver and gold from bronze | Spark 4.1 |
+| Orchestration | Apache Airflow | Schedules the pipelines on :8085 | 3.1.6 |
+| ML and AI | MLflow | Tracking server and AI Gateway on :5000 and :5001 | 3.14.0 |
+| Serving | Spark Connect | gRPC endpoint sc://localhost:15002 for every client | 4.1.0 |
+| Serving | Delta Sharing | Opt-in external sharing on :8443 | server 1.3.10 |
+| Consumers | Next.js dashboard | Read-only viewer on :3000 |  |
+| Consumers | Jupyter | Optional notebooks |  |
+
+## How data flows
+1. **Events arrive.** A producer writes order events to a Kafka topic.
+2. **Bronze lands.** A Spark Structured Streaming job reads the topic and appends raw records to a bronze Delta table registered in Unity Catalog.
+3. **Silver and gold derive.** Spark Declarative Pipelines reads bronze and maintains the silver and gold tables, which requires a Spark Connect server.
+4. **Bytes stay in your bucket.** All table data and checkpoints live under s3://lakehouse/warehouse/ in SeaweedFS.
+5. **Everything else reads.** Clients connect to sc://localhost:15002; DuckDB, Trino and PyIceberg read the same tables through Unity Catalog's Iceberg REST endpoint; the dashboard, MLflow and Delta Sharing recipients consume the results.
+
+## Run it
+
+### [open-lakehouse/open-lakehouse](https://github.com/open-lakehouse/open-lakehouse)
+
+An open reference architecture for the lakehouse that runs on Docker, deploys to AWS, and is designed so an AI agent can set it up and tear it down.
+
+```bash
+git clone https://github.com/open-lakehouse/open-lakehouse
+cd open-lakehouse
+
+cp .env.example .env       # fill in POSTGRES_*, S3_* placeholders
+./lakehouse setup          # validate env, install deps, download ~860MB of JARs
+./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
+./lakehouse start unity-catalog
+./lakehouse start mlflow
+./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)
+```
+
+### [open-lakehouse/lakehouse-masterclass](https://github.com/open-lakehouse/lakehouse-masterclass)
+
+A textbook course that builds an open lakehouse on a laptop one service per chapter, following one order-events story from storage to agents.
+
+## Caveats
+- Writes are Delta only in this stack. Unity Catalog OSS 0.6.0 rejects data_source_format=ICEBERG, so Iceberg is a read surface (docs/compatibility.md).
+- Delta 4.2.0 fails catalog-managed Delta writes through Unity Catalog 0.6.x with "400 INVALID_ARGUMENT ... Invalid type_json". Delta 4.3.1 is the pin.
+- Delta 4.0.x throws NoSuchMethodError on LogKey with Spark 4.1.
+- The setup step downloads about 860 MB of JARs.
+
+## Frequently asked questions
+
+### Can I run a full open source lakehouse on a laptop?
+
+Yes. The open-lakehouse repository runs Spark 4.1, Delta Lake 4.3.1, Unity Catalog OSS 0.6.0, Kafka, Airflow 3.1.6, MLflow 3.14.0 and SeaweedFS in Docker, started service by service with the ./lakehouse script.
+
+### Why does the laptop stack write Delta and not Iceberg?
+
+Unity Catalog OSS 0.6.0 only accepts Delta for writes and serves Iceberg read-only through its Iceberg REST endpoint. Unity Catalog 0.7.0 adds writable Iceberg REST, which the lakehouse masterclass uses.
+
+### How do other engines read the tables?
+
+DuckDB, Trino and PyIceberg read through Unity Catalog's Iceberg REST endpoint; Spark clients connect over Spark Connect at sc://localhost:15002.
+
+## Sources
+- [open-lakehouse README](https://github.com/open-lakehouse/open-lakehouse#readme)
+- [docs/compatibility.md](https://github.com/open-lakehouse/open-lakehouse/blob/main/docs/compatibility.md)
+- [docs/architecture.md](https://github.com/open-lakehouse/open-lakehouse/blob/main/docs/architecture.md)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/laptop-open-lakehouse
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/policy-and-lineage
+
+# Policy pushdown and open lineage: Cedar policies compiled to CEL, enforced in Spark and DataFusion, with OpenLineage
+
+> Write access rules once, enforce them inside every engine, and record where every column came from.
+
+Policy pushdown and open lineage is a governance architecture for multi-engine lakehouses. Access rules are authored once in the Cedar policy language, compiled to portable CEL expressions, and enforced inside each query engine's plan as row filters and column masks, so no engine depends on SQL views or per-engine rewrites. Alongside, every job emits OpenLineage events, which are stored as lakehouse tables and served through a lineage API, so auditors can trace a published number back to its sources.
+
+## When to use it
+- Several engines read the same sensitive tables.
+- You need row filters and column masks that cannot be bypassed by choosing a different engine.
+- Regulators or auditors ask where a value came from.
+
+## When not to
+- Production lineage storage today without evaluation: headwaters describes itself as experimental and recommends Marquez for production.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Policy authors | Write Cedar policies and tag templates |  |
+| Governance, lineage and policy | Cedar | Policy language; deny always wins | cedar-policy 4 |
+| Governance, lineage and policy | policast | Compiles Cedar to CEL and injects enforcement into the physical plan |  |
+| Governance, lineage and policy | breakwater | Row filters and column masks inside the DataFusion planner |  |
+| Catalog | Unity Catalog OSS | Policy decision point resolving tags | 0.4.1 in the demo |
+| Object storage | RustFS | Demo object store |  |
+| Open table format | Delta Lake | Governed tables and the lineage table |  |
+| Compute engines | Apache Spark | Enforcement as Catalyst rules | 4.2 plugin |
+| Compute engines | Apache DataFusion | Enforcement as plan rewrites | 53.1 |
+| Governance, lineage and policy | OpenLineage | Lineage events from every job, column level from Spark |  |
+| Governance, lineage and policy | open-lineage-connect | Ingests events and writes them to Delta and Iceberg tables |  |
+| Governance, lineage and policy | headwaters | Lineage read API and UI |  |
+| Consumers | Analysts, auditors | See only permitted rows and columns; trace lineage |  |
+
+## How data flows
+1. **Author once.** A policy author writes Cedar policies, including tag-based templates that apply to every column tagged, for example, as PHI.
+2. **Compile.** policast compiles the policies to CEL expressions that any engine can evaluate.
+3. **Enforce in the plan.** Spark applies them as Catalyst rules and DataFusion as plan rewrites, so filters and masks run inside the query, not in a view.
+4. **Emit lineage.** A Spark 4 plugin emits OpenLineage events with column-level lineage for each job.
+5. **Store lineage as tables.** An ingest service writes the events to Delta or Iceberg tables, which a lineage API and UI read.
+
+## Run it
+
+### [open-lakehouse/policast](https://github.com/open-lakehouse/policast)
+
+Author governance once in Cedar, compile it to portable CEL, and push enforcement into Spark and DataFusion physical plans.
+
+```bash
+cp docker/.env.example .env
+docker compose up -d sidecar
+docker compose --profile demo run --rm datafusion-demo
+
+# Same policies enforced on Spark (Catalyst rules, no sidecar):
+docker compose --profile spark run --rm spark-demo   # or: just spark-demo
+```
+
+### [open-lakehouse/open-lineage-connect](https://github.com/open-lakehouse/open-lineage-connect)
+
+OpenLineage end to end: a Go ingest service, a Rust service that writes events to Delta and Iceberg tables, and a Spark 4 plugin for column-level lineage.
+
+```bash
+make docker-compose-up        # builds both images, starts both services + MinIO
+curl -sf http://localhost:8090/health
+curl -sf http://localhost:8091/health
+make docker-compose-down      # tears it down and removes the Delta volume
+```
+
+### [open-lakehouse/breakwater](https://github.com/open-lakehouse/breakwater)
+
+Cedar fine-grained access control for DataFusion, with OCI-distributed policy bundles and a policy decision point service.
+
+### [open-lakehouse/headwaters](https://github.com/open-lakehouse/headwaters)
+
+Experimental Rust OpenLineage service with a Marquez-inspired read API and UI.
+
+## Caveats
+- In policast, deny always wins and grants never bypass column masks.
+- headwaters is experimental and not a drop-in Marquez replacement.
+- The policast demo pins Unity Catalog 0.4.1 as its policy decision point.
+
+## Industry use cases
+- **Banking: Regulatory reporting from one copy.** Build liquidity and capital reports from conformed silver tables with lineage an auditor can follow.
+- **Healthcare providers: Patient-level access policy.** Enforce row filters and column masks on PHI the same way in every engine that reads the tables.
+- **Telecommunications: Subscriber data protection.** Mask subscriber identifiers for analysts and keep lineage for regulators.
+- **Cybersecurity: Least-privilege access to logs.** Restrict sensitive log fields by role in every engine.
+
+## Frequently asked questions
+
+### How do you enforce the same access policy in Spark and other engines?
+
+Compile one policy source into an engine-neutral form and inject it into each engine's query plan. policast compiles Cedar policies to CEL and enforces them as Catalyst rules in Spark and as plan rewrites in DataFusion.
+
+### What is OpenLineage?
+
+An open standard, hosted by the LF AI & Data Foundation, for lineage events that describe jobs, runs and the datasets they read and write. Spark, Airflow, Flink and dbt have integrations.
+
+### Can lineage be stored in the lakehouse itself?
+
+Yes. open-lineage-connect writes OpenLineage events to Delta tables, Iceberg tables through a REST catalog, or both.
+
+## Sources
+- [policast README](https://github.com/open-lakehouse/policast#readme)
+- [open-lineage-connect README](https://github.com/open-lakehouse/open-lineage-connect#readme)
+- [OpenLineage](https://openlineage.io)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/policy-and-lineage
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/semantic-layer
+
+# Semantic layer with Spark metric views: Metrics declared in YAML, served over Spark Connect to BI, notebooks and agents
+
+> Define revenue once. Every dashboard, notebook and agent gets the same number.
+
+A semantic layer is the set of governed metric and dimension definitions that sit between tables and the tools that query them. In open source Apache Spark, a metric view declares measures and dimensions in YAML over a source table; consumers query it with the MEASURE() function and Spark expands the definition at query time. Served over Spark Connect or JDBC, the same definitions answer dashboards, notebooks and AI agents, so a metric cannot drift between tools.
+
+## When to use it
+- Different teams report different numbers for the same metric.
+- You want AI agents to answer questions from governed definitions instead of writing raw SQL.
+
+## When not to
+- Spark versions before metric views shipped; the reference demo is verified on Spark 4.2.0.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Gold tables | Facts and dimensions to measure |  |
+| Open table format | Delta Lake | Source tables |  |
+| Catalog | Hive Metastore | Registers the metric view in the demo |  |
+| Compute engines | Apache Spark | Expands MEASURE() at query time | 4.2.0 |
+| Serving | Spark metric views | YAML measures and dimensions |  |
+| Serving | Spark Connect | Remote access for clients and agents |  |
+| Consumers | Apache Superset | Dashboards over the metric view |  |
+| Consumers | Notebooks and AI agents | Ask questions through the same definitions |  |
+
+## How data flows
+1. **Declare metrics.** Write measures and dimensions in YAML over a source table.
+2. **Register.** Create the metric view in the catalog.
+3. **Query with MEASURE().** Clients select dimensions and MEASURE(metric); Spark expands the definition and aggregates at the requested grain.
+4. **Serve everyone.** Dashboards connect over JDBC or Spark Connect, and agents use the same views as tools.
+
+## Run it
+
+### [lisancao/spark-demos](https://github.com/lisancao/spark-demos)
+
+Demo 01_metrics_views: eight metric view examples, a doctor script and a grammar probe, verified on Spark 4.2.0.
+
+## Caveats
+- The reference demo is verified on Spark 4.2.0 and awaits official Spark 4.3 images for re-verification.
+
+## Industry use cases
+- **Banking: Analyst questions in plain language.** Let relationship managers ask about balances and products through governed metric definitions.
+- **Manufacturing: OEE dashboards with one definition.** Define availability, performance and quality once and query them from BI and agents.
+- **Retail and e-commerce: One definition of margin.** Define revenue, margin and sell-through once for BI, notebooks and agents.
+
+## Frequently asked questions
+
+### Does open source Spark have a semantic layer?
+
+Yes. Spark metric views declare measures and dimensions in YAML over a table, and queries use the MEASURE() function to evaluate them.
+
+### Why give AI agents a semantic layer?
+
+Because an agent querying metric views uses the governed definition of each metric instead of inventing its own SQL, so its answers match the dashboards.
+
+## Sources
+- [spark-demos 01_metrics_views](https://github.com/lisancao/spark-demos/tree/main/demos/01_metrics_views)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/semantic-layer
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/ml-lifecycle
+
+# ML and GenAI lifecycle on the lakehouse: MLflow tracking, registry and AI Gateway over open tables
+
+> Every model run points at the exact table version it was trained on.
+
+The ML lifecycle on an open lakehouse ties experiments, models and GenAI traces to versioned tables. Features are built by Spark from silver and gold tables in an open format; each MLflow run records parameters, metrics, artifacts and the table snapshot or version it trained on; the MLflow model registry promotes versions; and the MLflow AI Gateway fronts model providers for GenAI applications. Because tables support time travel, any run can be reproduced against the exact data it saw.
+
+## When to use it
+- You need to reproduce a model from months ago.
+- You train on lakehouse tables and want lineage from data to model.
+- You run GenAI applications and want tracing and evaluation in the same place.
+
+## When not to
+- Low-latency online feature serving by itself: pair it with the real-time streaming pattern and a key-value store.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Sources | Gold feature tables | Training data |  |
+| Open table format | Apache Iceberg | Snapshot ids give reproducible training sets |  |
+| Catalog | Unity Catalog OSS | Tables, and in the course, the catalog the run reads through |  |
+| Compute engines | Apache Spark | Feature engineering and batch scoring |  |
+| ML and AI | MLflow | Tracking, registry, tracing, evaluation and AI Gateway | 3.14.0 in open-lakehouse; 3.1.0 in the course |
+| Orchestration | Apache Airflow | Retraining schedules |  |
+| Consumers | Jupyter | Experiments |  |
+| Consumers | Applications | Call registered models and gateway routes |  |
+
+## How data flows
+1. **Build features.** Spark reads gold tables and writes a feature table.
+2. **Record the data version.** The training run logs the table's snapshot id or version to MLflow alongside parameters and metrics.
+3. **Register.** A good run's model is registered and promoted in the MLflow model registry.
+4. **Serve and trace.** Applications call models and providers through the MLflow AI Gateway; traces land back in MLflow for evaluation.
+
+## Run it
+
+### [open-lakehouse/open-lakehouse](https://github.com/open-lakehouse/open-lakehouse)
+
+Runs MLflow 3.14.0 tracking (:5000) and AI Gateway (:5001) next to Spark, Delta and Unity Catalog.
+
+```bash
+git clone https://github.com/open-lakehouse/open-lakehouse
+cd open-lakehouse
+
+cp .env.example .env       # fill in POSTGRES_*, S3_* placeholders
+./lakehouse setup          # validate env, install deps, download ~860MB of JARs
+./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
+./lakehouse start unity-catalog
+./lakehouse start mlflow
+./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)
+```
+
+### [open-lakehouse/lakehouse-masterclass](https://github.com/open-lakehouse/lakehouse-masterclass)
+
+Chapter 12 trains a model on gold and logs the gold Iceberg snapshot id to MLflow.
+
+## Caveats
+- MLflow 3.x matches --allowed-hosts exactly; the open-lakehouse stack sets localhost:5000 explicitly.
+
+## Industry use cases
+- **Banking: Credit risk model lifecycle.** Track, register and compare probability-of-default models trained on governed features.
+- **Healthcare providers: Readmission risk models.** Track experiments and promote models with a registry that records the training data version.
+- **Energy and utilities: Load forecasting.** Train and track forecast models on years of interval data plus weather.
+- **Retail and e-commerce: Demand forecasting.** Train store-by-SKU forecasts and track which model version produced each order.
+- **Telecommunications: Churn models.** Train and track churn models on usage, care and billing features.
+
+## Frequently asked questions
+
+### How do I make an ML model reproducible on a lakehouse?
+
+Log the table snapshot id (Iceberg) or version (Delta Lake) used for training to the MLflow run; time travel then lets you read exactly that data again.
+
+### Is MLflow open source?
+
+Yes. MLflow is Apache-2.0 licensed and hosted by the Linux Foundation.
+
+## Sources
+- [MLflow docs](https://mlflow.org/docs/latest/)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/ml-lifecycle
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/arrow-native-serving
+
+# Arrow-native serving: Arrow Flight SQL and Spark Connect clients over lakehouse tables
+
+> Results leave as Arrow columns, not rows, in whatever language the client speaks.
+
+Arrow-native serving delivers lakehouse query results as Apache Arrow record batches over gRPC instead of row-by-row JDBC. Two open protocols do this: Arrow Flight SQL, a generic SQL-over-Flight protocol, and Spark Connect, Spark's client-server protocol. A Flight SQL server built on Apache DataFusion can answer queries over Delta tables with policy enforcement and lineage built in, while Spark Connect lets thin clients in Python, Go, Rust, Swift and other languages send plans to a remote Spark and hand the Arrow results straight to DuckDB or Polars.
+
+## When to use it
+- Clients pull large result sets into Python, Rust or other analytical tools.
+- You want to query the lakehouse from a language without a JVM.
+- You want policy and lineage enforced at the serving edge.
+
+## When not to
+- Clients that only speak ODBC or JDBC: put a Flight SQL JDBC driver or a SQL gateway in front.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Open table format | Delta Lake | Tables served |  |
+| Catalog | Unity Catalog OSS | Resolves tables and vends credentials |  |
+| Compute engines | Apache DataFusion | Query engine inside the Flight SQL server | 55 |
+| Compute engines | Apache Spark | Remote engine behind Spark Connect | 4.2.0 in the demos |
+| Serving | hydrofoil | Flight SQL server with Cedar policy and OpenLineage |  |
+| Serving | Arrow Flight SQL | Protocol |  |
+| Serving | Spark Connect | gRPC protocol for Spark clients |  |
+| Governance, lineage and policy | breakwater | Cedar enforcement in the DataFusion planner |  |
+| Governance, lineage and policy | OpenLineage | Lineage emitted per query |  |
+| Consumers | Spark Connect clients | Python, Scala, Go, Rust, OCaml, Swift clients |  |
+| Consumers | DuckDB | Joins Arrow results locally |  |
+
+## How data flows
+1. **Client sends a query or plan.** A Flight SQL client sends SQL, or a Spark Connect client sends an unresolved logical plan over gRPC.
+2. **Server resolves tables.** The server resolves table names through the catalog and obtains storage access.
+3. **Policy applies.** In hydrofoil, Cedar policies are enforced inside the DataFusion plan before execution.
+4. **Arrow streams back.** Results stream to the client as Arrow record batches.
+5. **Zero-copy downstream.** The client hands the same Arrow batches to DuckDB or Polars without conversion.
+
+## Run it
+
+### [open-lakehouse/hydrofoil](https://github.com/open-lakehouse/hydrofoil)
+
+A Flight SQL server over open-table-format tables, built on DataFusion 55 with Cedar policy enforcement, OpenLineage and OpenTelemetry tracing.
+
+### [lisancao/spark-demos](https://github.com/lisancao/spark-demos)
+
+Demos 02 (Spark Connect setup), 08 (OCaml client) and 09 (Rust client with DuckDB 2.0 and Polars on the same Arrow batches).
+
+## Caveats
+- hydrofoil's README does not yet document running the Flight SQL server; its architecture is recorded in docs/adr.
+
+## Frequently asked questions
+
+### What is the difference between Arrow Flight SQL and Spark Connect?
+
+Both stream Apache Arrow over gRPC. Flight SQL is a generic SQL protocol any engine can implement; Spark Connect carries Spark's own logical plans, so clients get the full DataFrame API of a remote Spark.
+
+### Can I use Spark from Rust or Go?
+
+Yes, through Spark Connect clients. spark-demos demo 09 uses the Rust client and passes the Arrow results to DuckDB and Polars.
+
+## Sources
+- [Arrow Flight SQL](https://arrow.apache.org/docs/format/FlightSql.html)
+- [Spark Connect overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/arrow-native-serving
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/cloud-deployment-aws
+
+# Self-hosted catalog on AWS: Unity Catalog OSS on ECS Fargate with Neon Postgres and S3, in Terraform
+
+> The open catalog in your own AWS account, with no static storage keys.
+
+A self-hosted open catalog on AWS runs Unity Catalog OSS as a container on Amazon ECS Fargate behind an Application Load Balancer, keeps catalog metadata in a managed Postgres database, stores configuration on EFS and secrets in AWS Secrets Manager, and vends credentials for an S3 data bucket through a bucket-scoped IAM role instead of static keys. Everything is declared in Terraform, so the catalog can be recreated in another account or region from code.
+
+## When to use it
+- You want an open catalog in your own cloud account.
+- Data residency or sovereignty rules out a hosted service.
+
+## When not to
+- A full compute stack: this reference deploys the catalog server; compute is deployed separately.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Object storage | Amazon S3 | Data bucket reached through a bucket-scoped storage role |  |
+| Catalog | Unity Catalog OSS | Catalog server, digest-pinned and mirrored to ECR | 0.7.0 |
+| Catalog | Neon | Postgres for catalog metadata |  |
+| Orchestration | Amazon ECS on Fargate | Runs the server in a two-AZ VPC behind a public ALB |  |
+| Orchestration | Terraform | Declares the whole deployment | >= 1.11, AWS provider ~> 6.45 |
+| Compute engines | Apache Spark | Any engine with a Unity Catalog or Iceberg REST client |  |
+| Consumers | Engines and users | Reach the catalog through the ALB |  |
+
+## How data flows
+1. **Prepare a profile.** just init-profile and just doctor check AWS credentials and tooling.
+2. **Sync state and secrets.** Terraform state and the Neon connection secret are synced into the account.
+3. **Deploy.** just deploy uc-server applies Terraform: VPC, ALB, ECS service, EFS and the storage role.
+4. **Bootstrap.** The bootstrap step creates the storage credential, the unity catalog and the unity.default schema.
+
+## Run it
+
+### [open-lakehouse/terraform-deploy-oss](https://github.com/open-lakehouse/terraform-deploy-oss)
+
+Terraform and scripts for deploying open source lakehouse services to the cloud, starting with Unity Catalog on AWS.
+
+```bash
+just init-profile prod
+just doctor
+just sync terraform-state
+just sync neon-secret
+just deploy uc-server
+```
+
+### [open-lakehouse/open-lakehouse](https://github.com/open-lakehouse/open-lakehouse)
+
+terraform/ holds AWS deployment for the rest of the stack, including Spark and MLflow on ECS (just deploy spark-ecs, just deploy mlflow-ecs).
+
+```bash
+git clone https://github.com/open-lakehouse/open-lakehouse
+cd open-lakehouse
+
+cp .env.example .env       # fill in POSTGRES_*, S3_* placeholders
+./lakehouse setup          # validate env, install deps, download ~860MB of JARs
+./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
+./lakehouse start unity-catalog
+./lakehouse start mlflow
+./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)
+```
+
+## Caveats
+- Upgrading Unity Catalog from 0.6.0 or earlier needs a schema change: ALTER TABLE uc_properties ALTER COLUMN property_value TYPE text;
+- Unity Catalog 0.7.0 permanently deletes dropped managed table files after seven days.
+- The default ingress CIDR is 0.0.0.0/0; narrow it before production.
+- During the measured v0.7.0 cutover in the sandbox, 5 of 491 requests returned 502 within 8 seconds (docs/unitycatalog/observability.md).
+
+## Industry use cases
+- **Energy and utilities: Self-hosted on AWS.** Run the open stack in the utility's own cloud account with infrastructure as code.
+
+## Frequently asked questions
+
+### How do I deploy Unity Catalog OSS on AWS?
+
+terraform-deploy-oss runs Unity Catalog 0.7.0 on ECS Fargate behind an ALB, with Neon Postgres for metadata, EFS for configuration and a bucket-scoped IAM role for S3, deployed with just deploy uc-server.
+
+## Sources
+- [terraform-deploy-oss](https://github.com/open-lakehouse/terraform-deploy-oss)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/cloud-deployment-aws
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/serverless-lakehouse-services
+
+# Serverless lakehouse services: Catalog and lineage as Neon Functions on branchable Postgres
+
+> Every pull request gets its own catalog, database and bucket.
+
+Serverless lakehouse services package the control plane of an open lakehouse (the catalog, the lineage service and the sharing server) as functions that run per database branch. In luminescent-lakehouse, Rust services built on axum are compiled to Node-API addons and deployed as Neon Functions; each Neon branch gets its own Postgres schema and storage bucket, so a pull request preview has a full, isolated catalog and lineage service that disappears with the branch.
+
+## When to use it
+- You want preview environments with their own catalog per pull request.
+- You want to run lakehouse control-plane services without operating servers.
+
+## When not to
+- Data-plane compute: engines still run elsewhere and talk to these services over HTTP.
+
+## Components
+
+| Layer | Component | Role | Version |
+|---|---|---|---|
+| Catalog | Neon | Per-branch Postgres and storage bucket |  |
+| Catalog | unitycatalog-rs | Catalog function (mangrove server) |  |
+| Governance, lineage and policy | headwaters | OpenLineage ingest with Marquez-compatible reads |  |
+| Serving | distributary | Sharing function; built and tested, not yet deployed |  |
+| Open table format | Delta Lake | Managed tables under s3://lakehouse/managed |  |
+| Consumers | Engines and apps | Call the functions over HTTPS |  |
+
+## How data flows
+1. **Build.** Each Rust service is compiled to a linux-arm64 Node-API addon and bundled within Neon's size limits.
+2. **Migrate a branch.** Deploying to a Neon branch runs the database migrations for that branch.
+3. **Deploy functions.** The catalog and lineage functions are applied to the branch from neon.ts.
+4. **Promote.** Pull requests get preview branches, merges deploy to staging, and production needs manual approval.
+
+## Run it
+
+### [open-lakehouse/luminescent-lakehouse](https://github.com/open-lakehouse/luminescent-lakehouse)
+
+Deploys open-lakehouse services (Unity Catalog, OpenLineage, OpenSharing) to Neon as functions.
+
+```bash
+just test <fn>         # host-native addon behind the fetch handler, node --test
+just build <fn>        # linux-arm64 bundle + zip, gated on Neon's size limits
+just test-arm64 <fn>   # the deployable bundle in node:24-bookworm-slim
+just deploy <branch>   # migrate a Neon branch and apply neon.ts to it
+```
+
+## Caveats
+- The opensharing function builds and passes tests but is not in neon.ts yet; only the catalog and lineage functions deploy.
+
+## Frequently asked questions
+
+### Can a data catalog run serverless?
+
+Yes. luminescent-lakehouse runs a Unity Catalog implementation and an OpenLineage service as Neon Functions, with a separate Postgres branch and bucket per environment.
+
+## Sources
+- [luminescent-lakehouse](https://github.com/open-lakehouse/luminescent-lakehouse)
+
+Last updated: 2026-11-21. Canonical page: https://openlakehouse.io/reference-architectures/serverless-lakehouse-services
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/banking
+
+# Open source data architecture for Banking
+
+Banks move core banking ledgers, card authorizations and payment messages into open tables so fraud, risk and regulatory reporting read one governed copy instead of a mart per team.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| Core banking system | Nightly batch extracts plus CDC from the ledger database |
+| Card authorization switch | Streaming, one event per authorization |
+| Payment hub | Streaming ISO 20022 messages |
+| CRM and digital channels | Hourly batch and clickstream events |
+| Market and reference data feeds | Intraday batch files |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [ISO 20022](https://www.iso20022.org) | ISO | XML message standard for payments and securities |
+| [SWIFT MT](https://www.swift.com/standards/category-7-mt) | Swift | Legacy FIN messages still exchanged during the MX migration |
+| [ISO 8583](https://www.iso.org/standard/79451.html) | ISO | Card transaction message format |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw ledger extracts and payment messages
+- **Silver:** Conformed accounts, customers and transactions
+- **Gold:** Exposure, liquidity and fraud features
+
+## Use cases and the architecture for each
+- **Real-time card fraud scoring.** Score each authorization against recent account behaviour before the switch times out. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **Regulatory reporting from one copy.** Build liquidity and capital reports from conformed silver tables with lineage an auditor can follow. Architecture: [Policy pushdown and open lineage](https://openlakehouse.io/reference-architectures/policy-and-lineage).
+- **Core banking CDC into the lakehouse.** Keep a current and historical (SCD type 2) view of accounts without full nightly reloads. Architecture: [Change data capture with SCD type 2](https://openlakehouse.io/reference-architectures/change-data-capture).
+- **Credit risk model lifecycle.** Track, register and compare probability-of-default models trained on governed features. Architecture: [ML and GenAI lifecycle on the lakehouse](https://openlakehouse.io/reference-architectures/ml-lifecycle).
+- **Analyst questions in plain language.** Let relationship managers ask about balances and products through governed metric definitions. Architecture: [Semantic layer with Spark metric views](https://openlakehouse.io/reference-architectures/semantic-layer).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/banking
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/payments-fintech
+
+# Open source data architecture for Payments and fintech
+
+Payment processors and fintechs run on event streams; the lakehouse holds the durable history that fraud models, reconciliation and merchant analytics read.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| Payment gateway and acquirer | Streaming authorization and capture events |
+| ACH and real-time payment rails | Batch files and streaming ISO 20022 |
+| Application databases | CDC through Debezium |
+| Mobile app events | Streaming clickstream |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [ISO 8583](https://www.iso.org/standard/79451.html) | ISO | Card network messages |
+| [ISO 20022](https://www.iso20022.org) | ISO | Real-time and cross-border payment messages |
+| [Nacha ACH file format](https://www.nacha.org) | Nacha | Fixed-width US ACH batch files |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw gateway events and rail files
+- **Silver:** One row per payment with its lifecycle state
+- **Gold:** Merchant settlement, chargeback and fraud features
+
+## Use cases and the architecture for each
+- **Sub-second fraud features.** Maintain velocity counters per card and device and serve them while the payment is still in flight. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **Ledger reconciliation.** Match gateway, processor and bank files every day and surface the breaks. Architecture: [Batch medallion with Spark Declarative Pipelines](https://openlakehouse.io/reference-architectures/batch-medallion).
+- **Streaming payment history into tables.** Land every gateway event in a bronze table and keep silver current within seconds. Architecture: [Streaming medallion](https://openlakehouse.io/reference-architectures/streaming-medallion).
+- **Migrating a Flink fraud job to Spark.** Port keyed state and windows to Spark and measure whether latency holds. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **Governed agent for merchant support.** Let an agent answer settlement questions with tools limited by policy. Architecture: [Governed AI agents for data engineering](https://openlakehouse.io/reference-architectures/governed-ai-agents).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/payments-fintech
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/healthcare
+
+# Open source data architecture for Healthcare providers
+
+Health systems pull EHR, claims and device data into open tables mapped to a common data model, with strict access policy on every column that identifies a patient.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| Electronic health record | HL7 v2 feeds, FHIR APIs and bulk exports |
+| Claims and billing | Batch X12 837 and 835 files |
+| Imaging archive (PACS) | DICOM objects and metadata |
+| Bedside and remote monitoring devices | Streaming vitals |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [HL7 FHIR](https://hl7.org/fhir/) | HL7 International | REST resources and bulk NDJSON exports for clinical data |
+| [HL7 v2](https://www.hl7.org/implement/standards/product_brief.cfm?product_id=185) | HL7 International | Pipe-delimited ADT, ORU and ORM messages |
+| [DICOM](https://www.dicomstandard.org) | NEMA (DICOM Standards Committee) | Medical imaging objects and metadata |
+| [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) | OHDSI | Common data model for observational research |
+| [X12 837/835](https://x12.org) | X12 | Claim and remittance transactions |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw HL7, FHIR bundles and claim files
+- **Silver:** OMOP-conformed persons, visits, conditions and measurements
+- **Gold:** Quality measures, readmission risk and capacity dashboards
+
+## Use cases and the architecture for each
+- **Patient-level access policy.** Enforce row filters and column masks on PHI the same way in every engine that reads the tables. Architecture: [Policy pushdown and open lineage](https://openlakehouse.io/reference-architectures/policy-and-lineage).
+- **Real-time deterioration alerts.** Score streaming vitals against early-warning rules and push alerts to care teams. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **FHIR bulk export to OMOP.** Land FHIR NDJSON in bronze and transform it into the OMOP common data model. Architecture: [Batch medallion with Spark Declarative Pipelines](https://openlakehouse.io/reference-architectures/batch-medallion).
+- **Readmission risk models.** Track experiments and promote models with a registry that records the training data version. Architecture: [ML and GenAI lifecycle on the lakehouse](https://openlakehouse.io/reference-architectures/ml-lifecycle).
+- **Research data sharing.** Share de-identified cohorts with a university partner as live tables. Architecture: [Open data sharing](https://openlakehouse.io/reference-architectures/open-data-sharing).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/healthcare
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/manufacturing
+
+# Open source data architecture for Manufacturing
+
+Plants stream machine telemetry from the shop floor, join it with MES and ERP records, and use the result for predictive maintenance, quality and OEE.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| PLCs and SCADA via OPC UA | Streaming sensor tags |
+| Plant historian | Batch backfill and streaming |
+| Manufacturing execution system (MES) | CDC |
+| ERP | Nightly batch |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [OPC UA](https://opcfoundation.org/about/opc-technologies/opc-ua/) | OPC Foundation | Industrial machine-to-machine protocol and information model |
+| [MQTT](https://mqtt.org) | OASIS | Lightweight publish/subscribe messaging for devices |
+| [Sparkplug](https://sparkplug.eclipse.org) | Eclipse Foundation | MQTT topic and payload specification for industrial data |
+| [ISA-95](https://www.isa.org/standards-and-publications/isa-standards/isa-95-standard) | ISA | Model for enterprise and control system integration |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw tag readings and MES events
+- **Silver:** Asset-aligned time series on the ISA-95 hierarchy
+- **Gold:** OEE, scrap rate and failure predictions
+
+## Use cases and the architecture for each
+- **Predictive maintenance.** Compute rolling sensor features per asset and score failure risk continuously. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **Telemetry into tables.** Land MQTT and OPC UA readings in bronze and keep asset-level silver current. Architecture: [Streaming medallion](https://openlakehouse.io/reference-architectures/streaming-medallion).
+- **OEE dashboards with one definition.** Define availability, performance and quality once and query them from BI and agents. Architecture: [Semantic layer with Spark metric views](https://openlakehouse.io/reference-architectures/semantic-layer).
+- **Supplier data exchange.** Share quality and demand tables with suppliers as live tables. Architecture: [Open data sharing](https://openlakehouse.io/reference-architectures/open-data-sharing).
+- **Quality and scrap analytics.** Join MES quality checks with ERP orders every shift to find where scrap comes from. Architecture: [Batch medallion with Spark Declarative Pipelines](https://openlakehouse.io/reference-architectures/batch-medallion).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/manufacturing
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/energy-utilities
+
+# Open source data architecture for Energy and utilities
+
+Utilities combine smart meter interval data, grid telemetry and asset records for load forecasting, outage response and regulatory filings.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| Advanced metering infrastructure (AMI) | Interval reads every 15 minutes, batch and streaming |
+| SCADA and substation automation | Streaming telemetry |
+| Outage management system | Streaming events |
+| GIS and asset registry | Batch |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [IEC 61850](https://webstore.iec.ch/en/publication/6028) | IEC | Substation automation communication |
+| [CIM (IEC 61970 / 61968)](https://cimug.ucaiug.org) | IEC | Common information model for grid and distribution |
+| [Green Button](https://www.greenbuttonalliance.org) | Green Button Alliance | Customer energy usage data exchange |
+| [DNP3 (IEEE 1815)](https://standards.ieee.org/ieee/1815/10003/) | IEEE | SCADA protocol for utilities |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw interval reads and SCADA points
+- **Silver:** Validated, estimated and edited (VEE) meter data on the CIM network model
+- **Gold:** Load forecasts, outage KPIs and rate-case reports
+
+## Use cases and the architecture for each
+- **Load forecasting.** Train and track forecast models on years of interval data plus weather. Architecture: [ML and GenAI lifecycle on the lakehouse](https://openlakehouse.io/reference-architectures/ml-lifecycle).
+- **Meter data at scale.** Process billions of interval reads a day through bronze, VEE silver and billing gold. Architecture: [Batch medallion with Spark Declarative Pipelines](https://openlakehouse.io/reference-architectures/batch-medallion).
+- **Outage detection from streaming telemetry.** Correlate last-gasp meter events and SCADA alarms within seconds. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **Regulator and partner sharing.** Share reliability metrics with regulators as live tables. Architecture: [Open data sharing](https://openlakehouse.io/reference-architectures/open-data-sharing).
+- **Self-hosted on AWS.** Run the open stack in the utility's own cloud account with infrastructure as code. Architecture: [Self-hosted catalog on AWS](https://openlakehouse.io/reference-architectures/cloud-deployment-aws).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/energy-utilities
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/retail-ecommerce
+
+# Open source data architecture for Retail and e-commerce
+
+Retailers and online stores bring point-of-sale, clickstream, inventory, supply chain and loyalty data together for demand forecasting, replenishment, personalization and fraud.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| Point-of-sale systems | Streaming baskets, end-of-day batch |
+| Web and app clickstream | Streaming events |
+| Inventory and warehouse management | CDC |
+| Supplier EDI | Batch X12 or EDIFACT documents |
+| Loyalty and CRM | Batch |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [GS1 EPCIS](https://www.gs1.org/standards/epcis) | GS1 | Supply chain visibility events |
+| [GTIN](https://www.gs1.org/standards/id-keys/gtin) | GS1 | Global trade item numbers that key the product master |
+| [ANSI X12 (850, 856, 810)](https://x12.org) | X12 | Purchase orders, ship notices and invoices |
+| [UN/EDIFACT](https://unece.org/trade/uncefact/introducing-unedifact) | UNECE | International EDI messages |
+| [CloudEvents](https://cloudevents.io) | CNCF | Common envelope for clickstream and order events |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw baskets, EDI documents and stock snapshots
+- **Silver:** Sales, inventory and orders keyed by GTIN and store
+- **Gold:** Forecasts, replenishment orders and customer segments
+
+## Use cases and the architecture for each
+- **Demand forecasting.** Train store-by-SKU forecasts and track which model version produced each order. Architecture: [ML and GenAI lifecycle on the lakehouse](https://openlakehouse.io/reference-architectures/ml-lifecycle).
+- **Real-time inventory.** Keep stock positions current from POS and warehouse events so online orders do not oversell. Architecture: [Streaming medallion](https://openlakehouse.io/reference-architectures/streaming-medallion).
+- **Supplier collaboration.** Share sell-through and stock tables with suppliers instead of sending reports. Architecture: [Open data sharing](https://openlakehouse.io/reference-architectures/open-data-sharing).
+- **One definition of margin.** Define revenue, margin and sell-through once for BI, notebooks and agents. Architecture: [Semantic layer with Spark metric views](https://openlakehouse.io/reference-architectures/semantic-layer).
+- **In-session recommendations.** Update product recommendations while the shopper is still browsing. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **Clickstream to sessions.** Sessionize web and app events with watermarks and land them as tables for funnel analysis. Architecture: [Streaming medallion](https://openlakehouse.io/reference-architectures/streaming-medallion).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/retail-ecommerce
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/telecommunications
+
+# Open source data architecture for Telecommunications
+
+Operators collect network performance counters, call detail records and customer data for network planning, churn and service assurance.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| Network elements and OSS | Streaming performance counters and alarms |
+| Mediation (CDRs and xDRs) | Batch files every few minutes |
+| BSS: billing and CRM | CDC |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [3GPP charging data records](https://www.3gpp.org/specifications-technologies) | 3GPP | CDR formats defined in TS 32.297 and related specs |
+| [TM Forum Open APIs](https://www.tmforum.org/oda/open-apis/) | TM Forum | Standard APIs for BSS and OSS integration |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw counters, alarms and CDR files
+- **Silver:** Cell, subscriber and session-level facts
+- **Gold:** Network KPIs, churn scores and capacity plans
+
+## Use cases and the architecture for each
+- **Service assurance.** Correlate alarms and KPI drops across cells within seconds. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **CDR processing.** Process mediation files into rated usage tables every few minutes. Architecture: [Streaming medallion](https://openlakehouse.io/reference-architectures/streaming-medallion).
+- **Churn models.** Train and track churn models on usage, care and billing features. Architecture: [ML and GenAI lifecycle on the lakehouse](https://openlakehouse.io/reference-architectures/ml-lifecycle).
+- **Subscriber data protection.** Mask subscriber identifiers for analysts and keep lineage for regulators. Architecture: [Policy pushdown and open lineage](https://openlakehouse.io/reference-architectures/policy-and-lineage).
+- **Network planning on many engines.** Run heavy jobs in Spark and interactive exploration in Trino against one catalog. Architecture: [One catalog, many engines](https://openlakehouse.io/reference-architectures/multi-engine-catalog).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/telecommunications
+
+---
+
+URL: https://openlakehouse.io/reference-architectures/industries/cybersecurity
+
+# Open source data architecture for Cybersecurity
+
+Security teams keep years of logs in open tables at object-storage prices and run detections, hunts and investigations over them with several engines.
+
+## Source systems
+
+| System | How data arrives |
+|---|---|
+| Endpoint, identity and network logs | Streaming |
+| Cloud audit logs | Streaming and batch |
+| Threat intelligence feeds | Batch STIX bundles |
+
+## Data formats and standards
+
+| Format | Standards body | What it carries |
+|---|---|---|
+| [OCSF](https://ocsf.io) | OCSF project | Open Cybersecurity Schema Framework for normalized security events |
+| [STIX / TAXII](https://oasis-open.github.io/cti-documentation/) | OASIS | Threat intelligence objects and transport |
+| [Sigma](https://sigmahq.io) | SigmaHQ | Generic detection rule format |
+
+## Medallion layers in this industry's terms
+- **Bronze:** Raw logs per source
+- **Silver:** OCSF-normalized events
+- **Gold:** Detections, incidents and entity timelines
+
+## Use cases and the architecture for each
+- **Streaming detections.** Evaluate detection rules on normalized events within seconds of arrival. Architecture: [Real-time streaming with Spark Real-Time Mode](https://openlakehouse.io/reference-architectures/real-time-streaming).
+- **Security data lake.** Normalize every source to OCSF in silver and keep years of history cheaply. Architecture: [Streaming medallion](https://openlakehouse.io/reference-architectures/streaming-medallion).
+- **Threat hunting with any engine.** Hunt in DuckDB or Trino over the same tables that Spark writes. Architecture: [One catalog, many engines](https://openlakehouse.io/reference-architectures/multi-engine-catalog).
+- **Least-privilege access to logs.** Restrict sensitive log fields by role in every engine. Architecture: [Policy pushdown and open lineage](https://openlakehouse.io/reference-architectures/policy-and-lineage).
+- **Investigation agents.** Let an agent query logs and draft incident timelines under strict tool policy. Architecture: [Governed AI agents for data engineering](https://openlakehouse.io/reference-architectures/governed-ai-agents).
+
+Canonical page: https://openlakehouse.io/reference-architectures/industries/cybersecurity

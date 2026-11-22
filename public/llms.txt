@@ -10,6 +10,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [Home](https://openlakehouse.io/): What the Open Lakehouse is and why it matters.
 - [Technologies](https://openlakehouse.io/technologies): Every open-source building block, grouped by layer.
 - [Open Source Data Engineering](https://openlakehouse.io/open-source-data-engineering): What open source data engineering is, the reference stack, and the projects that make it up.
+- [Reference Architectures](https://openlakehouse.io/reference-architectures): Interactive open source data engineering reference architectures, each backed by a runnable repo, with industry lenses.
 - [Learn](https://openlakehouse.io/learn): Curated guides, talks, and tutorials.
 - [Community](https://openlakehouse.io/community): Where practitioners gather.
 - [Authors](https://openlakehouse.io/authors): Maintainers, authors, and practitioners in the Open Lakehouse community.
@@ -18,6 +19,80 @@ full text of every article is mirrored in /llms-full.txt.
 
 ## Pillar references
 - [Delta Lake](https://openlakehouse.io/technologies/delta-lake): What Delta Lake is, how it works, who created it, and how it compares to Iceberg.
+
+## Data Engineering Reference Architectures
+- [Data Engineering Reference Architectures](https://openlakehouse.io/reference-architectures): Open source data engineering reference architectures: interactive, runnable blueprints for batch and streaming medallion pipelines, real-time streaming, multi-engine catalogs, governed AI agents and data sharing, mapped to industry use cases and backed by public repositories.
+- [Machine-readable catalog (JSON)](https://openlakehouse.io/reference-architectures.json): Every architecture, component and industry lens as JSON.
+- [Batch medallion with Spark Declarative Pipelines: Spark 4.3, Apache Iceberg and Unity Catalog with bronze, silver and gold](https://openlakehouse.io/reference-architectures/batch-medallion): Declare the tables, let Spark work out the order, keep every layer in an open format. Markdown: https://openlakehouse.io/reference-architectures/batch-medallion.md
+- [Change data capture with SCD type 2: AUTO CDC in Spark Declarative Pipelines, from a Kafka change feed into Apache Iceberg](https://openlakehouse.io/reference-architectures/change-data-capture): Keep the current state and every past version of each row, without hand-written MERGE logic. Markdown: https://openlakehouse.io/reference-architectures/change-data-capture.md
+- [Streaming medallion: Kafka, Spark Structured Streaming and Delta Lake in Unity Catalog](https://openlakehouse.io/reference-architectures/streaming-medallion): Events in, governed tables out, minutes or seconds behind the source. Markdown: https://openlakehouse.io/reference-architectures/streaming-medallion.md
+- [Real-time streaming with Spark Real-Time Mode: Kafka in, Kafka out, milliseconds in between](https://openlakehouse.io/reference-architectures/real-time-streaming): Continuous processing for fraud, recommendations and live boards, measured end to end. Markdown: https://openlakehouse.io/reference-architectures/real-time-streaming.md
+- [One catalog, many engines: Unity Catalog OSS with Spark, DuckDB, PyIceberg and Trino on Delta and Iceberg](https://openlakehouse.io/reference-architectures/multi-engine-catalog): Write once, read from whatever engine fits the question. Markdown: https://openlakehouse.io/reference-architectures/multi-engine-catalog.md
+- [Governed AI agents for data engineering: Spark Declarative Pipelines, Spark Connect, Kubernetes and a governed Iceberg REST catalog](https://openlakehouse.io/reference-architectures/governed-ai-agents): Agents write pipeline specs; the platform decides what they are allowed to touch. Markdown: https://openlakehouse.io/reference-architectures/governed-ai-agents.md
+- [Open data sharing: Delta Sharing servers over Unity Catalog and open tables](https://openlakehouse.io/reference-architectures/open-data-sharing): Share live tables with another organization without copying them or sending files. Markdown: https://openlakehouse.io/reference-architectures/open-data-sharing.md
+- [The open lakehouse on a laptop: Spark, Delta Lake, Unity Catalog, Kafka, Airflow and MLflow in Docker](https://openlakehouse.io/reference-architectures/laptop-open-lakehouse): The whole stack, one command at a time, on the machine in front of you. Markdown: https://openlakehouse.io/reference-architectures/laptop-open-lakehouse.md
+- [Policy pushdown and open lineage: Cedar policies compiled to CEL, enforced in Spark and DataFusion, with OpenLineage](https://openlakehouse.io/reference-architectures/policy-and-lineage): Write access rules once, enforce them inside every engine, and record where every column came from. Markdown: https://openlakehouse.io/reference-architectures/policy-and-lineage.md
+- [Semantic layer with Spark metric views: Metrics declared in YAML, served over Spark Connect to BI, notebooks and agents](https://openlakehouse.io/reference-architectures/semantic-layer): Define revenue once. Every dashboard, notebook and agent gets the same number. Markdown: https://openlakehouse.io/reference-architectures/semantic-layer.md
+- [ML and GenAI lifecycle on the lakehouse: MLflow tracking, registry and AI Gateway over open tables](https://openlakehouse.io/reference-architectures/ml-lifecycle): Every model run points at the exact table version it was trained on. Markdown: https://openlakehouse.io/reference-architectures/ml-lifecycle.md
+- [Arrow-native serving: Arrow Flight SQL and Spark Connect clients over lakehouse tables](https://openlakehouse.io/reference-architectures/arrow-native-serving): Results leave as Arrow columns, not rows, in whatever language the client speaks. Markdown: https://openlakehouse.io/reference-architectures/arrow-native-serving.md
+- [Self-hosted catalog on AWS: Unity Catalog OSS on ECS Fargate with Neon Postgres and S3, in Terraform](https://openlakehouse.io/reference-architectures/cloud-deployment-aws): The open catalog in your own AWS account, with no static storage keys. Markdown: https://openlakehouse.io/reference-architectures/cloud-deployment-aws.md
+- [Serverless lakehouse services: Catalog and lineage as Neon Functions on branchable Postgres](https://openlakehouse.io/reference-architectures/serverless-lakehouse-services): Every pull request gets its own catalog, database and bucket. Markdown: https://openlakehouse.io/reference-architectures/serverless-lakehouse-services.md
+
+## Open source data engineering resources
+- [open-lakehouse (Runnable stacks and courses)](https://github.com/open-lakehouse/open-lakehouse): Spark, Delta Lake, Unity Catalog, Kafka, Airflow and MLflow in Docker, with an AWS path.
+- [unitycatalog-playground (Runnable stacks and courses)](https://github.com/open-lakehouse/unitycatalog-playground): Unity Catalog OSS with Spark, Delta and Iceberg in marimo notebooks.
+- [lakehouse-masterclass (Runnable stacks and courses)](https://github.com/open-lakehouse/lakehouse-masterclass): A textbook course that builds an open lakehouse one service per chapter.
+- [Spark Masterclass (Runnable stacks and courses)](https://lisancao.github.io/spark-masterclass/): A runnable online book on Apache Spark 4.3; every number traces to a script.
+- [spark-demos (Runnable stacks and courses)](https://github.com/lisancao/spark-demos): One runnable demo per Spark feature: metric views, Spark Connect, Real-Time Mode and more.
+- [safe-spark-agents-paper (Runnable stacks and courses)](https://github.com/open-lakehouse/safe-spark-agents-paper): A reproducible study and reference architecture for AI agents building Spark pipelines.
+- [Delta Lake (Open table formats)](https://github.com/delta-io/delta): Transaction-log table format; the protocol is in PROTOCOL.md.
+- [delta-rs (Open table formats)](https://github.com/delta-io/delta-rs): Native Rust and Python library for Delta tables, no JVM.
+- [delta-kernel-rs (Open table formats)](https://github.com/delta-io/delta-kernel-rs): A Rust kernel that engines embed to read and write Delta.
+- [Apache Iceberg (Open table formats)](https://github.com/apache/iceberg): Metadata-tree table format with a REST catalog specification.
+- [PyIceberg (Open table formats)](https://github.com/apache/iceberg-python): Pure-Python Iceberg reads and writes.
+- [iceberg-rust (Open table formats)](https://github.com/apache/iceberg-rust): The Rust implementation of Apache Iceberg.
+- [Apache Hudi (Open table formats)](https://github.com/apache/hudi): Table format built around upserts and incremental queries.
+- [Unity Catalog OSS (Catalogs)](https://github.com/unitycatalog/unitycatalog): Tables, volumes, functions and models, with Iceberg REST and credential vending.
+- [Apache Polaris (Catalogs)](https://github.com/apache/polaris): An implementation of the Iceberg REST catalog specification.
+- [Lakekeeper (Catalogs)](https://github.com/lakekeeper/lakekeeper): Iceberg REST catalog in Rust.
+- [unitycatalog-rs (Catalogs)](https://github.com/open-lakehouse/unitycatalog-rs): Rust implementation of the Unity Catalog OSS APIs.
+- [Apache Spark (Compute engines)](https://github.com/apache/spark): Batch, SQL, Structured Streaming and declarative pipelines.
+- [Apache Flink (Compute engines)](https://github.com/apache/flink): Stateful stream processing.
+- [Trino (Compute engines)](https://github.com/trinodb/trino): Distributed SQL across catalogs.
+- [DuckDB (Compute engines)](https://github.com/duckdb/duckdb): In-process analytical SQL.
+- [Apache DataFusion (Compute engines)](https://github.com/apache/datafusion): Embeddable Rust query engine on Arrow.
+- [Polars (Compute engines)](https://github.com/pola-rs/polars): Arrow-native DataFrames in Rust and Python.
+- [Apache Kafka (Streaming and ingestion)](https://github.com/apache/kafka): The event log most streaming architectures start from.
+- [Debezium (Streaming and ingestion)](https://github.com/debezium/debezium): Change data capture from database logs.
+- [spark-rtm-quickstart (Streaming and ingestion)](https://github.com/lisancao/spark-rtm-quickstart): Spark Real-Time Mode pipelines with a latency harness.
+- [Apache Airflow (Orchestration)](https://github.com/apache/airflow): Python DAG scheduler.
+- [Dagster (Orchestration)](https://github.com/dagster-io/dagster): Asset-oriented orchestration.
+- [Temporal (Orchestration)](https://github.com/temporalio/temporal): Durable execution for long-running workflows.
+- [OpenLineage (Governance, lineage and policy)](https://github.com/OpenLineage/OpenLineage): Open standard for lineage events.
+- [Marquez (Governance, lineage and policy)](https://github.com/MarquezProject/marquez): Reference OpenLineage server and UI.
+- [policast (Governance, lineage and policy)](https://github.com/open-lakehouse/policast): Cedar policies compiled to CEL and enforced inside Spark and DataFusion plans.
+- [breakwater (Governance, lineage and policy)](https://github.com/open-lakehouse/breakwater): Cedar row filters and column masks for DataFusion.
+- [open-lineage-connect (Governance, lineage and policy)](https://github.com/open-lakehouse/open-lineage-connect): OpenLineage events stored as Delta and Iceberg tables.
+- [MLflow (ML and AI)](https://github.com/mlflow/mlflow): Tracking, registry, GenAI tracing, evaluation and AI Gateway.
+- [lakehouse-agent-kit (ML and AI)](https://github.com/open-lakehouse/lakehouse-agent-kit): Agent skills for the open lakehouse stack.
+- [Model Context Protocol (ML and AI)](https://modelcontextprotocol.io): Open protocol for giving agents tools and data.
+- [Delta Lake protocol (Specs and protocols)](https://github.com/delta-io/delta/blob/master/PROTOCOL.md): How the Delta transaction log works.
+- [Iceberg table spec (Specs and protocols)](https://iceberg.apache.org/spec/): Iceberg metadata, manifests and snapshots.
+- [Iceberg REST catalog spec (Specs and protocols)](https://iceberg.apache.org/rest-catalog-spec/): The HTTP API catalogs implement for Iceberg.
+- [Delta Sharing protocol (Specs and protocols)](https://github.com/delta-io/delta-sharing/blob/main/PROTOCOL.md): REST protocol for sharing live tables.
+- [Spark Connect (Specs and protocols)](https://spark.apache.org/docs/latest/spark-connect-overview.html): Spark's client-server protocol.
+- [Arrow Flight SQL (Specs and protocols)](https://arrow.apache.org/docs/format/FlightSql.html): SQL over Arrow Flight.
+- [OpenLineage spec (Specs and protocols)](https://github.com/OpenLineage/OpenLineage/tree/main/spec): The lineage event model and facets.
+
+## Data engineering architectures by industry
+- [Open source data architecture for Banking](https://openlakehouse.io/reference-architectures/industries/banking): Banks move core banking ledgers, card authorizations and payment messages into open tables so fraud, risk and regulatory reporting read one governed copy instead of a mart per team.
+- [Open source data architecture for Payments and fintech](https://openlakehouse.io/reference-architectures/industries/payments-fintech): Payment processors and fintechs run on event streams; the lakehouse holds the durable history that fraud models, reconciliation and merchant analytics read.
+- [Open source data architecture for Healthcare providers](https://openlakehouse.io/reference-architectures/industries/healthcare): Health systems pull EHR, claims and device data into open tables mapped to a common data model, with strict access policy on every column that identifies a patient.
+- [Open source data architecture for Manufacturing](https://openlakehouse.io/reference-architectures/industries/manufacturing): Plants stream machine telemetry from the shop floor, join it with MES and ERP records, and use the result for predictive maintenance, quality and OEE.
+- [Open source data architecture for Energy and utilities](https://openlakehouse.io/reference-architectures/industries/energy-utilities): Utilities combine smart meter interval data, grid telemetry and asset records for load forecasting, outage response and regulatory filings.
+- [Open source data architecture for Retail and e-commerce](https://openlakehouse.io/reference-architectures/industries/retail-ecommerce): Retailers and online stores bring point-of-sale, clickstream, inventory, supply chain and loyalty data together for demand forecasting, replenishment, personalization and fraud.
+- [Open source data architecture for Telecommunications](https://openlakehouse.io/reference-architectures/industries/telecommunications): Operators collect network performance counters, call detail records and customer data for network planning, churn and service assurance.
+- [Open source data architecture for Cybersecurity](https://openlakehouse.io/reference-architectures/industries/cybersecurity): Security teams keep years of logs in open tables at object-storage prices and run detections, hunts and investigations over them with several engines.
 
 ## Technology categories
 - [Compute Engines](https://openlakehouse.io/technologies/compute-engines)

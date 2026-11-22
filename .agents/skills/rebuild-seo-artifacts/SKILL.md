@@ -19,6 +19,8 @@ use to discover and cite content. They are generated, never hand-edited.
 | `public/sitemap.xml` | Every public route, for search-engine crawlers |
 | `public/llms.txt` | Curated, citable index of pages ([llmstxt.org](https://llmstxt.org)) |
 | `public/llms-full.txt` | Full text of every published article, for LLM retrieval |
+| `public/reference-architectures.json` | Every reference architecture, component and industry lens |
+| `public/reference-architectures/**.md` | Markdown twin of each architecture and industry page |
 
 ## Single source of truth
 

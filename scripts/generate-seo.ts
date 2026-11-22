@@ -8,7 +8,7 @@
 // The canonical origin comes from src/lib/seo.ts (SITE_URL) so URLs never
 // drift between the app <head>, robots.txt, and these files.
 
-import { writeFileSync, readdirSync, readFileSync, statSync } from "fs";
+import { writeFileSync, readdirSync, readFileSync, statSync, mkdirSync, rmSync } from "fs";
 import { resolve, join } from "path";
 import { SITE_URL, SITE_NAME, SITE_DESCRIPTION } from "../src/lib/seo";
 import {
@@ -20,6 +20,22 @@ import {
   STACK as GUIDE_STACK,
   TITLE as GUIDE_TITLE,
 } from "../src/content/open-source-data-engineering";
+import {
+  HUB_DEFINITION as RA_DEFINITION,
+  HUB_DESCRIPTION as RA_DESCRIPTION,
+  HUB_FAQS as RA_FAQS,
+  HUB_PATH as RA_PATH,
+  HUB_TITLE as RA_TITLE,
+  HUB_UPDATED as RA_UPDATED,
+  INDUSTRIES as RA_INDUSTRIES,
+  PATTERNS as RA_PATTERNS,
+  RESOURCE_GROUPS as RA_RESOURCES,
+  dataset as raDataset,
+  industryMarkdown,
+  industryPath,
+  patternMarkdown,
+  patternPath,
+} from "../src/content/reference-architectures";
 
 const BASE_URL = SITE_URL;
 
@@ -36,6 +52,7 @@ const staticEntries: SitemapEntry[] = [
   { path: "/", changefreq: "weekly", priority: "1.0" },
   { path: "/technologies", changefreq: "weekly", priority: "0.9" },
   { path: "/open-source-data-engineering", changefreq: "monthly", priority: "0.9" },
+  { path: "/reference-architectures", changefreq: "weekly", priority: "0.9" },
   { path: "/learn", changefreq: "weekly", priority: "0.8" },
   { path: "/community", changefreq: "monthly", priority: "0.6" },
   { path: "/authors", changefreq: "monthly", priority: "0.6" },
@@ -49,6 +66,8 @@ const NAV_DESCRIPTIONS: Record<string, string> = {
   "/technologies": "Every open-source building block, grouped by layer.",
   "/open-source-data-engineering":
     "What open source data engineering is, the reference stack, and the projects that make it up.",
+  "/reference-architectures":
+    "Interactive open source data engineering reference architectures, each backed by a runnable repo, with industry lenses.",
   "/learn": "Curated guides, talks, and tutorials.",
   "/community": "Where practitioners gather.",
   "/authors": "Maintainers, authors, and practitioners in the Open Lakehouse community.",
@@ -262,6 +281,13 @@ function buildSitemapEntries(): SitemapEntry[] {
     entries.push({ path: `/authors/${a.slug}`, changefreq: "monthly", priority: "0.4" });
   }
 
+  for (const p of RA_PATTERNS) {
+    entries.push({ path: patternPath(p.slug), lastmod: p.updated, changefreq: "monthly", priority: "0.8" });
+  }
+  for (const i of RA_INDUSTRIES) {
+    entries.push({ path: industryPath(i.slug), lastmod: RA_UPDATED, changefreq: "monthly", priority: "0.7" });
+  }
+
   return entries;
 }
 
@@ -321,6 +347,24 @@ function renderLlms(): string {
     lines.push(
       withDesc(formatCategory(slug), `/technologies/${slug}`, PILLAR_DESCRIPTIONS[slug]),
     );
+  }
+  lines.push("");
+
+  lines.push(`## ${RA_TITLE}`);
+  lines.push(withDesc(RA_TITLE, RA_PATH, RA_DESCRIPTION));
+  lines.push(withDesc("Machine-readable catalog (JSON)", "/reference-architectures.json", "Every architecture, component and industry lens as JSON."));
+  for (const p of RA_PATTERNS) {
+    lines.push(withDesc(`${p.title}: ${p.stackLine}`, patternPath(p.slug), `${p.tagline} Markdown: ${url(patternPath(p.slug))}.md`));
+  }
+  lines.push("");
+  lines.push("## Open source data engineering resources");
+  for (const g of RA_RESOURCES) {
+    for (const r of g.items) lines.push(withDesc(`${r.name} (${g.title})`, r.url, r.what));
+  }
+  lines.push("");
+  lines.push("## Data engineering architectures by industry");
+  for (const i of RA_INDUSTRIES) {
+    lines.push(withDesc(`Open source data architecture for ${i.name}`, industryPath(i.slug), i.summary));
   }
   lines.push("");
 
@@ -455,6 +499,26 @@ function renderLlmsFull(): string {
     out.push(faq.a);
     out.push("");
   }
+
+  // Open Reference Architectures: hub definition, then every pattern and
+  // industry page as Markdown (the same text served at <path>.md).
+  out.push("---");
+  out.push("");
+  out.push(`# ${RA_TITLE}`);
+  out.push("");
+  out.push(`URL: ${url(RA_PATH)}`);
+  out.push("");
+  out.push(RA_DEFINITION);
+  out.push("");
+  for (const faq of RA_FAQS) {
+    out.push(`### ${faq.q}`, "", faq.a, "");
+  }
+  for (const p of RA_PATTERNS) {
+    out.push("---", "", `URL: ${url(patternPath(p.slug))}`, "", patternMarkdown(p));
+  }
+  for (const i of RA_INDUSTRIES) {
+    out.push("---", "", `URL: ${url(industryPath(i.slug))}`, "", industryMarkdown(i));
+  }
   return out.join("\n");
 }
 
@@ -464,6 +528,13 @@ const sitemapEntries = buildSitemapEntries();
 writeFileSync(resolve("public/sitemap.xml"), renderSitemap(sitemapEntries));
 writeFileSync(resolve("public/llms.txt"), renderLlms());
 writeFileSync(resolve("public/llms-full.txt"), renderLlmsFull());
+
+// Reference architectures: JSON dataset and Markdown twins of each page.
+writeFileSync(resolve("public/reference-architectures.json"), JSON.stringify(raDataset(), null, 2) + "\n");
+rmSync(resolve("public/reference-architectures"), { recursive: true, force: true });
+mkdirSync(resolve("public/reference-architectures/industries"), { recursive: true });
+for (const p of RA_PATTERNS) writeFileSync(resolve(`public${patternPath(p.slug)}.md`), patternMarkdown(p));
+for (const i of RA_INDUSTRIES) writeFileSync(resolve(`public${industryPath(i.slug)}.md`), industryMarkdown(i));
 
 console.log(
   `SEO artifacts written: sitemap.xml (${sitemapEntries.length} urls), ` +
