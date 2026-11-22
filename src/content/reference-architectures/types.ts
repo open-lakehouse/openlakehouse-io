@@ -2,30 +2,34 @@
 // Plain data only (no JSX, no asset imports) so the React pages, the
 // prerenderer, and the SEO/llms.txt generator can all import it.
 
-export type LayerId =
-  | "sources"
-  | "ingest"
-  | "storage"
-  | "format"
-  | "catalog"
-  | "compute"
-  | "orchestration"
-  | "ml"
-  | "serving"
-  | "consumers"
-  | "governance";
+export type ZoneId = "sources" | "ingest" | "platform" | "serving" | "teams";
 
-export type Layer = {
-  id: LayerId;
+export type Group = { id: string; zone: ZoneId; name: string; intro: string };
+
+export type SlotId = string;
+
+export type Slot = {
+  id: SlotId;
+  group: string;
   name: string;
   short: string;
-  question: string; // the question this layer answers, phrased the way people search
+  question: string; // the question this capability answers, phrased the way people search
+  what: string; // what the capability does, one or two literal sentences
+  defaults: string[]; // component ids; the first is the typical open source choice
+};
+
+export type Team = {
+  id: string;
+  name: string;
+  cares: string;
+  slots: SlotId[];
+  learn: { label: string; href: string }[];
 };
 
 export type Component = {
   id: string;
   name: string;
-  layer: LayerId;
+  slot: SlotId; // primary capability
   blurb: string; // one sentence, literal, citable
   url: string;
   repo?: string;
@@ -41,7 +45,7 @@ export type Node = {
   /** Component id, or a free-form label for things that are not projects (e.g. "Operational databases"). */
   component?: string;
   label?: string;
-  layer: LayerId;
+  slot: SlotId;
   role: string; // what this box does in THIS architecture
   version?: string; // as pinned in the reference repo
   /** Only shown in the detailed view. */

@@ -2,15 +2,17 @@
 // No JSX and no browser APIs, so the pages, the prerenderer and the
 // SEO generator all share one implementation of every export format.
 
-import { BOARD_LAYERS, COMPONENTS, LAYERS, componentById, layerById } from "./components";
+import { COMPONENTS, componentById } from "./components";
+import { CORE_SLOTS, GROUPS, PLATFORM_BANDS, PLATFORM_GROUPS, SLOTS, TEAMS, groupById, slotById, slotsInGroup } from "./platform";
 import { INDUSTRIES, SECTORS, industryBySlug } from "./industries";
 import { PATTERNS, PATTERN_CATEGORIES, PATTERN_GROUPS, patternBySlug } from "./patterns";
 import { RESOURCE_GROUPS } from "./resources";
-import type { Industry, LayerId, Node, Pattern } from "./types";
+import type { Industry, Node, Pattern } from "./types";
 
 export * from "./types";
 export * from "./resources";
-export { BOARD_LAYERS, COMPONENTS, LAYERS, componentById, layerById };
+export { COMPONENTS, componentById };
+export { CORE_SLOTS, GROUPS, PLATFORM_BANDS, PLATFORM_GROUPS, SLOTS, TEAMS, groupById, slotById, slotsInGroup };
 export { INDUSTRIES, SECTORS, industryBySlug };
 export { PATTERNS, PATTERN_CATEGORIES, PATTERN_GROUPS, patternBySlug };
 
@@ -73,14 +75,24 @@ export function applySwaps(pattern: Pattern, swaps: Record<number, string>): Nod
 
 export const nodeName = (n: Node) => componentById(n.component)?.name ?? n.label ?? "";
 
-export function nodesByLayer(nodes: Node[], detailed: boolean) {
-  const visible = nodes.filter((n) => detailed || !n.detail);
-  const map = new Map<LayerId, Node[]>();
-  for (const n of visible) {
-    if (!map.has(n.layer)) map.set(n.layer, []);
-    map.get(n.layer)!.push(n);
+/** Nodes keyed by slot, honouring the simplified/detailed view. */
+export function nodesBySlot(nodes: Node[], detailed: boolean) {
+  const map = new Map<string, Node[]>();
+  for (const n of nodes.filter((x) => detailed || !x.detail)) {
+    if (!map.has(n.slot)) map.set(n.slot, []);
+    map.get(n.slot)!.push(n);
   }
   return map;
+}
+
+/** Slot order for exports: zones left to right, platform groups top to bottom. */
+const SLOT_ORDER = SLOTS.map((x) => x.id);
+const bySlotOrder = (a: Node, b: Node) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot);
+
+/** Teams whose work touches the slots this architecture uses. */
+export function teamsForNodes(nodes: Node[]) {
+  const used = new Set(nodes.map((n) => n.slot));
+  return TEAMS.filter((t) => t.slots.some((sl) => used.has(sl)));
 }
 
 /** Industry use cases that map to a pattern, across all industries. */
@@ -110,13 +122,14 @@ export function toYaml(pattern: Pattern, nodes: Node[], industry?: Industry): st
   if (industry) out.push(`  industry: ${industry.slug}`);
   out.push(`  updated: "${pattern.updated}"`);
   out.push(`spec:`);
-  out.push(`  layers:`);
-  for (const layer of [...BOARD_LAYERS, "governance" as LayerId]) {
-    const inLayer = nodes.filter((n) => n.layer === layer);
-    if (!inLayer.length) continue;
-    out.push(`    - layer: ${layer}`);
+  out.push(`  capabilities:`);
+  for (const sl of SLOTS) {
+    const inSlot = nodes.filter((n) => n.slot === sl.id);
+    if (!inSlot.length) continue;
+    out.push(`    - capability: ${sl.id}`);
+    out.push(`      group: ${sl.group}`);
     out.push(`      components:`);
-    for (const n of inLayer) {
+    for (const n of inSlot) {
       const c = componentById(n.component);
       out.push(`        - name: ${yamlStr(nodeName(n))}`);
       if (c) out.push(`          id: ${c.id}`);
@@ -143,24 +156,19 @@ const mmLabel = (s: string) => s.replace(/"/g, "'");
 
 export function toMermaid(pattern: Pattern, nodes: Node[]): string {
   const out: string[] = ["flowchart LR"];
-  const present: LayerId[] = [];
-  nodes.forEach((n, i) => {
-    if (!present.includes(n.layer)) present.push(n.layer);
-    void i;
-  });
-  const ordered = [...BOARD_LAYERS, "governance" as LayerId].filter((l) => present.includes(l));
-  for (const layer of ordered) {
-    out.push(`  subgraph ${mmId(layer)}["${mmLabel(layerById(layer).name)}"]`);
+  const groupsPresent = GROUPS.filter((g) => nodes.some((n) => slotById(n.slot).group === g.id));
+  for (const g of groupsPresent) {
+    out.push(`  subgraph ${mmId(g.id)}["${mmLabel(g.name)}"]`);
     nodes.forEach((n, i) => {
-      if (n.layer !== layer) return;
+      if (slotById(n.slot).group !== g.id) return;
       const v = n.version ? `<br/><small>${mmLabel(n.version)}</small>` : "";
       out.push(`    n${i}["${mmLabel(nodeName(n))}${v}"]`);
     });
     out.push("  end");
   }
-  const flowLayers = ordered.filter((l) => l !== "governance");
-  for (let i = 0; i < flowLayers.length - 1; i++) out.push(`  ${mmId(flowLayers[i])} --> ${mmId(flowLayers[i + 1])}`);
-  if (ordered.includes("governance")) out.push(`  ${mmId("governance")} -.-> ${mmId(flowLayers[Math.floor(flowLayers.length / 2)] ?? "catalog")}`);
+  const flow = ["sources", "ingest", "ai", "access", "execution", "data", "serving"].filter((id) => groupsPresent.some((g) => g.id === id));
+  for (let i = 0; i < flow.length - 1; i++) out.push(`  ${mmId(flow[i])} --> ${mmId(flow[i + 1])}`);
+  for (const band of ["governance", "operations"]) if (groupsPresent.some((g) => g.id === band) && flow.includes("data")) out.push(`  ${band} -.-> data`);
   out.push(`  %% ${pattern.title}: https://openlakehouse.io${patternPath(pattern.slug)}`);
   return out.join("\n") + "\n";
 }
@@ -176,7 +184,7 @@ export function toJson(pattern: Pattern, nodes: Node[], industry?: Industry) {
     industry: industry?.slug,
     components: nodes.map((n) => {
       const c = componentById(n.component);
-      return { layer: n.layer, name: nodeName(n), id: c?.id, role: n.role, version: n.version, license: c?.license, url: c?.url, swappableWith: n.swaps };
+      return { capability: n.slot, name: nodeName(n), id: c?.id, role: n.role, version: n.version, license: c?.license, url: c?.url, swappableWith: n.swaps };
     }),
     repositories: pattern.repos.map((r) => ({ name: r.name, url: r.url, license: r.license, targets: r.targets })),
     updated: pattern.updated,
@@ -189,8 +197,8 @@ export function toAiPrompt(pattern: Pattern, nodes: Node[], industry?: Industry)
     `I am designing a data platform based on the "${pattern.title}" open reference architecture (https://openlakehouse.io${patternPath(pattern.slug)}).`,
     industry ? `Industry: ${industry.name}. Typical sources: ${industry.sources.map((s) => s.name).join("; ")}. Exchange formats: ${industry.formats.map((f) => f.name).join(", ")}.` : "",
     "",
-    "Components by layer:",
-    ...nodes.map((n) => `- ${layerById(n.layer).name}: ${nodeName(n)}${n.version ? ` (${n.version})` : ""}, ${n.role}`),
+    "Components by capability:",
+    ...[...nodes].sort(bySlotOrder).map((n) => `- ${slotById(n.slot).name}: ${nodeName(n)}${n.version ? ` (${n.version})` : ""}, ${n.role}`),
     "",
     "Known caveats:",
     ...pattern.caveats.map((c) => `- ${c}`),
@@ -208,8 +216,8 @@ export function patternMarkdown(p: Pattern): string {
   out.push(`# ${p.title}: ${p.stackLine}`, "", `> ${p.tagline}`, "", p.definition, "");
   out.push("## When to use it", ...p.whenToUse.map((w) => `- ${w}`), "");
   out.push("## When not to", ...p.notFor.map((w) => `- ${w}`), "");
-  out.push("## Components", "", "| Layer | Component | Role | Version |", "|---|---|---|---|");
-  for (const n of p.nodes) out.push(`| ${layerById(n.layer).name} | ${nodeName(n)} | ${n.role} | ${n.version ?? ""} |`);
+  out.push("## Components", "", "| Capability | Component | Role | Version |", "|---|---|---|---|");
+  for (const n of [...p.nodes].sort(bySlotOrder)) out.push(`| ${slotById(n.slot).name} | ${nodeName(n)} | ${n.role} | ${n.version ?? ""} |`);
   out.push("", "## How data flows");
   p.steps.forEach((s, i) => out.push(`${i + 1}. **${s.title}.** ${s.body}`));
   out.push("", "## Run it");
@@ -273,7 +281,9 @@ export function dataset() {
     description: HUB_DESCRIPTION,
     url: `https://openlakehouse.io${HUB_PATH}`,
     updated: HUB_UPDATED,
-    layers: LAYERS,
+    groups: GROUPS,
+    capabilities: SLOTS,
+    teams: TEAMS,
     components: COMPONENTS,
     patterns: PATTERNS.map((p) => ({ ...p, url: `https://openlakehouse.io${patternPath(p.slug)}` })),
     industries: INDUSTRIES.map((i) => ({ ...i, url: `https://openlakehouse.io${industryPath(i.slug)}` })),
@@ -296,7 +306,7 @@ export function searchIndex(): SearchHit[] {
       title: p.title,
       sub: p.stackLine,
       href: patternPath(p.slug),
-      hay: [p.title, p.stackLine, p.tagline, p.category, ...p.keywords, ...p.nodes.map((n) => `${nodeName(n)} ${n.role}`)].join(" "),
+      hay: [p.title, p.stackLine, p.tagline, p.category, ...p.keywords, ...p.nodes.map((n) => `${nodeName(n)} ${n.role} ${slotById(n.slot).name}`)].join(" "),
       rank: 0,
     });
   }
@@ -324,7 +334,7 @@ export function searchIndex(): SearchHit[] {
       title: c.name,
       sub: `${c.blurb} In: ${used.map((p) => p.title).join(", ")}.`,
       href: patternPath(used[0].slug),
-      hay: `${c.name} ${c.id} ${c.blurb} ${layerById(c.layer).name}`,
+      hay: `${c.name} ${c.id} ${c.blurb} ${slotById(c.slot).name}`,
       rank: 2,
     });
   }
