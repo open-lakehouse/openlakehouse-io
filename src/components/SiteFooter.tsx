@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { GUIDE_NAV } from "@/content/agentic";
 import { Github, Linkedin, Twitter, Youtube, MessageCircle, ExternalLink, Calendar } from "lucide-react";
 import logoUrl from "@/assets/bundled/olai-logo-white.png";
 import databricksLogo from "@/assets/logos/databricks.svg";
@@ -87,7 +89,19 @@ export const SiteFooter = () => {
   return (
     <footer className="border-t border-border bg-gradient-to-b from-background to-secondary/40">
       <div className="container py-16">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-12 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-12 mb-16">
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-primary mb-5">Guides</h4>
+            <ul className="space-y-2.5">
+              {GUIDE_NAV.map((g) => (
+                <li key={g.href}>
+                  <Link to={g.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                    {g.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-widest text-primary mb-5">Projects</h4>
             <LinkList items={projects} />

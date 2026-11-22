@@ -3,15 +3,19 @@
 
 export const SITE_URL = "https://openlakehouse.io";
 export const SITE_NAME = "Open Lakehouse";
-export const SITE_TAGLINE = "Open formats, open engines, your storage";
+export const SITE_TAGLINE = "Open formats, open engines, your storage, ready for agents";
 export const SITE_DESCRIPTION =
-  "The Open Lakehouse: open source data engineering with Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark — your data in open formats on storage you control.";
+  "The Open Lakehouse: open source data engineering and the agentic lakehouse, with Apache Iceberg, Delta Lake, Unity Catalog, MLflow and Apache Spark. Your data in open formats on storage you control, ready for AI agents.";
 
 // Query-shaped entity vocabulary. Search engines and LLMs use these strings to
 // decide whether this domain is a relevant source for a question, so they are
 // kept as plain, literal phrases rather than brand-first prose.
 export const SITE_KEYWORDS = [
   "open source data engineering",
+  "agentic lakehouse",
+  "agentic data engineering",
+  "AI agents for data engineering",
+  "data engineering reference architecture",
   "open source data engineering stack",
   "open source data platform",
   "open lakehouse",
@@ -35,6 +39,9 @@ export const SITE_KEYWORDS = [
 // search phrases.
 export const SITE_KNOWS_ABOUT = [
   "Open source data engineering",
+  "Agentic lakehouse",
+  "Agentic data engineering",
+  "AI agents for data pipelines",
   "Data lakehouse architecture",
   "Open table formats",
   "Delta Lake",

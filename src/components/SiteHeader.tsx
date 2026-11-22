@@ -4,6 +4,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, ChevronDown, Cpu, BookOpen, Bot, Layers, ShieldCheck, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { GUIDE_NAV } from "@/content/agentic";
 
 type TechItem = { name: string; url: string };
 type TechCategory = {
@@ -138,9 +139,28 @@ export const SiteHeader = () => {
               />
             </Link>
           </div>
-          <Link to="/open-source-data-engineering" className={desktopLinkClass}>
-            Data Engineering
-          </Link>
+          <div className="group relative">
+            <Link
+              to="/agentic-lakehouse"
+              className={cn(desktopLinkClass, "inline-flex items-center gap-1")}
+              aria-haspopup="true"
+            >
+              Guides
+              <ChevronDown className="h-3.5 w-3.5 transition-transform group-hover:rotate-180 group-focus-within:rotate-180" />
+            </Link>
+            <div className="invisible absolute left-1/2 top-full z-50 w-80 -translate-x-1/2 pt-2 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+              <ul className="rounded-xl border border-border bg-popover p-2 shadow-2xl">
+                {GUIDE_NAV.map((g) => (
+                  <li key={g.href}>
+                    <Link to={g.href} className="block rounded-lg px-3 py-2.5 hover:bg-primary/10">
+                      <span className="text-sm font-semibold text-foreground">{g.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{g.blurb}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
           <Link to="/reference-architectures" className={desktopLinkClass}>
             Architectures
           </Link>
@@ -257,16 +277,11 @@ export const SiteHeader = () => {
             </div>
           </div>
 
-          <Link
-            to="/open-source-data-engineering"
-            className={mobileLinkClass}
-            onClick={() => setOpen(false)}
-          >
-            Data Engineering
-          </Link>
-          <Link to="/reference-architectures" className={mobileLinkClass} onClick={() => setOpen(false)}>
-            Reference Architectures
-          </Link>
+          {GUIDE_NAV.map((g) => (
+            <Link key={g.href} to={g.href} className={mobileLinkClass} onClick={() => setOpen(false)}>
+              {g.label}
+            </Link>
+          ))}
           <Link to="/blog" className={mobileLinkClass} onClick={() => setOpen(false)}>
             Blog
           </Link>
