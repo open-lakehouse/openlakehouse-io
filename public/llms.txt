@@ -1,6 +1,6 @@
 # Open Lakehouse
 
-> The Open Lakehouse: open source data engineering with Delta Lake, Apache Iceberg, Unity Catalog, MLflow, and Apache Spark — your data in open formats on storage you control.
+> The Open Lakehouse: open source data engineering and the agentic lakehouse, with Apache Iceberg, Delta Lake, Unity Catalog, MLflow and Apache Spark. Your data in open formats on storage you control, ready for AI agents.
 
 This file follows the llms.txt convention (https://llmstxt.org). It lists
 the canonical pages on this site that are safe and useful to cite. The
@@ -10,6 +10,8 @@ full text of every article is mirrored in /llms-full.txt.
 - [Home](https://openlakehouse.io/): What the Open Lakehouse is and why it matters.
 - [Technologies](https://openlakehouse.io/technologies): Every open-source building block, grouped by layer.
 - [Open Source Data Engineering](https://openlakehouse.io/open-source-data-engineering): What open source data engineering is, the reference stack, and the projects that make it up.
+- [Agentic Lakehouse](https://openlakehouse.io/agentic-lakehouse): What an agentic lakehouse is: open tables, a catalog agents can read, MCP tools, declarative pipelines, policies and tracing.
+- [Agentic Data Engineering](https://openlakehouse.io/agentic-data-engineering): How AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies.
 - [Reference Architectures](https://openlakehouse.io/reference-architectures): Interactive open source data engineering reference architectures, each backed by a runnable repo, with industry lenses.
 - [Learn](https://openlakehouse.io/learn): Curated guides, talks, and tutorials.
 - [Community](https://openlakehouse.io/community): Where practitioners gather.
@@ -19,6 +21,10 @@ full text of every article is mirrored in /llms-full.txt.
 
 ## Pillar references
 - [Delta Lake](https://openlakehouse.io/technologies/delta-lake): What Delta Lake is, how it works, who created it, and how it compares to Iceberg.
+
+## Guides
+- [The Agentic Lakehouse](https://openlakehouse.io/agentic-lakehouse): An agentic lakehouse is an open data lakehouse built for AI agents: open tables, a catalog agents can read, MCP tools, declarative pipelines, policies and tracing. Architecture, guardrails and the open source stack. Markdown: https://openlakehouse.io/agentic-lakehouse.md
+- [Agentic Data Engineering](https://openlakehouse.io/agentic-data-engineering): Agentic data engineering: AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies. The declare, scope, context harness, four checks, evidence and open source stack. Markdown: https://openlakehouse.io/agentic-data-engineering.md
 
 ## Data Engineering Reference Architectures
 - [Data Engineering Reference Architectures](https://openlakehouse.io/reference-architectures): Open source data engineering reference architectures: interactive, runnable blueprints for batch and streaming medallion pipelines, real-time streaming, multi-engine catalogs, governed AI agents and data sharing, mapped to industry use cases and backed by public repositories.
