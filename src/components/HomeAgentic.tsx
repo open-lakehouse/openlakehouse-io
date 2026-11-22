@@ -29,7 +29,7 @@ export const HomeAgentic = () => (
         {[
           { icon: Workflow, title: "Declare", text: "Agents write Spark Declarative Pipelines; a dry run against the real catalog must pass before anything runs.", to: "/agentic-data-engineering#what-changes" },
           { icon: ShieldCheck, title: "Scope and policy", text: "Agents write only to their own namespace, and every tool call is allowed, denied or sent to a person.", to: "/agentic-lakehouse#guardrails" },
-          { icon: Bot, title: "Run it governed", text: "Identity-pinned Spark Connect and a catalog that authorizes every request, in a runnable reference architecture.", to: "/reference-architectures/governed-ai-agents" },
+          { icon: Bot, title: "Sandboxed Spark for every agent", text: "Omnigent and MLflow over a sandboxed Spark Connect session per agent, on Iceberg and a catalog that authorizes every request.", to: "/reference-architectures/agentic-lakehouse" },
         ].map((c) => (
           <li key={c.title}>
             <Link to={c.to} className="group flex gap-4 rounded-2xl border border-border bg-card p-5 transition-all hover:-translate-y-0.5 hover:border-primary">

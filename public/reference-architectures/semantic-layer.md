@@ -13,16 +13,15 @@ A semantic layer is the set of governed metric and dimension definitions that si
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Gold tables | Facts and dimensions to measure |  |
+| Source systems | Gold tables | Facts and dimensions to measure |  |
+| Spark Connect sessions | Spark Connect | Remote access for clients and agents |  |
+| Batch and SQL | Apache Spark | Expands MEASURE() at query time | 4.2.0 |
+| Catalog and credentials | Hive Metastore | Registers the metric view in the demo |  |
 | Open table format | Delta Lake | Source tables |  |
-| Catalog | Hive Metastore | Registers the metric view in the demo |  |
-| Compute engines | Apache Spark | Expands MEASURE() at query time | 4.2.0 |
-| Serving | Spark metric views | YAML measures and dimensions |  |
-| Serving | Spark Connect | Remote access for clients and agents |  |
-| Consumers | Apache Superset | Dashboards over the metric view |  |
-| Consumers | Notebooks and AI agents | Ask questions through the same definitions |  |
+| Semantic layer | Spark metric views | YAML measures and dimensions |  |
+| Dashboards and notebooks | Apache Superset | Dashboards over the metric view |  |
 
 ## How data flows
 1. **Declare metrics.** Write measures and dimensions in YAML over a source table.

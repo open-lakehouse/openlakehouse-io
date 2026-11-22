@@ -56,6 +56,7 @@ Agents get their tools from an MCP server. Each tool does one thing with named a
 
 ## Reference architectures
 
+- https://openlakehouse.io/reference-architectures/agentic-lakehouse: Where the agent runs, how it reaches Spark and what the catalog lets it touch.
 - https://openlakehouse.io/reference-architectures/governed-ai-agents: The reference architecture for agents building Spark pipelines in governed, multi-tenant sandboxes.
 - https://openlakehouse.io/reference-architectures/batch-medallion: The declarative medallion pipelines agents write, scheduled by Airflow.
 - https://openlakehouse.io/reference-architectures/change-data-capture: AUTO CDC flows: a declarative target an agent can produce and the platform can check.

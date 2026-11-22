@@ -5,6 +5,7 @@ import { HelmetProvider } from "react-helmet-async";
 import {
   COMPONENTS,
   INDUSTRIES,
+  SLOTS,
   PATTERNS,
   applySwaps,
   componentById,
@@ -31,12 +32,17 @@ describe("reference architecture data", () => {
       for (const n of p.nodes) {
         if (n.component) expect(componentById(n.component), `${p.slug}: ${n.component}`).toBeDefined();
         else expect(n.label, `${p.slug}: node needs a component or a label`).toBeTruthy();
+        expect(SLOTS.some((sl) => sl.id === n.slot), `${p.slug}: unknown slot ${n.slot}`).toBe(true);
         for (const s of n.swaps ?? []) {
           const c = componentById(s);
           expect(c, `${p.slug}: swap ${s}`).toBeDefined();
         }
       }
     }
+  });
+
+  it("names only known components as each capability's typical choices", () => {
+    for (const sl of SLOTS) for (const id of sl.defaults) expect(componentById(id), `${sl.id}: ${id}`).toBeDefined();
   });
 
   it("maps every industry use case onto an existing pattern", () => {
@@ -107,11 +113,16 @@ describe("ArchitectureBoard", () => {
     expect(screen.getByText("Banking lens")).toBeInTheDocument();
   });
 
-  it("hides detail-only boxes until the detailed view is chosen", () => {
-    renderAt("/reference-architectures?pattern=laptop-open-lakehouse");
-    expect(screen.queryByText("PostgreSQL")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Detailed" }));
-    expect(screen.getByText("PostgreSQL")).toBeInTheDocument();
+  it("shows the full platform, with typical choices for unused capabilities, only when asked", () => {
+    renderAt("/reference-architectures?pattern=agentic-lakehouse");
+    expect(screen.queryByText("Typical: Great Expectations")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Full platform" }));
+    expect(screen.getByText("Typical: Great Expectations")).toBeInTheDocument();
+  });
+
+  it("lists AI agents as a team on the agentic lakehouse board", () => {
+    renderAt("/reference-architectures?pattern=agentic-lakehouse");
+    expect(screen.getAllByText("AI agents").length).toBeGreaterThan(0);
   });
 
   it("applies a swap from the URL", () => {

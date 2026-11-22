@@ -15,17 +15,17 @@ Real-time streaming is the architecture for decisions that must happen while an 
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Payments, clicks, game events | Producers with event timestamps |  |
-| Ingestion and streaming | Apache Kafka | Input topic, 16 partitions in the reference runs | Confluent 7.6.0 image |
-| Compute engines | Spark Real-Time Mode | Continuous processing trigger | Spark 4.1 to 4.3 |
-| Compute engines | Apache Spark | transformWithState for keyed state, on RocksDB | 4.3.0 |
-| Compute engines | Apache Flink | The engine being compared or migrated from |  |
-| Serving | Kafka sink topic | Output and latency topics |  |
-| Serving | Redis | Latest state for applications |  |
-| Open table format | Delta Lake | Optional history table written by a separate query |  |
-| Consumers | Fraud engine, app UI, live board | Read results within milliseconds |  |
+| Source systems | Payments, clicks, game events | Producers with event timestamps |  |
+| Event streaming | Apache Kafka | Input topic, 16 partitions in the reference runs | Confluent 7.6.0 image |
+| Real-Time Mode | Spark Real-Time Mode | Continuous processing trigger | Spark 4.1 to 4.3 |
+| Real-Time Mode | Apache Spark | transformWithState for keyed state, on RocksDB | 4.3.0 |
+| Real-Time Mode | Apache Flink | The engine being compared or migrated from |  |
+| Open table format | Apache Iceberg | Optional history table written by a separate query |  |
+| Apps and APIs | Kafka sink topic | Output and latency topics |  |
+| Apps and APIs | Redis | Latest state for applications |  |
+| Apps and APIs | Fraud engine, app UI, live board | Read results within milliseconds |  |
 
 ## How data flows
 1. **Produce with timestamps.** A generator writes keyed events to Kafka with the send time embedded.

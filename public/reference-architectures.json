@@ -3,79 +3,634 @@
   "description": "Open source data engineering reference architectures: interactive, runnable blueprints for batch and streaming medallion pipelines, real-time streaming, multi-engine catalogs, governed AI agents and data sharing, mapped to industry use cases and backed by public repositories.",
   "url": "https://openlakehouse.io/reference-architectures",
   "updated": "2026-11-21",
-  "layers": [
+  "groups": [
     {
       "id": "sources",
+      "zone": "sources",
       "name": "Sources",
-      "short": "Sources",
-      "question": "Where does the data come from?"
+      "intro": "Where the data comes from."
     },
     {
       "id": "ingest",
-      "name": "Ingestion and streaming",
-      "short": "Ingest",
-      "question": "How does data get into the lakehouse?"
+      "zone": "ingest",
+      "name": "Ingestion",
+      "intro": "How data gets into the lakehouse."
     },
     {
-      "id": "storage",
-      "name": "Object storage",
-      "short": "Storage",
-      "question": "Where do the bytes live?"
+      "id": "ai",
+      "zone": "platform",
+      "name": "AI and agents",
+      "intro": "The agents, the control plane that decides what they may do, and the models behind them."
     },
     {
-      "id": "format",
-      "name": "Open table format",
-      "short": "Format",
-      "question": "What turns files into tables?"
+      "id": "access",
+      "zone": "platform",
+      "name": "Engine access",
+      "intro": "How agents, apps and people reach compute: a client session per identity."
     },
     {
-      "id": "catalog",
-      "name": "Catalog",
-      "short": "Catalog",
-      "question": "How do engines find and secure tables?"
+      "id": "execution",
+      "zone": "platform",
+      "name": "Execution",
+      "intro": "Spark's execution modes, plus engines that read the same tables."
     },
     {
-      "id": "compute",
-      "name": "Compute engines",
-      "short": "Compute",
-      "question": "What reads and writes the tables?"
-    },
-    {
-      "id": "orchestration",
-      "name": "Orchestration",
-      "short": "Orchestrate",
-      "question": "What runs the jobs, and when?"
-    },
-    {
-      "id": "ml",
-      "name": "ML and AI",
-      "short": "ML / AI",
-      "question": "Where do models and agents fit?"
-    },
-    {
-      "id": "serving",
-      "name": "Serving",
-      "short": "Serving",
-      "question": "How do results leave the lakehouse?"
-    },
-    {
-      "id": "consumers",
-      "name": "Consumers",
-      "short": "Consumers",
-      "question": "Who uses the output?"
+      "id": "data",
+      "zone": "platform",
+      "name": "Data foundation",
+      "intro": "Open tables in a governed catalog, on storage you own."
     },
     {
       "id": "governance",
-      "name": "Governance, lineage and policy",
-      "short": "Governance",
-      "question": "Who can see what, and where did it come from?"
+      "zone": "platform",
+      "name": "Governance",
+      "intro": "Who can see what, where it came from, whether it is right."
+    },
+    {
+      "id": "operations",
+      "zone": "platform",
+      "name": "Operations",
+      "intro": "Scheduling, keeping tables healthy, observing and deploying the platform."
+    },
+    {
+      "id": "serving",
+      "zone": "serving",
+      "name": "Serving",
+      "intro": "How results leave the lakehouse."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "sources",
+      "group": "sources",
+      "name": "Source systems",
+      "short": "Sources",
+      "question": "Where does the data come from?",
+      "what": "Operational databases, applications, devices, files and partner feeds. An industry lens fills this in with that industry's systems.",
+      "defaults": []
+    },
+    {
+      "id": "ingest-batch",
+      "group": "ingest",
+      "name": "Batch and file ingestion",
+      "short": "Batch loads",
+      "question": "How do files and extracts land?",
+      "what": "Loads files, extracts and API pulls into bronze tables, idempotently so reruns do not duplicate rows.",
+      "defaults": [
+        "spark",
+        "dlt"
+      ]
+    },
+    {
+      "id": "ingest-stream",
+      "group": "ingest",
+      "name": "Event streaming",
+      "short": "Events",
+      "question": "How do events arrive?",
+      "what": "A durable event log that producers append to and the lakehouse reads from by offset.",
+      "defaults": [
+        "kafka"
+      ]
+    },
+    {
+      "id": "ingest-cdc",
+      "group": "ingest",
+      "name": "Change data capture",
+      "short": "CDC",
+      "question": "How do database changes arrive?",
+      "what": "Turns database transaction logs into change events and applies them to tables as current state and history.",
+      "defaults": [
+        "debezium",
+        "auto-cdc"
+      ]
+    },
+    {
+      "id": "agent-harness",
+      "group": "ai",
+      "name": "Agent harness and policy",
+      "short": "Harness + policy",
+      "question": "What runs the agent, and who decides what it may do?",
+      "what": "Runs agents with tools and session state, and checks every tool call, model request and file operation against policies that allow it, deny it, or ask a person. Policies are set per session, per agent and server-wide.",
+      "defaults": [
+        "omnigent"
+      ]
+    },
+    {
+      "id": "agent-sandbox",
+      "group": "ai",
+      "name": "Agent sandboxes",
+      "short": "Sandboxes",
+      "question": "Where does the agent's code run?",
+      "what": "An isolated container or microVM per agent session, locally or on a cluster. Provider credentials stay outside the sandbox; the agent gets only the scoped access it needs.",
+      "defaults": [
+        "kubernetes",
+        "omnigent-sandbox"
+      ]
+    },
+    {
+      "id": "agent-tools",
+      "group": "ai",
+      "name": "Tools and skills",
+      "short": "Tools",
+      "question": "What can the agent call?",
+      "what": "Named actions with named arguments (read a table, dry-run a pipeline, run one SQL statement) served over the Model Context Protocol, plus skills that carry version-pinned context.",
+      "defaults": [
+        "mcp",
+        "lakehouse-agent-kit"
+      ]
+    },
+    {
+      "id": "agent-models",
+      "group": "ai",
+      "name": "Models and gateway",
+      "short": "Models",
+      "question": "Which model does the agent use, and through what?",
+      "what": "Open-weight models served locally or on a cluster, and a gateway in front of hosted providers for routing, keys and cost limits.",
+      "defaults": [
+        "ollama",
+        "vllm",
+        "mlflow"
+      ]
+    },
+    {
+      "id": "agent-observability",
+      "group": "ai",
+      "name": "Tracing and evaluation",
+      "short": "Traces + evals",
+      "question": "What did the agent do, and was it right?",
+      "what": "Records every agent step with inputs and outputs, and scores results against trusted data and judges.",
+      "defaults": [
+        "mlflow",
+        "opentelemetry"
+      ]
+    },
+    {
+      "id": "ml",
+      "group": "ai",
+      "name": "ML lifecycle",
+      "short": "ML models",
+      "question": "How are models trained, tracked and registered?",
+      "what": "Experiment tracking, a model registry and the table version each model trained on.",
+      "defaults": [
+        "mlflow"
+      ]
+    },
+    {
+      "id": "spark-connect",
+      "group": "access",
+      "name": "Spark Connect sessions",
+      "short": "Spark Connect",
+      "question": "How do agents and apps reach Spark?",
+      "what": "A thin gRPC client per identity sends query plans to a remote Spark. In production each agent or tenant gets its own authenticated endpoint; in a sandbox it can point at a local Spark working on a subset of the data, against the same catalog.",
+      "defaults": [
+        "spark-connect"
+      ]
+    },
+    {
+      "id": "batch",
+      "group": "execution",
+      "name": "Batch and SQL",
+      "short": "Batch",
+      "question": "What runs scheduled and ad hoc work?",
+      "what": "Distributed batch jobs, DataFrames and SQL over the tables.",
+      "defaults": [
+        "spark"
+      ]
+    },
+    {
+      "id": "pipelines",
+      "group": "execution",
+      "name": "Declarative pipelines",
+      "short": "Pipelines",
+      "question": "How are tables declared and kept up to date?",
+      "what": "Declare tables and flows; Spark infers dependencies, checks the graph with a dry run, and runs it. The output agents should write.",
+      "defaults": [
+        "sdp"
+      ]
+    },
+    {
+      "id": "streaming",
+      "group": "execution",
+      "name": "Structured Streaming",
+      "short": "Streaming",
+      "question": "What processes events in micro-batches?",
+      "what": "Incremental processing of event streams with exactly-once table writes, watermarks and state.",
+      "defaults": [
+        "spark",
+        "flink"
+      ]
+    },
+    {
+      "id": "realtime",
+      "group": "execution",
+      "name": "Real-Time Mode",
+      "short": "Real-time",
+      "question": "What handles millisecond decisions?",
+      "what": "Continuous processing for decisions made while the event is still in flight.",
+      "defaults": [
+        "spark-rtm",
+        "flink"
+      ]
+    },
+    {
+      "id": "local",
+      "group": "execution",
+      "name": "Local mode (Project Feather)",
+      "short": "Local + Feather",
+      "question": "What runs an agent's small, fast queries?",
+      "what": "Spark in one process, with Spark 4.3's shuffle-free single-task execution for small queries. Fast to start and cheap, for prototyping and agent sandboxes.",
+      "defaults": [
+        "spark-feather"
+      ]
+    },
+    {
+      "id": "sql",
+      "group": "execution",
+      "name": "Other engines",
+      "short": "Other engines",
+      "question": "What else reads the same tables?",
+      "what": "Engines that read the same governed tables through the catalog, without copies.",
+      "defaults": [
+        "duckdb",
+        "trino",
+        "pyiceberg"
+      ]
+    },
+    {
+      "id": "catalog",
+      "group": "data",
+      "name": "Catalog and credentials",
+      "short": "Catalog",
+      "question": "How do engines and agents find tables, and what may they touch?",
+      "what": "Namespaces, schemas and permissions over an API, and short-lived storage credentials vended per table and identity.",
+      "defaults": [
+        "unity-catalog",
+        "polaris",
+        "lakekeeper"
+      ]
+    },
+    {
+      "id": "format",
+      "group": "data",
+      "name": "Open table format",
+      "short": "Table format",
+      "question": "What turns files into tables?",
+      "what": "ACID transactions, schema evolution, snapshots and time travel over Parquet files.",
+      "defaults": [
+        "iceberg",
+        "delta",
+        "hudi"
+      ]
+    },
+    {
+      "id": "storage",
+      "group": "data",
+      "name": "Object storage",
+      "short": "Storage",
+      "question": "Where do the bytes live?",
+      "what": "S3-compatible object storage you control.",
+      "defaults": [
+        "seaweedfs",
+        "rustfs",
+        "minio",
+        "s3"
+      ]
+    },
+    {
+      "id": "access-policy",
+      "group": "governance",
+      "name": "Access control and policy",
+      "short": "Access policy",
+      "question": "Who may read which rows and columns?",
+      "what": "Grants, row filters and column masks, enforced the same way in every engine.",
+      "defaults": [
+        "unity-catalog",
+        "cedar",
+        "openfga",
+        "opa"
+      ]
+    },
+    {
+      "id": "lineage",
+      "group": "governance",
+      "name": "Lineage",
+      "short": "Lineage",
+      "question": "Where did this value come from?",
+      "what": "Events from every job and query describing what was read and written, down to columns.",
+      "defaults": [
+        "openlineage",
+        "marquez"
+      ]
+    },
+    {
+      "id": "quality",
+      "group": "governance",
+      "name": "Data quality and contracts",
+      "short": "Quality",
+      "question": "Is the data right?",
+      "what": "Expectations and contracts checked as data lands and before it is published.",
+      "defaults": [
+        "great-expectations",
+        "soda-core"
+      ]
+    },
+    {
+      "id": "metadata",
+      "group": "governance",
+      "name": "Discovery and audit",
+      "short": "Discovery",
+      "question": "What data exists, and who used it?",
+      "what": "Search, ownership, glossary and an audit trail across the platform.",
+      "defaults": [
+        "datahub",
+        "openmetadata"
+      ]
+    },
+    {
+      "id": "orchestration",
+      "group": "operations",
+      "name": "Orchestration",
+      "short": "Orchestration",
+      "question": "What runs the jobs, and when?",
+      "what": "Schedules, dependencies, retries and backfills. Agents trigger runs through it instead of racing scheduled ones.",
+      "defaults": [
+        "airflow",
+        "dagster",
+        "temporal"
+      ]
+    },
+    {
+      "id": "maintenance",
+      "group": "operations",
+      "name": "Table maintenance",
+      "short": "Maintenance",
+      "question": "What keeps tables fast and storage bounded?",
+      "what": "Compaction, manifest rewrites and snapshot expiry, on a schedule.",
+      "defaults": [
+        "iceberg-maintenance"
+      ]
+    },
+    {
+      "id": "observability",
+      "group": "operations",
+      "name": "Platform observability",
+      "short": "Observability",
+      "question": "Is the platform healthy?",
+      "what": "Metrics, logs and traces from every service, and the Spark UI and event logs for every job.",
+      "defaults": [
+        "opentelemetry",
+        "prometheus",
+        "grafana"
+      ]
+    },
+    {
+      "id": "deploy",
+      "group": "operations",
+      "name": "Runtime, CI/CD and IaC",
+      "short": "Deploy",
+      "question": "Where does it run, and how do changes ship?",
+      "what": "The cluster or containers it runs on, infrastructure as code, and the pipeline that reviews and applies changes, including agents' pull requests.",
+      "defaults": [
+        "kubernetes",
+        "opentofu",
+        "argocd"
+      ]
+    },
+    {
+      "id": "identity",
+      "group": "operations",
+      "name": "Identity and secrets",
+      "short": "Identity",
+      "question": "Who is each person, service and agent?",
+      "what": "Single sign-on for people, workload identity for services and agents, and secret storage.",
+      "defaults": [
+        "keycloak",
+        "spiffe",
+        "openbao"
+      ]
+    },
+    {
+      "id": "semantic",
+      "group": "serving",
+      "name": "Semantic layer",
+      "short": "Metrics",
+      "question": "Where are metrics defined once?",
+      "what": "Governed measures and dimensions that dashboards, notebooks and agents all query.",
+      "defaults": [
+        "metric-views"
+      ]
+    },
+    {
+      "id": "bi",
+      "group": "serving",
+      "name": "Dashboards and notebooks",
+      "short": "BI + notebooks",
+      "question": "Where do people look at results?",
+      "what": "BI dashboards and notebooks over the governed tables.",
+      "defaults": [
+        "superset",
+        "marimo",
+        "jupyter"
+      ]
+    },
+    {
+      "id": "apps",
+      "group": "serving",
+      "name": "Apps and APIs",
+      "short": "Apps + APIs",
+      "question": "How do applications get results?",
+      "what": "Arrow Flight SQL, Kafka topics and key-value stores for applications.",
+      "defaults": [
+        "flight-sql",
+        "kafka-sink"
+      ]
+    },
+    {
+      "id": "sharing",
+      "group": "serving",
+      "name": "Data sharing",
+      "short": "Sharing",
+      "question": "How do other organizations get live data?",
+      "what": "An open protocol for read access to live tables without copying them.",
+      "defaults": [
+        "delta-sharing"
+      ]
+    }
+  ],
+  "teams": [
+    {
+      "id": "data-engineering",
+      "name": "Data engineers",
+      "cares": "Pipelines that are correct, idempotent and cheap to rerun.",
+      "slots": [
+        "ingest-batch",
+        "ingest-stream",
+        "ingest-cdc",
+        "batch",
+        "pipelines",
+        "streaming",
+        "realtime",
+        "orchestration",
+        "quality",
+        "maintenance",
+        "format"
+      ],
+      "learn": [
+        {
+          "label": "Spark Masterclass (book)",
+          "href": "https://lisancao.github.io/spark-masterclass/"
+        },
+        {
+          "label": "Lakehouse masterclass, chapters 7 to 10",
+          "href": "https://github.com/open-lakehouse/lakehouse-masterclass/tree/main/textbook/chapters"
+        },
+        {
+          "label": "Getting started with Apache Spark",
+          "href": "/learn/getting-started/apache-spark"
+        }
+      ]
+    },
+    {
+      "id": "agents",
+      "name": "AI agents",
+      "cares": "Tools with clear arguments, a sandbox to write into, fast feedback from dry runs, and version-pinned context.",
+      "slots": [
+        "agent-tools",
+        "agent-sandbox",
+        "spark-connect",
+        "local",
+        "pipelines",
+        "semantic"
+      ],
+      "learn": [
+        {
+          "label": "Agentic data engineering",
+          "href": "/agentic-data-engineering"
+        },
+        {
+          "label": "The agentic lakehouse",
+          "href": "/agentic-lakehouse"
+        },
+        {
+          "label": "Lakehouse masterclass, chapter 3",
+          "href": "https://github.com/open-lakehouse/lakehouse-masterclass/blob/main/textbook/chapters/ch03-agentic-data-engineering.md"
+        }
+      ]
+    },
+    {
+      "id": "ai-engineering",
+      "name": "ML and AI engineers",
+      "cares": "Reproducible models, traced and evaluated agents, and a model gateway they control.",
+      "slots": [
+        "ml",
+        "agent-models",
+        "agent-observability",
+        "agent-harness",
+        "agent-tools"
+      ],
+      "learn": [
+        {
+          "label": "Getting started with MLflow",
+          "href": "/learn/getting-started/mlflow"
+        },
+        {
+          "label": "Getting started with Omnigent",
+          "href": "/learn/getting-started/omnigent"
+        },
+        {
+          "label": "Lakehouse masterclass, chapters 12 and 13",
+          "href": "https://github.com/open-lakehouse/lakehouse-masterclass/tree/main/textbook/chapters"
+        }
+      ]
+    },
+    {
+      "id": "analytics",
+      "name": "Analysts and analytics engineers",
+      "cares": "One definition of each metric, fast SQL, and dashboards that match.",
+      "slots": [
+        "sql",
+        "semantic",
+        "bi",
+        "batch"
+      ],
+      "learn": [
+        {
+          "label": "Spark metric views demo",
+          "href": "https://github.com/lisancao/spark-demos/tree/main/demos/01_metrics_views"
+        },
+        {
+          "label": "DuckDB Delta grows up",
+          "href": "/blog/delta-lake/duckdb-delta-grows-up"
+        }
+      ]
+    },
+    {
+      "id": "platform",
+      "name": "Platform engineers",
+      "cares": "A platform that is boring to run: deployable from code, observable, with identities for every person, service and agent.",
+      "slots": [
+        "storage",
+        "catalog",
+        "deploy",
+        "identity",
+        "observability",
+        "agent-sandbox",
+        "spark-connect"
+      ],
+      "learn": [
+        {
+          "label": "open-lakehouse repository",
+          "href": "https://github.com/open-lakehouse/open-lakehouse"
+        },
+        {
+          "label": "Getting started with Unity Catalog",
+          "href": "/learn/getting-started/unity-catalog"
+        }
+      ]
+    },
+    {
+      "id": "governance",
+      "name": "Governance and security",
+      "cares": "Policies that hold in every engine and for every agent, lineage for audits, and least privilege by default.",
+      "slots": [
+        "access-policy",
+        "lineage",
+        "metadata",
+        "catalog",
+        "agent-harness",
+        "identity"
+      ],
+      "learn": [
+        {
+          "label": "Open governance",
+          "href": "/technologies/open-governance"
+        },
+        {
+          "label": "Policy pushdown and open lineage",
+          "href": "/reference-architectures/policy-and-lineage"
+        }
+      ]
+    },
+    {
+      "id": "partners",
+      "name": "External partners",
+      "cares": "Live, read-only access to the tables they are entitled to.",
+      "slots": [
+        "sharing"
+      ],
+      "learn": [
+        {
+          "label": "Open data sharing",
+          "href": "/reference-architectures/open-data-sharing"
+        }
+      ]
     }
   ],
   "components": [
     {
       "id": "kafka",
       "name": "Apache Kafka",
-      "layer": "ingest",
+      "slot": "ingest-stream",
       "blurb": "A distributed event log that producers append to and consumers read from by offset.",
       "url": "https://kafka.apache.org",
       "repo": "https://github.com/apache/kafka",
@@ -85,7 +640,7 @@
     {
       "id": "debezium",
       "name": "Debezium",
-      "layer": "ingest",
+      "slot": "ingest-cdc",
       "blurb": "Change data capture connectors that turn database transaction logs into event streams.",
       "url": "https://debezium.io",
       "repo": "https://github.com/debezium/debezium",
@@ -94,7 +649,7 @@
     {
       "id": "kafka-connect",
       "name": "Kafka Connect",
-      "layer": "ingest",
+      "slot": "ingest-stream",
       "blurb": "The Kafka framework for running source and sink connectors.",
       "url": "https://kafka.apache.org/documentation/#connect",
       "license": "Apache-2.0",
@@ -103,7 +658,7 @@
     {
       "id": "tributary",
       "name": "tributary",
-      "layer": "ingest",
+      "slot": "sources",
       "blurb": "An open-lakehouse data generator that produces synthetic data to load into a lakehouse.",
       "url": "https://github.com/open-lakehouse/tributary",
       "repo": "https://github.com/open-lakehouse/tributary"
@@ -111,7 +666,7 @@
     {
       "id": "auto-cdc",
       "name": "AUTO CDC (Spark Declarative Pipelines)",
-      "layer": "ingest",
+      "slot": "ingest-cdc",
       "blurb": "The Spark Declarative Pipelines flow that applies an ordered change feed to a target table as SCD type 1 or type 2.",
       "url": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
       "license": "Apache-2.0",
@@ -121,14 +676,14 @@
     {
       "id": "s3",
       "name": "Amazon S3",
-      "layer": "storage",
+      "slot": "storage",
       "blurb": "Object storage on AWS; the de facto API that most lakehouse engines speak.",
       "url": "https://aws.amazon.com/s3/"
     },
     {
       "id": "seaweedfs",
       "name": "SeaweedFS",
-      "layer": "storage",
+      "slot": "storage",
       "blurb": "A self-hosted distributed file and object store with an S3-compatible gateway.",
       "url": "https://github.com/seaweedfs/seaweedfs",
       "repo": "https://github.com/seaweedfs/seaweedfs",
@@ -137,7 +692,7 @@
     {
       "id": "minio",
       "name": "MinIO",
-      "layer": "storage",
+      "slot": "storage",
       "blurb": "A self-hosted S3-compatible object store.",
       "url": "https://min.io",
       "repo": "https://github.com/minio/minio",
@@ -146,21 +701,21 @@
     {
       "id": "local-fs",
       "name": "Local filesystem",
-      "layer": "storage",
+      "slot": "storage",
       "blurb": "A directory on disk; every open table format can use it for development.",
       "url": "https://en.wikipedia.org/wiki/File_system"
     },
     {
       "id": "gcs-adls",
       "name": "GCS / ADLS",
-      "layer": "storage",
+      "slot": "storage",
       "blurb": "Google Cloud Storage and Azure Data Lake Storage, the object stores on GCP and Azure.",
       "url": "https://cloud.google.com/storage"
     },
     {
       "id": "delta",
       "name": "Delta Lake",
-      "layer": "format",
+      "slot": "format",
       "blurb": "An open table format that adds ACID transactions, time travel and schema enforcement to Parquet files through a JSON transaction log.",
       "url": "https://delta.io",
       "repo": "https://github.com/delta-io/delta",
@@ -171,7 +726,7 @@
     {
       "id": "iceberg",
       "name": "Apache Iceberg",
-      "layer": "format",
+      "slot": "format",
       "blurb": "An open table format that tracks table state through a tree of metadata, manifest lists and manifests over Parquet, ORC or Avro files.",
       "url": "https://iceberg.apache.org",
       "repo": "https://github.com/apache/iceberg",
@@ -182,7 +737,7 @@
     {
       "id": "hudi",
       "name": "Apache Hudi",
-      "layer": "format",
+      "slot": "format",
       "blurb": "An open table format built around record-level upserts, incremental queries and a timeline of table actions.",
       "url": "https://hudi.apache.org",
       "repo": "https://github.com/apache/hudi",
@@ -193,7 +748,7 @@
     {
       "id": "parquet",
       "name": "Apache Parquet",
-      "layer": "format",
+      "slot": "format",
       "blurb": "The columnar file format that every open table format stores its data in by default.",
       "url": "https://parquet.apache.org",
       "license": "Apache-2.0",
@@ -202,7 +757,7 @@
     {
       "id": "unity-catalog",
       "name": "Unity Catalog OSS",
-      "layer": "catalog",
+      "slot": "catalog",
       "blurb": "An open catalog for tables, volumes, functions and models with a three-level namespace, an Iceberg REST endpoint and credential vending.",
       "url": "https://unitycatalog.io",
       "repo": "https://github.com/unitycatalog/unitycatalog",
@@ -213,7 +768,7 @@
     {
       "id": "unitycatalog-rs",
       "name": "unitycatalog-rs",
-      "layer": "catalog",
+      "slot": "catalog",
       "blurb": "An independent Rust implementation of the Unity Catalog OSS APIs, with Delta and Iceberg REST, Delta Sharing and credential vending.",
       "url": "https://github.com/open-lakehouse/unitycatalog-rs",
       "repo": "https://github.com/open-lakehouse/unitycatalog-rs"
@@ -221,7 +776,7 @@
     {
       "id": "polaris",
       "name": "Apache Polaris",
-      "layer": "catalog",
+      "slot": "catalog",
       "blurb": "A catalog that implements the Apache Iceberg REST catalog specification.",
       "url": "https://polaris.apache.org",
       "repo": "https://github.com/apache/polaris",
@@ -232,7 +787,7 @@
     {
       "id": "lakekeeper",
       "name": "Lakekeeper",
-      "layer": "catalog",
+      "slot": "catalog",
       "blurb": "An Apache Iceberg REST catalog written in Rust.",
       "url": "https://docs.lakekeeper.io",
       "repo": "https://github.com/lakekeeper/lakekeeper",
@@ -242,7 +797,7 @@
     {
       "id": "hive-metastore",
       "name": "Hive Metastore",
-      "layer": "catalog",
+      "slot": "catalog",
       "blurb": "The original Hadoop-era table catalog that Spark, Trino and others still read.",
       "url": "https://hive.apache.org",
       "license": "Apache-2.0",
@@ -251,7 +806,7 @@
     {
       "id": "spark",
       "name": "Apache Spark",
-      "layer": "compute",
+      "slot": "batch",
       "blurb": "A distributed engine for batch SQL, DataFrames, Structured Streaming and declarative pipelines, reachable remotely over Spark Connect.",
       "url": "https://spark.apache.org",
       "repo": "https://github.com/apache/spark",
@@ -262,7 +817,7 @@
     {
       "id": "flink",
       "name": "Apache Flink",
-      "layer": "compute",
+      "slot": "streaming",
       "blurb": "A stateful stream processor with event-time windows, timers and exactly-once checkpoints.",
       "url": "https://flink.apache.org",
       "repo": "https://github.com/apache/flink",
@@ -273,7 +828,7 @@
     {
       "id": "trino",
       "name": "Trino",
-      "layer": "compute",
+      "slot": "sql",
       "blurb": "A distributed SQL query engine that reads many catalogs and table formats in one query.",
       "url": "https://trino.io",
       "repo": "https://github.com/trinodb/trino",
@@ -283,7 +838,7 @@
     {
       "id": "duckdb",
       "name": "DuckDB",
-      "layer": "compute",
+      "slot": "sql",
       "blurb": "An in-process analytical SQL database that reads Parquet, Delta and Iceberg.",
       "url": "https://duckdb.org",
       "repo": "https://github.com/duckdb/duckdb",
@@ -293,7 +848,7 @@
     {
       "id": "datafusion",
       "name": "Apache DataFusion",
-      "layer": "compute",
+      "slot": "sql",
       "blurb": "An embeddable query engine in Rust built on Apache Arrow.",
       "url": "https://datafusion.apache.org",
       "repo": "https://github.com/apache/datafusion",
@@ -304,7 +859,7 @@
     {
       "id": "sdp",
       "name": "Spark Declarative Pipelines",
-      "layer": "compute",
+      "slot": "pipelines",
       "blurb": "The Spark 4.1+ framework where you declare tables and flows and Spark works out the order, retries and incremental updates.",
       "url": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
       "license": "Apache-2.0",
@@ -313,7 +868,7 @@
     {
       "id": "spark-rtm",
       "name": "Spark Real-Time Mode",
-      "layer": "compute",
+      "slot": "realtime",
       "blurb": "A Structured Streaming trigger that processes records continuously for low-latency stateless and stateful queries.",
       "url": "https://spark.apache.org/docs/latest/streaming/index.html",
       "license": "Apache-2.0",
@@ -322,7 +877,7 @@
     {
       "id": "polars",
       "name": "Polars",
-      "layer": "compute",
+      "slot": "sql",
       "blurb": "A DataFrame library in Rust with Python bindings, built on Apache Arrow.",
       "url": "https://pola.rs",
       "repo": "https://github.com/pola-rs/polars",
@@ -331,7 +886,7 @@
     {
       "id": "airflow",
       "name": "Apache Airflow",
-      "layer": "orchestration",
+      "slot": "orchestration",
       "blurb": "A workflow scheduler where pipelines are Python DAGs of tasks.",
       "url": "https://airflow.apache.org",
       "repo": "https://github.com/apache/airflow",
@@ -342,7 +897,7 @@
     {
       "id": "temporal",
       "name": "Temporal",
-      "layer": "orchestration",
+      "slot": "orchestration",
       "blurb": "A durable execution engine for long-running workflows written as code.",
       "url": "https://temporal.io",
       "repo": "https://github.com/temporalio/temporal",
@@ -352,7 +907,7 @@
     {
       "id": "dagster",
       "name": "Dagster",
-      "layer": "orchestration",
+      "slot": "orchestration",
       "blurb": "An asset-oriented orchestrator for data pipelines.",
       "url": "https://dagster.io",
       "repo": "https://github.com/dagster-io/dagster",
@@ -361,7 +916,7 @@
     {
       "id": "kubernetes",
       "name": "Kubernetes",
-      "layer": "orchestration",
+      "slot": "deploy",
       "blurb": "The container scheduler that most self-hosted lakehouse services run on in production.",
       "url": "https://kubernetes.io",
       "repo": "https://github.com/kubernetes/kubernetes",
@@ -371,7 +926,7 @@
     {
       "id": "mlflow",
       "name": "MLflow",
-      "layer": "ml",
+      "slot": "ml",
       "blurb": "An open platform for experiment tracking, a model registry, GenAI tracing and evaluation.",
       "url": "https://mlflow.org",
       "repo": "https://github.com/mlflow/mlflow",
@@ -382,7 +937,7 @@
     {
       "id": "omnigent",
       "name": "Omnigent",
-      "layer": "ml",
+      "slot": "agent-harness",
       "blurb": "An agent harness that runs AI agents with tools, skills and policies.",
       "url": "https://omnigent.ai",
       "sitePath": "/learn/getting-started/omnigent"
@@ -390,7 +945,7 @@
     {
       "id": "ollama",
       "name": "Ollama",
-      "layer": "ml",
+      "slot": "agent-models",
       "blurb": "A local runtime for open-weight language models.",
       "url": "https://ollama.com",
       "repo": "https://github.com/ollama/ollama",
@@ -399,7 +954,7 @@
     {
       "id": "mcp",
       "name": "Model Context Protocol",
-      "layer": "ml",
+      "slot": "agent-tools",
       "blurb": "An open protocol that exposes tools and data to AI agents.",
       "url": "https://modelcontextprotocol.io",
       "license": "MIT"
@@ -407,7 +962,7 @@
     {
       "id": "lakehouse-agent-kit",
       "name": "lakehouse-agent-kit",
-      "layer": "ml",
+      "slot": "agent-tools",
       "blurb": "Agent skills for Spark, Delta, Iceberg, Unity Catalog OSS, Kafka, Airflow and MLflow.",
       "url": "https://github.com/open-lakehouse/lakehouse-agent-kit",
       "repo": "https://github.com/open-lakehouse/lakehouse-agent-kit"
@@ -415,7 +970,7 @@
     {
       "id": "delta-sharing",
       "name": "Delta Sharing",
-      "layer": "serving",
+      "slot": "sharing",
       "blurb": "An open REST protocol for sharing live tables across organizations without copying them.",
       "url": "https://delta.io/sharing",
       "repo": "https://github.com/delta-io/delta-sharing",
@@ -425,7 +980,7 @@
     {
       "id": "distributary",
       "name": "distributary",
-      "layer": "serving",
+      "slot": "sharing",
       "blurb": "A Rust implementation of the Delta Sharing protocol: client, admin API and a sharing server.",
       "url": "https://github.com/open-lakehouse/distributary",
       "repo": "https://github.com/open-lakehouse/distributary"
@@ -433,7 +988,7 @@
     {
       "id": "flight-sql",
       "name": "Arrow Flight SQL",
-      "layer": "serving",
+      "slot": "apps",
       "blurb": "A gRPC protocol for running SQL and streaming Arrow record batches back to the client.",
       "url": "https://arrow.apache.org/docs/format/FlightSql.html",
       "license": "Apache-2.0",
@@ -442,7 +997,7 @@
     {
       "id": "hydrofoil",
       "name": "hydrofoil",
-      "layer": "serving",
+      "slot": "apps",
       "blurb": "An open-lakehouse Arrow Flight SQL server over lakehouse tables.",
       "url": "https://github.com/open-lakehouse/hydrofoil",
       "repo": "https://github.com/open-lakehouse/hydrofoil"
@@ -450,7 +1005,7 @@
     {
       "id": "spark-connect",
       "name": "Spark Connect",
-      "layer": "serving",
+      "slot": "spark-connect",
       "blurb": "Spark's gRPC client-server protocol; thin clients in Python, Scala, Go, Rust and more send plans to a remote Spark.",
       "url": "https://spark.apache.org/docs/latest/spark-connect-overview.html",
       "license": "Apache-2.0",
@@ -460,7 +1015,7 @@
     {
       "id": "metric-views",
       "name": "Spark metric views",
-      "layer": "serving",
+      "slot": "semantic",
       "blurb": "Spark's semantic layer: measures and dimensions declared in YAML over a source table and queried with MEASURE().",
       "url": "https://github.com/lisancao/spark-demos/tree/main/demos/01_metrics_views",
       "license": "Apache-2.0",
@@ -469,14 +1024,14 @@
     {
       "id": "kafka-sink",
       "name": "Kafka sink topic",
-      "layer": "serving",
+      "slot": "apps",
       "blurb": "Results written back to a Kafka topic for downstream services.",
       "url": "https://kafka.apache.org"
     },
     {
       "id": "superset",
       "name": "Apache Superset",
-      "layer": "consumers",
+      "slot": "bi",
       "blurb": "An open source BI and dashboarding application.",
       "url": "https://superset.apache.org",
       "repo": "https://github.com/apache/superset",
@@ -486,7 +1041,7 @@
     {
       "id": "jupyter",
       "name": "Jupyter",
-      "layer": "consumers",
+      "slot": "bi",
       "blurb": "Notebooks for interactive Python, SQL and Spark.",
       "url": "https://jupyter.org",
       "license": "BSD-3-Clause",
@@ -495,7 +1050,7 @@
     {
       "id": "marimo",
       "name": "marimo",
-      "layer": "consumers",
+      "slot": "bi",
       "blurb": "A reactive Python notebook stored as plain .py files.",
       "url": "https://marimo.io",
       "repo": "https://github.com/marimo-team/marimo",
@@ -504,7 +1059,7 @@
     {
       "id": "grafana",
       "name": "Grafana",
-      "layer": "consumers",
+      "slot": "observability",
       "blurb": "Dashboards and alerting over metrics and SQL sources.",
       "url": "https://grafana.com",
       "repo": "https://github.com/grafana/grafana",
@@ -513,7 +1068,7 @@
     {
       "id": "openlineage",
       "name": "OpenLineage",
-      "layer": "governance",
+      "slot": "lineage",
       "blurb": "An open standard for emitting lineage events from jobs, with integrations for Spark, Airflow, Flink and dbt.",
       "url": "https://openlineage.io",
       "repo": "https://github.com/OpenLineage/OpenLineage",
@@ -524,7 +1079,7 @@
     {
       "id": "marquez",
       "name": "Marquez",
-      "layer": "governance",
+      "slot": "lineage",
       "blurb": "The reference OpenLineage metadata server and lineage UI.",
       "url": "https://marquezproject.ai",
       "repo": "https://github.com/MarquezProject/marquez",
@@ -534,7 +1089,7 @@
     {
       "id": "policast",
       "name": "policast",
-      "layer": "governance",
+      "slot": "access-policy",
       "blurb": "Author governance once in Cedar, compile it to portable CEL, and push enforcement into the query engine's physical plan.",
       "url": "https://github.com/open-lakehouse/policast",
       "repo": "https://github.com/open-lakehouse/policast",
@@ -543,7 +1098,7 @@
     {
       "id": "cedar",
       "name": "Cedar",
-      "layer": "governance",
+      "slot": "access-policy",
       "blurb": "A policy language and evaluation engine for authorization.",
       "url": "https://www.cedarpolicy.com",
       "repo": "https://github.com/cedar-policy/cedar",
@@ -552,7 +1107,7 @@
     {
       "id": "opa",
       "name": "Open Policy Agent",
-      "layer": "governance",
+      "slot": "access-policy",
       "blurb": "A general-purpose policy engine with the Rego language.",
       "url": "https://www.openpolicyagent.org",
       "repo": "https://github.com/open-policy-agent/opa",
@@ -562,7 +1117,7 @@
     {
       "id": "rustfs",
       "name": "RustFS",
-      "layer": "storage",
+      "slot": "storage",
       "blurb": "A self-hosted S3-compatible object store written in Rust.",
       "url": "https://github.com/rustfs/rustfs",
       "repo": "https://github.com/rustfs/rustfs",
@@ -571,7 +1126,7 @@
     {
       "id": "postgres",
       "name": "PostgreSQL",
-      "layer": "catalog",
+      "slot": "catalog",
       "blurb": "The relational database most open catalogs use to store their metadata.",
       "url": "https://www.postgresql.org",
       "license": "PostgreSQL"
@@ -579,7 +1134,7 @@
     {
       "id": "pyiceberg",
       "name": "PyIceberg",
-      "layer": "compute",
+      "slot": "sql",
       "blurb": "The pure-Python Apache Iceberg library for reading and writing Iceberg tables without a JVM.",
       "url": "https://py.iceberg.apache.org",
       "repo": "https://github.com/apache/iceberg-python",
@@ -589,7 +1144,7 @@
     {
       "id": "openfga",
       "name": "OpenFGA",
-      "layer": "governance",
+      "slot": "access-policy",
       "blurb": "A relationship-based authorization service modelled on Google Zanzibar.",
       "url": "https://openfga.dev",
       "repo": "https://github.com/openfga/openfga",
@@ -599,7 +1154,7 @@
     {
       "id": "envoy",
       "name": "Envoy",
-      "layer": "governance",
+      "slot": "access-policy",
       "blurb": "A proxy used here to terminate mTLS and route each client certificate to its own backend.",
       "url": "https://www.envoyproxy.io",
       "repo": "https://github.com/envoyproxy/envoy",
@@ -609,7 +1164,7 @@
     {
       "id": "breakwater",
       "name": "breakwater",
-      "layer": "governance",
+      "slot": "access-policy",
       "blurb": "Cedar fine-grained access control for Apache DataFusion: an access gate plus row filters and column masks applied in the query planner.",
       "url": "https://github.com/open-lakehouse/breakwater",
       "repo": "https://github.com/open-lakehouse/breakwater",
@@ -618,7 +1173,7 @@
     {
       "id": "headwaters",
       "name": "headwaters",
-      "layer": "governance",
+      "slot": "lineage",
       "blurb": "Experimental Rust OpenLineage service: an append-only event log in Postgres, projected read tables, a read API and a UI.",
       "url": "https://github.com/open-lakehouse/headwaters",
       "repo": "https://github.com/open-lakehouse/headwaters",
@@ -627,7 +1182,7 @@
     {
       "id": "open-lineage-connect",
       "name": "open-lineage-connect",
-      "layer": "governance",
+      "slot": "lineage",
       "blurb": "An OpenLineage pipeline that stores lineage events as Delta and Iceberg tables, with a Spark 4 plugin for column-level lineage.",
       "url": "https://github.com/open-lakehouse/open-lineage-connect",
       "repo": "https://github.com/open-lakehouse/open-lineage-connect",
@@ -636,21 +1191,21 @@
     {
       "id": "ecs-fargate",
       "name": "Amazon ECS on Fargate",
-      "layer": "orchestration",
+      "slot": "deploy",
       "blurb": "AWS's serverless container runtime; it runs the catalog server without managing hosts.",
       "url": "https://aws.amazon.com/fargate/"
     },
     {
       "id": "neon",
       "name": "Neon",
-      "layer": "catalog",
+      "slot": "catalog",
       "blurb": "Serverless Postgres with branching; used for catalog metadata and, in luminescent-lakehouse, to host the services themselves.",
       "url": "https://neon.com"
     },
     {
       "id": "terraform",
       "name": "Terraform",
-      "layer": "orchestration",
+      "slot": "deploy",
       "blurb": "Infrastructure as code; the reference repos ship their cloud deployments as Terraform.",
       "url": "https://www.terraform.io",
       "license": "BUSL-1.1"
@@ -658,7 +1213,7 @@
     {
       "id": "opentofu",
       "name": "OpenTofu",
-      "layer": "orchestration",
+      "slot": "deploy",
       "blurb": "An open source fork of Terraform governed by the Linux Foundation.",
       "url": "https://opentofu.org",
       "license": "MPL-2.0",
@@ -667,14 +1222,14 @@
     {
       "id": "redis",
       "name": "Redis",
-      "layer": "serving",
+      "slot": "apps",
       "blurb": "An in-memory key-value store used to serve the latest streaming state to applications.",
       "url": "https://redis.io"
     },
     {
       "id": "valkey",
       "name": "Valkey",
-      "layer": "serving",
+      "slot": "apps",
       "blurb": "A Linux Foundation fork of Redis under the BSD license.",
       "url": "https://valkey.io",
       "license": "BSD-3-Clause",
@@ -683,27 +1238,448 @@
     {
       "id": "dashboard",
       "name": "Next.js dashboard",
-      "layer": "consumers",
+      "slot": "bi",
       "blurb": "The read-only web dashboard that ships with the open-lakehouse stack.",
       "url": "https://github.com/open-lakehouse/open-lakehouse/tree/main/dashboard"
     },
     {
       "id": "gitops",
       "name": "GitOps CI gate",
-      "layer": "orchestration",
+      "slot": "deploy",
       "blurb": "Pull-request-only changes with a dry run against the real catalog before anything is applied.",
       "url": "https://github.com/open-lakehouse/safe-spark-agents-paper"
     },
     {
       "id": "spark-connect-clients",
       "name": "Spark Connect clients",
-      "layer": "consumers",
+      "slot": "spark-connect",
       "blurb": "Thin clients in Python, Scala, Go, Rust, Swift and more that send query plans to a remote Spark Connect server.",
       "url": "https://spark.apache.org/docs/latest/spark-connect-overview.html",
       "sitePath": "/blog/apache-spark/idiots-guide-spark-connect-clients"
+    },
+    {
+      "id": "dlt",
+      "name": "dlt",
+      "slot": "ingest-batch",
+      "blurb": "A Python library for loading data from APIs, databases and files into tables.",
+      "url": "https://dlthub.com",
+      "repo": "https://github.com/dlt-hub/dlt",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "omnigent-sandbox",
+      "name": "Omnigent sandbox hosts",
+      "slot": "agent-sandbox",
+      "blurb": "Run the Omnigent runner in a remote container or microVM per session; provider credentials stay on the launching process and never enter the sandbox.",
+      "url": "https://omnigent.ai/docs/deploy/cloud-sandbox-host"
+    },
+    {
+      "id": "vllm",
+      "name": "vLLM",
+      "slot": "agent-models",
+      "blurb": "A high-throughput inference server for open-weight language models.",
+      "url": "https://vllm.ai",
+      "repo": "https://github.com/vllm-project/vllm",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "opentelemetry",
+      "name": "OpenTelemetry",
+      "slot": "observability",
+      "blurb": "The open standard and SDKs for traces, metrics and logs.",
+      "url": "https://opentelemetry.io",
+      "repo": "https://github.com/open-telemetry",
+      "license": "Apache-2.0",
+      "steward": "Cloud Native Computing Foundation"
+    },
+    {
+      "id": "prometheus",
+      "name": "Prometheus",
+      "slot": "observability",
+      "blurb": "A metrics database and alerting system.",
+      "url": "https://prometheus.io",
+      "repo": "https://github.com/prometheus/prometheus",
+      "license": "Apache-2.0",
+      "steward": "Cloud Native Computing Foundation"
+    },
+    {
+      "id": "spark-feather",
+      "name": "Spark local mode (Project Feather)",
+      "slot": "local",
+      "blurb": "Spark in a single process; Spark 4.3 adds shuffle-free single-task execution for small queries (spark.sql.optimizer.singleTaskExecution.enabled, off by default).",
+      "url": "https://issues.apache.org/jira/browse/SPARK-56978",
+      "license": "Apache-2.0",
+      "steward": "Apache Software Foundation"
+    },
+    {
+      "id": "great-expectations",
+      "name": "Great Expectations",
+      "slot": "quality",
+      "blurb": "Declarative data quality tests (expectations) run against tables and batches.",
+      "url": "https://greatexpectations.io",
+      "repo": "https://github.com/great-expectations/great_expectations",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "soda-core",
+      "name": "Soda Core",
+      "slot": "quality",
+      "blurb": "Data quality checks written in YAML and run against tables.",
+      "url": "https://github.com/sodadata/soda-core",
+      "repo": "https://github.com/sodadata/soda-core",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "datahub",
+      "name": "DataHub",
+      "slot": "metadata",
+      "blurb": "A metadata platform for search, ownership, glossary and lineage across data systems.",
+      "url": "https://datahubproject.io",
+      "repo": "https://github.com/datahub-project/datahub",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "openmetadata",
+      "name": "OpenMetadata",
+      "slot": "metadata",
+      "blurb": "A metadata platform for discovery, governance, quality and collaboration.",
+      "url": "https://open-metadata.org",
+      "repo": "https://github.com/open-metadata/OpenMetadata",
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "iceberg-maintenance",
+      "name": "Iceberg maintenance procedures",
+      "slot": "maintenance",
+      "blurb": "rewrite_data_files, rewrite_manifests and expire_snapshots, called from Spark SQL on a schedule.",
+      "url": "https://iceberg.apache.org/docs/latest/maintenance/",
+      "license": "Apache-2.0",
+      "steward": "Apache Software Foundation"
+    },
+    {
+      "id": "argocd",
+      "name": "Argo CD",
+      "slot": "deploy",
+      "blurb": "GitOps continuous delivery for Kubernetes.",
+      "url": "https://argoproj.github.io/cd/",
+      "repo": "https://github.com/argoproj/argo-cd",
+      "license": "Apache-2.0",
+      "steward": "Cloud Native Computing Foundation"
+    },
+    {
+      "id": "keycloak",
+      "name": "Keycloak",
+      "slot": "identity",
+      "blurb": "Identity and access management with single sign-on, OIDC and SAML.",
+      "url": "https://www.keycloak.org",
+      "repo": "https://github.com/keycloak/keycloak",
+      "license": "Apache-2.0",
+      "steward": "Cloud Native Computing Foundation"
+    },
+    {
+      "id": "spiffe",
+      "name": "SPIFFE / SPIRE",
+      "slot": "identity",
+      "blurb": "Workload identity: cryptographic identities for services and agents.",
+      "url": "https://spiffe.io",
+      "repo": "https://github.com/spiffe/spire",
+      "license": "Apache-2.0",
+      "steward": "Cloud Native Computing Foundation"
+    },
+    {
+      "id": "openbao",
+      "name": "OpenBao",
+      "slot": "identity",
+      "blurb": "An open source fork of HashiCorp Vault for secrets management.",
+      "url": "https://openbao.org",
+      "repo": "https://github.com/openbao/openbao",
+      "license": "MPL-2.0"
     }
   ],
   "patterns": [
+    {
+      "slug": "agentic-lakehouse",
+      "title": "The agentic lakehouse",
+      "stackLine": "Omnigent and MLflow over sandboxed Spark Connect sessions, on Iceberg and Unity Catalog",
+      "tagline": "Agents get a sandbox, a Spark session and a catalog identity. The platform decides the rest.",
+      "category": "Platform",
+      "definition": "The agentic lakehouse architecture gives each AI agent a governed path to data. Omnigent runs the agent and evaluates policies on every tool call, model request and file operation, at session, agent and server level; MLflow traces and evaluates every step and fronts model providers. Each agent session runs in a sandbox, locally or on Kubernetes, with provider credentials kept outside it. Inside, the agent gets a Spark client over Spark Connect: a local Spark with Project Feather's shuffle-free execution for fast work on a subset of data, or a remote session pinned to its identity. Through Spark it can run batch, streaming, Real-Time Mode and declarative pipelines against Apache Iceberg tables in Unity Catalog, which authorizes each request and vends storage credentials scoped to what the agent may touch.",
+      "whenToUse": [
+        "You want agents to build and operate pipelines, not only answer questions.",
+        "You need one governance story for people, services and agents.",
+        "You want agents to iterate fast on small data without touching production."
+      ],
+      "notFor": [
+        "A single question-answering assistant over a few tables: the semantic layer architecture is lighter."
+      ],
+      "nodes": [
+        {
+          "label": "Operational systems and event streams",
+          "slot": "sources",
+          "role": "The data agents work on"
+        },
+        {
+          "component": "kafka",
+          "slot": "ingest-stream",
+          "role": "Events agents can build streaming pipelines over",
+          "detail": true
+        },
+        {
+          "component": "omnigent",
+          "slot": "agent-harness",
+          "role": "Runs agents; policies return ALLOW, DENY or ASK at session, agent and server level",
+          "swaps": []
+        },
+        {
+          "component": "omnigent-sandbox",
+          "slot": "agent-sandbox",
+          "role": "A container or microVM per session; provider credentials never enter it",
+          "swaps": [
+            "kubernetes"
+          ]
+        },
+        {
+          "component": "kubernetes",
+          "slot": "agent-sandbox",
+          "role": "Cluster for sandboxes and Spark executors",
+          "detail": true
+        },
+        {
+          "component": "mcp",
+          "slot": "agent-tools",
+          "role": "Named lakehouse tools: read a table, dry-run a pipeline, run one SQL statement",
+          "swaps": [
+            "lakehouse-agent-kit"
+          ]
+        },
+        {
+          "component": "mlflow",
+          "slot": "agent-models",
+          "role": "AI Gateway in front of hosted providers",
+          "swaps": [
+            "vllm",
+            "ollama"
+          ]
+        },
+        {
+          "component": "mlflow",
+          "slot": "agent-observability",
+          "role": "Traces every agent step; evaluates results against trusted tables"
+        },
+        {
+          "component": "spark-connect",
+          "slot": "spark-connect",
+          "role": "One client session per agent: local in the sandbox, or a remote endpoint pinned to its identity"
+        },
+        {
+          "component": "spark-feather",
+          "slot": "local",
+          "role": "Fast local Spark on a subset of data, same catalog",
+          "version": "Spark 4.3"
+        },
+        {
+          "component": "sdp",
+          "slot": "pipelines",
+          "role": "The agent's output; a dry run must pass before it runs"
+        },
+        {
+          "component": "spark",
+          "slot": "batch",
+          "role": "Batch and SQL on the cluster after review"
+        },
+        {
+          "component": "spark",
+          "slot": "streaming",
+          "role": "Structured Streaming jobs agents can author",
+          "detail": true
+        },
+        {
+          "component": "spark-rtm",
+          "slot": "realtime",
+          "role": "Real-Time Mode for millisecond paths",
+          "detail": true
+        },
+        {
+          "component": "unity-catalog",
+          "slot": "catalog",
+          "role": "Authorizes each request; vends credentials scoped to the agent's namespace",
+          "swaps": [
+            "lakekeeper",
+            "polaris"
+          ]
+        },
+        {
+          "component": "iceberg",
+          "slot": "format",
+          "role": "Snapshots make every agent write inspectable and reversible",
+          "swaps": [
+            "delta"
+          ]
+        },
+        {
+          "component": "seaweedfs",
+          "slot": "storage",
+          "role": "Object storage",
+          "swaps": [
+            "s3",
+            "rustfs",
+            "minio"
+          ]
+        },
+        {
+          "component": "openlineage",
+          "slot": "lineage",
+          "role": "Which tables each agent job read and wrote"
+        },
+        {
+          "component": "gitops",
+          "slot": "deploy",
+          "role": "Agent changes arrive as pull requests; CI dry-runs them before anything is applied"
+        },
+        {
+          "component": "spiffe",
+          "slot": "identity",
+          "role": "A workload identity per agent and tenant",
+          "detail": true
+        },
+        {
+          "component": "airflow",
+          "slot": "orchestration",
+          "role": "Runs approved pipelines; agents trigger runs through it",
+          "detail": true
+        }
+      ],
+      "steps": [
+        {
+          "title": "A session starts in a sandbox",
+          "body": "Omnigent starts the agent in a container or microVM, locally or on Kubernetes. The sandbox gets the agent's own identity; provider credentials stay outside."
+        },
+        {
+          "title": "Policies wrap every call",
+          "body": "Each tool call, model request and file operation passes session, agent and server policies. Any DENY blocks it; any ASK waits for a person."
+        },
+        {
+          "title": "The agent gets a Spark session",
+          "body": "Inside the sandbox it connects over Spark Connect to a local Spark with Project Feather enabled, working on a subset of the data registered in the same catalog."
+        },
+        {
+          "title": "It writes declarative pipelines",
+          "body": "The agent writes Spark Declarative Pipelines into its own namespace and dry-runs them against the real catalog."
+        },
+        {
+          "title": "Changes go through review",
+          "body": "Passing work becomes a pull request; CI dry-runs it again and a controller applies it after approval."
+        },
+        {
+          "title": "Production runs under identity",
+          "body": "Approved pipelines run on the cluster in batch, streaming or Real-Time Mode, through an endpoint pinned to the agent's or tenant's identity; the catalog vends credentials only for its tables."
+        },
+        {
+          "title": "Everything is traced",
+          "body": "MLflow records each agent step and evaluation; OpenLineage records every table read and written; Iceberg snapshots let you roll back."
+        }
+      ],
+      "repos": [
+        {
+          "name": "open-lakehouse/lakehouse-masterclass",
+          "url": "https://github.com/open-lakehouse/lakehouse-masterclass",
+          "description": "The local version: an SDP agent on Omnigent with a local model, MCP tools and ALLOW, DENY and ASK policies, writing into a sandbox namespace on Iceberg and Unity Catalog (chapters 3 and 13).",
+          "license": "Apache-2.0",
+          "targets": [
+            "laptop"
+          ]
+        },
+        {
+          "name": "open-lakehouse/safe-spark-agents-paper",
+          "url": "https://github.com/open-lakehouse/safe-spark-agents-paper",
+          "description": "The production version: PR-only agent output, CI dry runs, identity-pinned Spark Connect behind mTLS, Kubernetes executors and a governed Iceberg REST catalog with per-tenant credential vending.",
+          "targets": [
+            "kubernetes",
+            "aws"
+          ]
+        },
+        {
+          "name": "lisancao/spark-demos",
+          "url": "https://github.com/lisancao/spark-demos",
+          "description": "Demo 07 measures the local-mode overheads Project Feather targets; demo 16 shows Spark 4.3's shuffle-free single-task execution.",
+          "targets": [
+            "laptop"
+          ]
+        }
+      ],
+      "caveats": [
+        "Project Feather's shuffle-free single-task execution ships off by default in Spark 4.3 and applies to in-memory relations at or below 1,000 rows by default.",
+        "Omnigent sandbox providers differ in network egress control; check the provider before relying on it for isolation.",
+        "This architecture combines the masterclass and the paper; no single repo deploys all of it yet."
+      ],
+      "learn": [
+        {
+          "label": "The agentic lakehouse (guide)",
+          "href": "/agentic-lakehouse"
+        },
+        {
+          "label": "Agentic data engineering (guide)",
+          "href": "/agentic-data-engineering"
+        },
+        {
+          "label": "Governed AI agents architecture",
+          "href": "/reference-architectures/governed-ai-agents"
+        },
+        {
+          "label": "Omnigent policies",
+          "href": "https://omnigent.ai/docs/policies/overview"
+        },
+        {
+          "label": "Getting started with MLflow",
+          "href": "/learn/getting-started/mlflow"
+        }
+      ],
+      "faqs": [
+        {
+          "q": "How do you give an AI agent access to Spark safely?",
+          "a": "Give each agent its own Spark Connect session: a local Spark in its sandbox for fast work on a subset of data, and a remote endpoint pinned to its identity for production runs. The catalog authorizes every request and vends storage credentials scoped to the agent's namespace."
+        },
+        {
+          "q": "What do Omnigent and MLflow each do in an agentic lakehouse?",
+          "a": "Omnigent runs the agent, keeps its session in a sandbox, and enforces policies on every tool call, model request and file operation. MLflow traces and evaluates what the agent did and can front model providers through its AI Gateway."
+        },
+        {
+          "q": "What is Project Feather and why does it matter for agents?",
+          "a": "Project Feather (SPARK-56978) cuts Spark's local-mode latency. Spark 4.3 adds shuffle-free single-task execution for small queries, which suits agents that issue many small queries while they iterate."
+        }
+      ],
+      "sources": [
+        {
+          "label": "Omnigent policies",
+          "href": "https://omnigent.ai/docs/policies/overview"
+        },
+        {
+          "label": "Omnigent cloud sandbox hosts",
+          "href": "https://omnigent.ai/docs/deploy/cloud-sandbox-host"
+        },
+        {
+          "label": "SPARK-56978 (Project Feather)",
+          "href": "https://issues.apache.org/jira/browse/SPARK-56978"
+        },
+        {
+          "label": "spark-demos demo 07",
+          "href": "https://github.com/lisancao/spark-demos/tree/main/demos/07_project_feather"
+        },
+        {
+          "label": "safe-spark-agents paper",
+          "href": "https://open-lakehouse.github.io/safe-spark-agents-paper/"
+        }
+      ],
+      "keywords": [
+        "agentic lakehouse architecture",
+        "AI agents Spark Connect",
+        "agent sandbox Kubernetes Spark",
+        "Omnigent MLflow lakehouse",
+        "Project Feather agents"
+      ],
+      "updated": "2026-11-21",
+      "url": "https://openlakehouse.io/reference-architectures/agentic-lakehouse"
+    },
     {
       "slug": "batch-medallion",
       "title": "Batch medallion with Spark Declarative Pipelines",
@@ -723,23 +1699,23 @@
       "nodes": [
         {
           "label": "Order-event generator and batch extracts",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Daily and hourly files"
         },
         {
           "label": "Idempotent bronze loader",
-          "layer": "ingest",
+          "slot": "ingest-batch",
           "role": "Appends each batch once, keyed so reruns do not duplicate"
         },
         {
           "component": "auto-cdc",
-          "layer": "ingest",
+          "slot": "ingest-cdc",
           "role": "Applies change feeds as SCD type 1 or 2",
           "detail": true
         },
         {
           "component": "seaweedfs",
-          "layer": "storage",
+          "slot": "storage",
           "role": "s3://lakehouse/warehouse",
           "version": "4.51",
           "swaps": [
@@ -751,7 +1727,7 @@
         },
         {
           "component": "iceberg",
-          "layer": "format",
+          "slot": "format",
           "role": "Bronze, silver and gold tables",
           "version": "runtime 4.3_2.13 built from apache/iceberg#18749",
           "swaps": [
@@ -761,7 +1737,7 @@
         },
         {
           "component": "unity-catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Writable Iceberg REST catalog",
           "version": "0.7.0",
           "swaps": [
@@ -772,19 +1748,19 @@
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Runs the pipeline over Spark Connect",
           "version": "4.3.0"
         },
         {
           "component": "sdp",
-          "layer": "compute",
+          "slot": "pipelines",
           "role": "Declares bronze to silver to gold and resolves order",
           "version": "pyspark[pipelines]==4.3.0"
         },
         {
           "component": "airflow",
-          "layer": "orchestration",
+          "slot": "orchestration",
           "role": "DAG with schedules and backfills",
           "version": "3.3.2",
           "swaps": [
@@ -794,25 +1770,20 @@
         },
         {
           "component": "mlflow",
-          "layer": "ml",
+          "slot": "ml",
           "role": "Logs the gold snapshot id with each model run",
           "version": "3.1.0",
           "detail": true
         },
         {
           "component": "duckdb",
-          "layer": "serving",
+          "slot": "sql",
           "role": "Reads gold through Iceberg REST",
           "version": "1.5.6",
           "swaps": [
             "trino",
             "pyiceberg"
           ]
-        },
-        {
-          "label": "Analysts and notebooks",
-          "layer": "consumers",
-          "role": "Query gold tables"
         }
       ],
       "steps": [
@@ -949,24 +1920,24 @@
       "nodes": [
         {
           "label": "Operational database or service",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Emits one event per insert, update or delete"
         },
         {
           "component": "debezium",
-          "layer": "ingest",
+          "slot": "ingest-cdc",
           "role": "Turns database transaction logs into change events",
           "detail": true
         },
         {
           "component": "kafka",
-          "layer": "ingest",
+          "slot": "ingest-stream",
           "role": "The change feed topic (menu-changes in the demo)",
           "version": "apache/kafka 4.0.0 image"
         },
         {
           "component": "local-fs",
-          "layer": "storage",
+          "slot": "storage",
           "role": "Iceberg warehouse directory in the demo",
           "swaps": [
             "s3",
@@ -977,13 +1948,13 @@
         },
         {
           "component": "iceberg",
-          "layer": "format",
+          "slot": "format",
           "role": "SCD type 2 target with row-level operations",
           "version": "Spark 4.3 runtime built from source"
         },
         {
           "label": "Iceberg hadoop catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Declared in the pipeline spec",
           "swaps": [
             "unity-catalog",
@@ -993,19 +1964,14 @@
         },
         {
           "component": "sdp",
-          "layer": "compute",
+          "slot": "pipelines",
           "role": "Runs the pipeline with spark-pipelines run",
           "version": "pyspark==4.3.0"
         },
         {
           "component": "auto-cdc",
-          "layer": "compute",
+          "slot": "ingest-cdc",
           "role": "KEYS, SEQUENCE BY, APPLY AS DELETE WHEN, STORED AS SCD TYPE 2"
-        },
-        {
-          "label": "Analysts and audit queries",
-          "layer": "consumers",
-          "role": "Read current rows or any past version"
         }
       ],
       "steps": [
@@ -1104,127 +2070,137 @@
     {
       "slug": "streaming-medallion",
       "title": "Streaming medallion",
-      "stackLine": "Kafka, Spark Structured Streaming and Delta Lake in Unity Catalog",
-      "tagline": "Events in, governed tables out, minutes or seconds behind the source.",
+      "stackLine": "Kafka, Spark Structured Streaming and Apache Iceberg in Unity Catalog",
+      "tagline": "Events in, governed tables out, seconds behind the source.",
       "category": "Streaming",
-      "definition": "A streaming medallion architecture applies the bronze, silver and gold layout to event streams. Apache Kafka buffers events, an Apache Spark Structured Streaming job appends them to a bronze Delta Lake table with exactly-once checkpointing, and downstream streaming or declarative pipelines keep silver and gold tables up to date. Because the tables are open and registered in Unity Catalog OSS, batch jobs, BI tools and other engines read the same data the stream writes.",
+      "definition": "A streaming medallion architecture applies the bronze, silver and gold layout to event streams. Apache Kafka buffers events, an Apache Spark Structured Streaming query appends them to a bronze Apache Iceberg table with its checkpoint on object storage, and a Spark Declarative Pipeline derives silver and gold. Because the tables are open and registered in Unity Catalog OSS, batch jobs, other engines and AI agents read the same data the stream writes.",
       "whenToUse": [
         "Sources emit events continuously and consumers want tables, not topics.",
         "Latency of seconds to minutes is enough.",
-        "You want one copy of history that both streaming and batch jobs read."
+        "You want one copy of history that streaming jobs, batch jobs and agents all read."
       ],
       "notFor": [
-        "Request-path latency in milliseconds: see the real-time streaming pattern."
+        "Request-path latency in milliseconds: see the real-time streaming architecture."
       ],
       "nodes": [
         {
           "label": "Applications, devices and CDC",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Emit events"
         },
         {
           "component": "debezium",
-          "layer": "ingest",
+          "slot": "ingest-cdc",
           "role": "Turns database changes into Kafka events",
           "detail": true
         },
         {
           "component": "kafka",
-          "layer": "ingest",
-          "role": "Durable event buffer",
+          "slot": "ingest-stream",
+          "role": "Durable event buffer (the orders topic)",
           "version": "Confluent 7.5.0 images"
         },
         {
-          "component": "seaweedfs",
-          "layer": "storage",
-          "role": "Tables and streaming checkpoints",
-          "version": "3.80",
-          "swaps": [
-            "minio",
-            "rustfs",
-            "s3"
-          ]
-        },
-        {
-          "component": "delta",
-          "layer": "format",
-          "role": "Bronze, silver and gold tables",
-          "version": "4.3.1",
-          "swaps": [
-            "iceberg",
-            "hudi"
-          ]
-        },
-        {
-          "component": "unity-catalog",
-          "layer": "catalog",
-          "role": "Registers every layer",
-          "version": "0.6.0",
-          "swaps": [
-            "polaris",
-            "lakekeeper"
-          ]
-        },
-        {
           "component": "spark",
-          "layer": "compute",
-          "role": "Structured Streaming from Kafka to bronze",
-          "version": "4.1.0",
+          "slot": "streaming",
+          "role": "Kafka to iceberg.bronze.orders_raw, checkpoint at s3a://lakehouse/_checkpoints",
+          "version": "4.3.0",
           "swaps": [
             "flink"
           ]
         },
         {
           "component": "sdp",
-          "layer": "compute",
+          "slot": "pipelines",
           "role": "Silver and gold derived from bronze",
-          "detail": true
-        },
-        {
-          "component": "airflow",
-          "layer": "orchestration",
-          "role": "Runs the batch side and maintenance",
-          "version": "3.1.6",
-          "detail": true
+          "version": "4.3.0"
         },
         {
           "component": "spark-connect",
-          "layer": "serving",
-          "role": "Remote query access"
+          "slot": "spark-connect",
+          "role": "The streaming query runs over Spark Connect",
+          "version": "4.3.0"
         },
         {
-          "component": "dashboard",
-          "layer": "consumers",
-          "role": "Live views over gold"
+          "component": "unity-catalog",
+          "slot": "catalog",
+          "role": "Iceberg REST catalog for every layer",
+          "version": "0.7.0",
+          "swaps": [
+            "polaris",
+            "lakekeeper"
+          ]
+        },
+        {
+          "component": "iceberg",
+          "slot": "format",
+          "role": "Bronze, silver and gold tables",
+          "swaps": [
+            "delta",
+            "hudi"
+          ]
+        },
+        {
+          "component": "seaweedfs",
+          "slot": "storage",
+          "role": "Tables and streaming checkpoints",
+          "version": "4.51",
+          "swaps": [
+            "rustfs",
+            "minio",
+            "s3"
+          ]
+        },
+        {
+          "component": "airflow",
+          "slot": "orchestration",
+          "role": "Runs the batch side and table maintenance",
+          "version": "3.3.2",
+          "detail": true
+        },
+        {
+          "component": "iceberg-maintenance",
+          "slot": "maintenance",
+          "role": "Compaction keeps small streaming files in check",
+          "detail": true
         }
       ],
       "steps": [
         {
           "title": "Buffer events",
-          "body": "Producers write JSON events to Kafka topics."
+          "body": "Producers write JSON events to a Kafka topic, including resends and late events."
         },
         {
           "title": "Append to bronze",
-          "body": "A Structured Streaming query reads Kafka and appends to a bronze Delta table; its checkpoint makes the write exactly-once."
+          "body": "A Structured Streaming query reads Kafka and appends to a bronze Iceberg table; its checkpoint makes the write exactly-once."
         },
         {
           "title": "Clean and deduplicate",
-          "body": "Silver applies a watermark and dropDuplicates so late and repeated events are handled deterministically."
+          "body": "Silver handles late and repeated events deterministically."
         },
         {
           "title": "Aggregate",
-          "body": "Gold computes windowed aggregates, such as one-minute counts, and joins static dimension tables."
+          "body": "Gold computes the aggregates consumers read."
         },
         {
-          "title": "Read anywhere",
-          "body": "Because every layer is a catalog table, batch jobs and other engines read the same data."
+          "title": "Compact",
+          "body": "Streaming writes many small files; a scheduled rewrite_data_files keeps reads fast."
         }
       ],
       "repos": [
         {
+          "name": "open-lakehouse/lakehouse-masterclass",
+          "url": "https://github.com/open-lakehouse/lakehouse-masterclass",
+          "description": "Chapter 9 streams Kafka into iceberg.bronze.orders_raw over Spark Connect; chapter 8 builds silver and gold; chapter 10 adds maintenance.",
+          "license": "Apache-2.0",
+          "targets": [
+            "laptop"
+          ]
+        },
+        {
           "name": "open-lakehouse/open-lakehouse",
           "url": "https://github.com/open-lakehouse/open-lakehouse",
-          "description": "An open reference architecture for the lakehouse that runs on Docker, deploys to AWS, and is designed so an AI agent can set it up and tear it down.",
+          "description": "The same flow writing Delta Lake bronze into Unity Catalog 0.6.0.",
           "license": "Apache-2.0",
           "targets": [
             "laptop",
@@ -1241,29 +2217,20 @@
             "./lakehouse start mlflow",
             "./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)"
           ]
-        },
-        {
-          "name": "open-lakehouse/lakehouse-masterclass",
-          "url": "https://github.com/open-lakehouse/lakehouse-masterclass",
-          "description": "Chapter 9 builds Kafka to Structured Streaming to bronze on the course stack.",
-          "license": "Apache-2.0",
-          "targets": [
-            "laptop"
-          ]
         }
       ],
       "caveats": [
         "Match the Kafka connector to your Spark version exactly; a spark-sql-kafka build for one Spark minor version can fail with NoSuchMethodError on another.",
-        "Kafka is not registered in the catalog in the open-lakehouse stack; only the tables are."
+        "Kafka itself is not registered in the catalog; only the tables are."
       ],
       "learn": [
         {
-          "label": "Real-time streaming pattern",
+          "label": "Real-time streaming architecture",
           "href": "/reference-architectures/real-time-streaming"
         },
         {
-          "label": "Getting started with Delta Lake",
-          "href": "/learn/getting-started/delta-lake"
+          "label": "Lakehouse masterclass, chapter 9",
+          "href": "https://github.com/open-lakehouse/lakehouse-masterclass/blob/main/textbook/chapters/ch09-streaming.md"
         },
         {
           "label": "Structured Streaming guide",
@@ -1272,18 +2239,18 @@
       ],
       "faqs": [
         {
-          "q": "How do I stream Kafka into Delta Lake with open source tools?",
-          "a": "Run an Apache Spark Structured Streaming query with the Kafka source and a Delta sink with a checkpoint location; register the table in Unity Catalog OSS so other engines can find it."
+          "q": "How do I stream Kafka into Apache Iceberg with open source tools?",
+          "a": "Run an Apache Spark Structured Streaming query with the Kafka source and an Iceberg table as the sink, with its checkpoint on object storage, and register the table in an Iceberg REST catalog such as Unity Catalog OSS 0.7 so other engines can read it."
         },
         {
-          "q": "Is the Kafka to Delta write exactly-once?",
-          "a": "Yes for the table: Structured Streaming records Kafka offsets in its checkpoint and commits each micro-batch to the Delta log atomically, so a restarted query neither skips nor duplicates batches."
+          "q": "Is the Kafka to Iceberg write exactly-once?",
+          "a": "Yes for the table: Structured Streaming records Kafka offsets in its checkpoint and commits each micro-batch atomically, so a restarted query neither skips nor duplicates batches."
         }
       ],
       "sources": [
         {
-          "label": "open-lakehouse docs/architecture.md",
-          "href": "https://github.com/open-lakehouse/open-lakehouse/blob/main/docs/architecture.md"
+          "label": "lakehouse-masterclass chapter 9",
+          "href": "https://github.com/open-lakehouse/lakehouse-masterclass/blob/main/textbook/chapters/ch09-streaming.md"
         },
         {
           "label": "Structured Streaming + Kafka integration",
@@ -1291,9 +2258,9 @@
         }
       ],
       "keywords": [
-        "Kafka to Delta Lake",
+        "Kafka to Iceberg",
         "streaming medallion architecture",
-        "Spark Structured Streaming Kafka Delta",
+        "Spark Structured Streaming Kafka Iceberg",
         "streaming lakehouse open source"
       ],
       "updated": "2026-11-21",
@@ -1318,41 +2285,41 @@
       "nodes": [
         {
           "label": "Payments, clicks, game events",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Producers with event timestamps"
         },
         {
           "component": "kafka",
-          "layer": "ingest",
+          "slot": "ingest-stream",
           "role": "Input topic, 16 partitions in the reference runs",
           "version": "Confluent 7.6.0 image"
         },
         {
           "component": "spark-rtm",
-          "layer": "compute",
+          "slot": "realtime",
           "role": "Continuous processing trigger",
           "version": "Spark 4.1 to 4.3"
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "realtime",
           "role": "transformWithState for keyed state, on RocksDB",
           "version": "4.3.0"
         },
         {
           "component": "flink",
-          "layer": "compute",
+          "slot": "realtime",
           "role": "The engine being compared or migrated from",
           "detail": true
         },
         {
           "component": "kafka-sink",
-          "layer": "serving",
+          "slot": "apps",
           "role": "Output and latency topics"
         },
         {
           "component": "redis",
-          "layer": "serving",
+          "slot": "apps",
           "role": "Latest state for applications",
           "detail": true,
           "swaps": [
@@ -1360,17 +2327,17 @@
           ]
         },
         {
-          "component": "delta",
-          "layer": "format",
+          "component": "iceberg",
+          "slot": "format",
           "role": "Optional history table written by a separate query",
           "detail": true,
           "swaps": [
-            "iceberg"
+            "delta"
           ]
         },
         {
           "label": "Fraud engine, app UI, live board",
-          "layer": "consumers",
+          "slot": "apps",
           "role": "Read results within milliseconds"
         }
       ],
@@ -1517,12 +2484,12 @@
       "nodes": [
         {
           "label": "Pipelines and notebooks",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Create and update tables"
         },
         {
           "component": "rustfs",
-          "layer": "storage",
+          "slot": "storage",
           "role": "S3-compatible storage with STS credentials",
           "version": "1.0.0",
           "swaps": [
@@ -1533,7 +2500,7 @@
         },
         {
           "component": "delta",
-          "layer": "format",
+          "slot": "format",
           "role": "Catalog-managed Delta tables",
           "swaps": [
             "iceberg"
@@ -1541,12 +2508,12 @@
         },
         {
           "component": "iceberg",
-          "layer": "format",
+          "slot": "format",
           "role": "Native Iceberg tables through Iceberg REST"
         },
         {
           "component": "unity-catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Delta API, Iceberg REST catalog and credential vending",
           "version": "0.7.0",
           "swaps": [
@@ -1557,25 +2524,25 @@
         },
         {
           "component": "postgres",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Catalog metadata",
           "version": "16.3",
           "detail": true
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Delta notebooks on Spark 4.2.0; Iceberg notebooks on Spark 4.1.3",
           "version": "4.2.0 / 4.1.3"
         },
         {
           "component": "pyiceberg",
-          "layer": "compute",
+          "slot": "sql",
           "role": "JVM-free Iceberg reads and writes"
         },
         {
           "component": "duckdb",
-          "layer": "compute",
+          "slot": "sql",
           "role": "Attaches the Iceberg REST endpoint for SQL reads",
           "swaps": [
             "trino",
@@ -1585,13 +2552,13 @@
         },
         {
           "component": "trino",
-          "layer": "compute",
+          "slot": "sql",
           "role": "Distributed SQL over the same catalog",
           "detail": true
         },
         {
           "component": "marimo",
-          "layer": "consumers",
+          "slot": "bi",
           "role": "Reactive notebooks on :2718 and :2719",
           "swaps": [
             "jupyter"
@@ -1731,47 +2698,47 @@
       "nodes": [
         {
           "label": "AI coding agent",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Writes inert pipeline specs as a pull request"
         },
         {
           "component": "gitops",
-          "layer": "orchestration",
+          "slot": "deploy",
           "role": "PR-only output, dry run against the real catalog, reconcile"
         },
         {
           "component": "sdp",
-          "layer": "compute",
+          "slot": "pipelines",
           "role": "Declarative authoring: specs, not imperative jobs",
           "version": "Spark 4.1.2"
         },
         {
           "component": "envoy",
-          "layer": "governance",
+          "slot": "access-policy",
           "role": "mTLS on :15009; routes each client certificate to its tenant",
           "version": "1.31.5"
         },
         {
           "component": "spark-connect",
-          "layer": "serving",
+          "slot": "spark-connect",
           "role": "The single identity-pinned ingress per tenant",
           "version": "4.1.2"
         },
         {
           "component": "kubernetes",
-          "layer": "orchestration",
+          "slot": "deploy",
           "role": "Client-mode driver plus executor pods on EKS",
           "version": "EKS 1.31"
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Executors do the work",
           "version": "4.1.2"
         },
         {
           "component": "iceberg",
-          "layer": "format",
+          "slot": "format",
           "role": "Tables under per-tenant prefixes",
           "version": "1.11.0",
           "swaps": [
@@ -1780,7 +2747,7 @@
         },
         {
           "component": "lakekeeper",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Governed Iceberg REST catalog with per-principal authorization and credential vending",
           "version": "0.13.1",
           "swaps": [
@@ -1790,13 +2757,13 @@
         },
         {
           "component": "openfga",
-          "layer": "governance",
+          "slot": "access-policy",
           "role": "Authorization model behind the catalog",
           "version": "1.14.0"
         },
         {
           "component": "s3",
-          "layer": "storage",
+          "slot": "storage",
           "role": "Data under per-tenant prefixes with STS-scoped credentials",
           "swaps": [
             "minio"
@@ -1804,20 +2771,15 @@
         },
         {
           "component": "omnigent",
-          "layer": "ml",
+          "slot": "agent-harness",
           "role": "Agent harness with tools and policies",
           "detail": true
         },
         {
           "component": "ollama",
-          "layer": "ml",
+          "slot": "agent-models",
           "role": "Local model for the course's agent chapter",
           "detail": true
-        },
-        {
-          "label": "Reviewers and downstream jobs",
-          "layer": "consumers",
-          "role": "Approve PRs, read the governed tables"
         }
       ],
       "steps": [
@@ -1950,12 +2912,12 @@
       "nodes": [
         {
           "label": "Provider pipelines",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Maintain the tables to share"
         },
         {
           "component": "s3",
-          "layer": "storage",
+          "slot": "storage",
           "role": "Provider's bucket; data never moves",
           "swaps": [
             "gcs-adls",
@@ -1965,7 +2927,7 @@
         },
         {
           "component": "delta",
-          "layer": "format",
+          "slot": "format",
           "role": "Shared tables",
           "swaps": [
             "iceberg"
@@ -1973,7 +2935,7 @@
         },
         {
           "component": "unity-catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Source of shares and table locations",
           "swaps": [
             "unitycatalog-rs"
@@ -1981,25 +2943,20 @@
         },
         {
           "component": "delta-sharing",
-          "layer": "serving",
+          "slot": "sharing",
           "role": "Open REST protocol for recipients",
           "version": "server 1.3.10 in open-lakehouse"
         },
         {
           "component": "distributary",
-          "layer": "serving",
+          "slot": "sharing",
           "role": "Composable Rust sharing server with Postgres or SQLite stores",
           "detail": true
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Provider-side writes"
-        },
-        {
-          "label": "Recipients: pandas, Spark, BI tools",
-          "layer": "consumers",
-          "role": "Read with a bearer token profile"
         }
       ],
       "steps": [
@@ -2120,160 +3077,174 @@
     {
       "slug": "laptop-open-lakehouse",
       "title": "The open lakehouse on a laptop",
-      "stackLine": "Spark, Delta Lake, Unity Catalog, Kafka, Airflow and MLflow in Docker",
-      "tagline": "The whole stack, one command at a time, on the machine in front of you.",
+      "stackLine": "Spark 4.3, Apache Iceberg, Unity Catalog, Kafka, Airflow, MLflow and an agent, in Docker",
+      "tagline": "The whole stack, one service at a time, on the machine in front of you.",
       "category": "Platform",
-      "definition": "The open lakehouse on a laptop is a reference architecture that runs every layer of an open source data platform in Docker on one machine: SeaweedFS as S3-compatible object storage, Delta Lake tables registered in Unity Catalog OSS, Apache Spark 4.1 behind a Spark Connect server, Apache Kafka for events, Apache Airflow 3 for orchestration and MLflow 3 for tracking. It exists so that a data engineer, a student or an AI agent can build, test and tear down a real lakehouse without a cloud account, and then point the same code at a cloud deployment.",
+      "definition": "The open lakehouse on a laptop runs every layer of an open source data platform in Docker on one machine: SeaweedFS as S3-compatible storage, Apache Iceberg tables in Unity Catalog OSS 0.7 through its Iceberg REST endpoint, Apache Spark 4.3 behind a Spark Connect server, Spark Declarative Pipelines for the medallion, Kafka for events, Airflow 3 for scheduling and table maintenance, DuckDB reading the same tables, MLflow for models, and an AI agent on Omnigent with a local model, MCP tools and policies. It exists so a data engineer, a student or an AI agent can build, test and tear down a real lakehouse without a cloud account.",
       "whenToUse": [
-        "You want to learn how the layers of an open lakehouse fit together by running them.",
-        "You need a local integration environment where pipelines run against a real catalog and object store before they reach production.",
-        "You want an AI coding agent to have a full, disposable stack to work against."
+        "You want to learn how the layers of an open lakehouse fit together by building them.",
+        "You need a local integration environment with a real catalog and object store.",
+        "You want an AI agent to have a full, disposable stack to work against."
       ],
       "notFor": [
-        "Production workloads: the repo states that production hardening is out of scope.",
-        "Writing Iceberg tables through the catalog: Unity Catalog OSS 0.6.0 accepts Delta writes only, and its Iceberg REST adapter is read-only."
+        "Production: the course's Terraform chapter is illustrative and not applied.",
+        "Teams that need a released Iceberg runtime for Spark 4.3 today: the course builds one from an open Iceberg pull request."
       ],
       "nodes": [
         {
-          "label": "Event producers and sample data",
-          "layer": "sources",
-          "role": "Generate order events for the demos"
+          "label": "Order-event generator",
+          "slot": "sources",
+          "role": "Batch and streaming order events, the course's one dataset"
+        },
+        {
+          "label": "Idempotent bronze loader",
+          "slot": "ingest-batch",
+          "role": "Appends each batch once"
         },
         {
           "component": "kafka",
-          "layer": "ingest",
-          "role": "Event bus on :9092",
+          "slot": "ingest-stream",
+          "role": "Order events for the streaming chapter",
           "version": "Confluent 7.5.0 images"
         },
         {
-          "component": "seaweedfs",
-          "layer": "storage",
-          "role": "S3 API on :8333, bucket s3://lakehouse",
-          "version": "3.80",
-          "swaps": [
-            "minio",
-            "rustfs",
-            "s3"
-          ]
+          "component": "omnigent",
+          "slot": "agent-harness",
+          "role": "Runs the SDP agent and evaluates ALLOW, DENY and ASK policies on every tool call",
+          "version": "0.22.0"
         },
         {
-          "component": "delta",
-          "layer": "format",
-          "role": "The write path; every demo writes Delta into Unity Catalog",
-          "version": "4.3.1",
+          "component": "mcp",
+          "slot": "agent-tools",
+          "role": "Named tools: read and write pipeline files, dry-run or run the pipeline, run one SQL statement; no shell"
+        },
+        {
+          "component": "ollama",
+          "slot": "agent-models",
+          "role": "Local model sdp-qwen3, built from qwen3:14b with a 16K context window"
+        },
+        {
+          "component": "mlflow",
+          "slot": "ml",
+          "role": "Tracks a model trained on gold and logs the gold snapshot id",
+          "version": "3.1.0"
+        },
+        {
+          "component": "spark-connect",
+          "slot": "spark-connect",
+          "role": "sc://spark-connect:15002 for every client, the agent included",
+          "version": "4.3.0"
+        },
+        {
+          "component": "spark",
+          "slot": "batch",
+          "role": "Ingestion and queries over Spark Connect",
+          "version": "4.3.0"
+        },
+        {
+          "component": "sdp",
+          "slot": "pipelines",
+          "role": "Bronze to silver to gold; the agent's output, gated on a dry run",
+          "version": "pyspark[pipelines]==4.3.0"
+        },
+        {
+          "component": "spark",
+          "slot": "streaming",
+          "role": "Kafka to iceberg.bronze.orders_raw with a checkpoint on S3",
+          "version": "4.3.0"
+        },
+        {
+          "component": "duckdb",
+          "slot": "sql",
+          "role": "Reads gold through the Iceberg REST endpoint",
+          "version": "1.5.6"
+        },
+        {
+          "component": "unity-catalog",
+          "slot": "catalog",
+          "role": "Writable Iceberg REST catalog; a sandbox namespace for the agent",
+          "version": "0.7.0",
           "swaps": [
-            "iceberg"
+            "polaris",
+            "lakekeeper",
+            "unitycatalog-rs"
           ]
         },
         {
           "component": "iceberg",
-          "layer": "format",
-          "role": "Read surface for other engines through Unity Catalog's Iceberg REST endpoint",
-          "version": "1.10.0",
-          "detail": true
-        },
-        {
-          "component": "unity-catalog",
-          "layer": "catalog",
-          "role": "The only catalog, on :8081",
-          "version": "0.6.0",
+          "slot": "format",
+          "role": "Bronze, silver and gold tables; snapshots for time travel and rollback",
+          "version": "runtime 4.3_2.13 built from apache/iceberg#18749",
           "swaps": [
-            "unitycatalog-rs",
-            "polaris",
-            "lakekeeper"
+            "delta"
           ]
         },
         {
-          "component": "postgres",
-          "layer": "catalog",
-          "role": "Unity Catalog metadata store",
-          "version": "16",
-          "detail": true
-        },
-        {
-          "component": "spark",
-          "layer": "compute",
-          "role": "Batch and Structured Streaming jobs, Connect-first",
-          "version": "4.1.0 (Scala 2.13, Java 21)"
-        },
-        {
-          "component": "sdp",
-          "layer": "compute",
-          "role": "Derives silver and gold from bronze",
-          "version": "Spark 4.1",
-          "detail": true
+          "component": "seaweedfs",
+          "slot": "storage",
+          "role": "s3://lakehouse/warehouse",
+          "version": "4.51",
+          "swaps": [
+            "rustfs",
+            "minio",
+            "s3"
+          ]
         },
         {
           "component": "airflow",
-          "layer": "orchestration",
-          "role": "Schedules the pipelines on :8085",
-          "version": "3.1.6",
+          "slot": "orchestration",
+          "role": "Schedules the medallion with backfills",
+          "version": "3.3.2",
           "swaps": [
-            "dagster",
-            "temporal"
+            "dagster"
           ]
         },
         {
-          "component": "mlflow",
-          "layer": "ml",
-          "role": "Tracking server and AI Gateway on :5000 and :5001",
-          "version": "3.14.0"
-        },
-        {
-          "component": "spark-connect",
-          "layer": "serving",
-          "role": "gRPC endpoint sc://localhost:15002 for every client",
-          "version": "4.1.0"
-        },
-        {
-          "component": "delta-sharing",
-          "layer": "serving",
-          "role": "Opt-in external sharing on :8443",
-          "version": "server 1.3.10",
-          "detail": true
-        },
-        {
-          "component": "dashboard",
-          "layer": "consumers",
-          "role": "Read-only viewer on :3000"
-        },
-        {
-          "component": "jupyter",
-          "layer": "consumers",
-          "role": "Optional notebooks",
-          "detail": true,
-          "swaps": [
-            "marimo"
-          ]
+          "component": "iceberg-maintenance",
+          "slot": "maintenance",
+          "role": "A DAG that runs rewrite_data_files, rewrite_manifests and expire_snapshots"
         }
       ],
       "steps": [
         {
-          "title": "Events arrive",
-          "body": "A producer writes order events to a Kafka topic."
+          "title": "Storage and compute",
+          "body": "SeaweedFS serves the S3 API; Spark 4.3 runs behind a Spark Connect server that every client, including the agent, reaches at sc://."
         },
         {
-          "title": "Bronze lands",
-          "body": "A Spark Structured Streaming job reads the topic and appends raw records to a bronze Delta table registered in Unity Catalog."
+          "title": "Tables and catalog",
+          "body": "Unity Catalog OSS 0.7 is the Iceberg REST catalog; tables are named iceberg.<namespace>.<table>, and the agent gets its own sandbox namespace."
         },
         {
-          "title": "Silver and gold derive",
-          "body": "Spark Declarative Pipelines reads bronze and maintains the silver and gold tables, which requires a Spark Connect server."
+          "title": "Bronze, silver, gold",
+          "body": "Batch loads and a Structured Streaming job land bronze; a Spark Declarative Pipeline derives silver and gold."
         },
         {
-          "title": "Bytes stay in your bucket",
-          "body": "All table data and checkpoints live under s3://lakehouse/warehouse/ in SeaweedFS."
+          "title": "Schedule and maintain",
+          "body": "Airflow runs the pipeline with backfills and a second DAG compacts files and expires snapshots."
         },
         {
-          "title": "Everything else reads",
-          "body": "Clients connect to sc://localhost:15002; DuckDB, Trino and PyIceberg read the same tables through Unity Catalog's Iceberg REST endpoint; the dashboard, MLflow and Delta Sharing recipients consume the results."
+          "title": "Serve and learn",
+          "body": "DuckDB reads gold through the same catalog, MLflow trains on it and records the snapshot id."
+        },
+        {
+          "title": "Hand it to an agent",
+          "body": "An agent on Omnigent with a local model and MCP tools writes pipelines into its sandbox; policies require a passing dry run and ask before code pulls results onto one machine."
         }
       ],
       "repos": [
         {
+          "name": "open-lakehouse/lakehouse-masterclass",
+          "url": "https://github.com/open-lakehouse/lakehouse-masterclass",
+          "description": "The course that builds this stack chapter by chapter, from storage to agents. You write the Compose file yourself; there is no single command.",
+          "license": "Apache-2.0",
+          "targets": [
+            "laptop"
+          ]
+        },
+        {
           "name": "open-lakehouse/open-lakehouse",
           "url": "https://github.com/open-lakehouse/open-lakehouse",
-          "description": "An open reference architecture for the lakehouse that runs on Docker, deploys to AWS, and is designed so an AI agent can set it up and tear it down.",
+          "description": "The same layers prebuilt, writing Delta Lake into Unity Catalog 0.6.0 with Spark 4.1, started with one script.",
           "license": "Apache-2.0",
           "targets": [
             "laptop",
@@ -2290,31 +3261,23 @@
             "./lakehouse start mlflow",
             "./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)"
           ]
-        },
-        {
-          "name": "open-lakehouse/lakehouse-masterclass",
-          "url": "https://github.com/open-lakehouse/lakehouse-masterclass",
-          "description": "A textbook course that builds an open lakehouse on a laptop one service per chapter, following one order-events story from storage to agents.",
-          "license": "Apache-2.0",
-          "targets": [
-            "laptop"
-          ]
         }
       ],
       "caveats": [
-        "Writes are Delta only in this stack. Unity Catalog OSS 0.6.0 rejects data_source_format=ICEBERG, so Iceberg is a read surface (docs/compatibility.md).",
-        "Delta 4.2.0 fails catalog-managed Delta writes through Unity Catalog 0.6.x with \"400 INVALID_ARGUMENT ... Invalid type_json\". Delta 4.3.1 is the pin.",
-        "Delta 4.0.x throws NoSuchMethodError on LogKey with Spark 4.1.",
-        "The setup step downloads about 860 MB of JARs."
+        "There is no released Iceberg Spark runtime for Spark 4.3; chapter 5.5 builds it from apache/iceberg#18749 as a temporary step.",
+        "Unity Catalog 0.7 or later is required for Iceberg writes through its REST catalog.",
+        "The course recommends 16 GB of RAM; the agent's model needs about 12 GB of memory.",
+        "Older SeaweedFS releases have an S3A _temporary rename bug; the course pins 4.51.",
+        "In open-lakehouse, writes are Delta only: Unity Catalog 0.6.0 serves Iceberg read-only."
       ],
       "learn": [
         {
-          "label": "Open lakehouse on your laptop",
-          "href": "/blog/apache-spark/open-lakehouse-on-your-laptop"
+          "label": "The agentic lakehouse",
+          "href": "/agentic-lakehouse"
         },
         {
-          "label": "Lakehouse at home demos",
-          "href": "/blog/apache-spark/lakehouse-at-home-demos"
+          "label": "Open lakehouse on your laptop",
+          "href": "/blog/apache-spark/open-lakehouse-on-your-laptop"
         },
         {
           "label": "Getting started with Unity Catalog",
@@ -2328,37 +3291,33 @@
       "faqs": [
         {
           "q": "Can I run a full open source lakehouse on a laptop?",
-          "a": "Yes. The open-lakehouse repository runs Spark 4.1, Delta Lake 4.3.1, Unity Catalog OSS 0.6.0, Kafka, Airflow 3.1.6, MLflow 3.14.0 and SeaweedFS in Docker, started service by service with the ./lakehouse script."
+          "a": "Yes. The lakehouse masterclass builds Iceberg tables in Unity Catalog OSS 0.7 on SeaweedFS with Spark 4.3, Kafka, Airflow 3.3.2, DuckDB and MLflow in Docker, and adds an AI agent on Omnigent with a local Ollama model. The open-lakehouse repository offers a prebuilt Delta variant."
         },
         {
-          "q": "Why does the laptop stack write Delta and not Iceberg?",
-          "a": "Unity Catalog OSS 0.6.0 only accepts Delta for writes and serves Iceberg read-only through its Iceberg REST endpoint. Unity Catalog 0.7.0 adds writable Iceberg REST, which the lakehouse masterclass uses."
+          "q": "Can an AI agent work on a local lakehouse safely?",
+          "a": "Yes. In the masterclass the agent writes only to its own sandbox namespace, uses named MCP tools instead of a shell, and policies require a passing dry run before any pipeline runs."
         },
         {
           "q": "How do other engines read the tables?",
-          "a": "DuckDB, Trino and PyIceberg read through Unity Catalog's Iceberg REST endpoint; Spark clients connect over Spark Connect at sc://localhost:15002."
+          "a": "Through Unity Catalog's Iceberg REST endpoint. DuckDB attaches it and reads the gold tables Spark wrote, without copies."
         }
       ],
       "sources": [
         {
-          "label": "open-lakehouse README",
-          "href": "https://github.com/open-lakehouse/open-lakehouse#readme"
+          "label": "lakehouse-masterclass",
+          "href": "https://github.com/open-lakehouse/lakehouse-masterclass"
         },
         {
-          "label": "docs/compatibility.md",
+          "label": "open-lakehouse docs/compatibility.md",
           "href": "https://github.com/open-lakehouse/open-lakehouse/blob/main/docs/compatibility.md"
-        },
-        {
-          "label": "docs/architecture.md",
-          "href": "https://github.com/open-lakehouse/open-lakehouse/blob/main/docs/architecture.md"
         }
       ],
       "keywords": [
         "open source data lakehouse docker",
-        "local data lakehouse",
+        "local Iceberg lakehouse",
         "lakehouse on a laptop",
-        "Unity Catalog OSS docker compose",
-        "Spark Delta Kafka Airflow docker"
+        "Unity Catalog Iceberg docker compose",
+        "agentic lakehouse local"
       ],
       "updated": "2026-11-21",
       "url": "https://openlakehouse.io/reference-architectures/laptop-open-lakehouse"
@@ -2381,29 +3340,29 @@
       "nodes": [
         {
           "label": "Policy authors",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Write Cedar policies and tag templates"
         },
         {
           "component": "cedar",
-          "layer": "governance",
+          "slot": "access-policy",
           "role": "Policy language; deny always wins",
           "version": "cedar-policy 4"
         },
         {
           "component": "policast",
-          "layer": "governance",
+          "slot": "access-policy",
           "role": "Compiles Cedar to CEL and injects enforcement into the physical plan"
         },
         {
           "component": "breakwater",
-          "layer": "governance",
+          "slot": "access-policy",
           "role": "Row filters and column masks inside the DataFusion planner",
           "detail": true
         },
         {
           "component": "unity-catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Policy decision point resolving tags",
           "version": "0.4.1 in the demo",
           "swaps": [
@@ -2413,7 +3372,7 @@
         },
         {
           "component": "rustfs",
-          "layer": "storage",
+          "slot": "storage",
           "role": "Demo object store",
           "swaps": [
             "minio",
@@ -2421,48 +3380,43 @@
           ]
         },
         {
-          "component": "delta",
-          "layer": "format",
-          "role": "Governed tables and the lineage table",
+          "component": "iceberg",
+          "slot": "format",
+          "role": "Lineage event tables, written through Lakekeeper (Delta also supported)",
           "swaps": [
-            "iceberg"
+            "delta"
           ]
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Enforcement as Catalyst rules",
           "version": "4.2 plugin"
         },
         {
           "component": "datafusion",
-          "layer": "compute",
+          "slot": "sql",
           "role": "Enforcement as plan rewrites",
           "version": "53.1"
         },
         {
           "component": "openlineage",
-          "layer": "governance",
+          "slot": "lineage",
           "role": "Lineage events from every job, column level from Spark"
         },
         {
           "component": "open-lineage-connect",
-          "layer": "governance",
+          "slot": "lineage",
           "role": "Ingests events and writes them to Delta and Iceberg tables"
         },
         {
           "component": "headwaters",
-          "layer": "governance",
+          "slot": "lineage",
           "role": "Lineage read API and UI",
           "detail": true,
           "swaps": [
             "marquez"
           ]
-        },
-        {
-          "label": "Analysts, auditors",
-          "layer": "consumers",
-          "role": "See only permitted rows and columns; trace lineage"
         }
       ],
       "steps": [
@@ -2609,12 +3563,12 @@
       "nodes": [
         {
           "label": "Gold tables",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Facts and dimensions to measure"
         },
         {
           "component": "delta",
-          "layer": "format",
+          "slot": "format",
           "role": "Source tables",
           "swaps": [
             "iceberg"
@@ -2622,7 +3576,7 @@
         },
         {
           "component": "hive-metastore",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Registers the metric view in the demo",
           "swaps": [
             "unity-catalog"
@@ -2630,33 +3584,28 @@
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Expands MEASURE() at query time",
           "version": "4.2.0"
         },
         {
           "component": "metric-views",
-          "layer": "serving",
+          "slot": "semantic",
           "role": "YAML measures and dimensions"
         },
         {
           "component": "spark-connect",
-          "layer": "serving",
+          "slot": "spark-connect",
           "role": "Remote access for clients and agents"
         },
         {
           "component": "superset",
-          "layer": "consumers",
+          "slot": "bi",
           "role": "Dashboards over the metric view",
           "detail": true,
           "swaps": [
             "grafana"
           ]
-        },
-        {
-          "label": "Notebooks and AI agents",
-          "layer": "consumers",
-          "role": "Ask questions through the same definitions"
         }
       ],
       "steps": [
@@ -2743,12 +3692,12 @@
       "nodes": [
         {
           "label": "Gold feature tables",
-          "layer": "sources",
+          "slot": "sources",
           "role": "Training data"
         },
         {
           "component": "iceberg",
-          "layer": "format",
+          "slot": "format",
           "role": "Snapshot ids give reproducible training sets",
           "swaps": [
             "delta"
@@ -2756,7 +3705,7 @@
         },
         {
           "component": "unity-catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Tables, and in the course, the catalog the run reads through",
           "swaps": [
             "polaris",
@@ -2765,7 +3714,7 @@
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Feature engineering and batch scoring",
           "swaps": [
             "duckdb",
@@ -2774,28 +3723,23 @@
         },
         {
           "component": "mlflow",
-          "layer": "ml",
+          "slot": "ml",
           "role": "Tracking, registry, tracing, evaluation and AI Gateway",
           "version": "3.14.0 in open-lakehouse; 3.1.0 in the course"
         },
         {
           "component": "airflow",
-          "layer": "orchestration",
+          "slot": "orchestration",
           "role": "Retraining schedules",
           "detail": true
         },
         {
           "component": "jupyter",
-          "layer": "consumers",
+          "slot": "bi",
           "role": "Experiments",
           "swaps": [
             "marimo"
           ]
-        },
-        {
-          "label": "Applications",
-          "layer": "consumers",
-          "role": "Call registered models and gateway routes"
         }
       ],
       "steps": [
@@ -2904,7 +3848,7 @@
       "nodes": [
         {
           "component": "delta",
-          "layer": "format",
+          "slot": "format",
           "role": "Tables served",
           "swaps": [
             "iceberg"
@@ -2912,7 +3856,7 @@
         },
         {
           "component": "unity-catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Resolves tables and vends credentials",
           "swaps": [
             "unitycatalog-rs"
@@ -2920,52 +3864,52 @@
         },
         {
           "component": "datafusion",
-          "layer": "compute",
+          "slot": "sql",
           "role": "Query engine inside the Flight SQL server",
           "version": "55"
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Remote engine behind Spark Connect",
           "version": "4.2.0 in the demos"
         },
         {
           "component": "hydrofoil",
-          "layer": "serving",
+          "slot": "apps",
           "role": "Flight SQL server with Cedar policy and OpenLineage"
         },
         {
           "component": "flight-sql",
-          "layer": "serving",
+          "slot": "apps",
           "role": "Protocol",
           "detail": true
         },
         {
           "component": "spark-connect",
-          "layer": "serving",
+          "slot": "spark-connect",
           "role": "gRPC protocol for Spark clients"
         },
         {
           "component": "breakwater",
-          "layer": "governance",
+          "slot": "access-policy",
           "role": "Cedar enforcement in the DataFusion planner",
           "detail": true
         },
         {
           "component": "openlineage",
-          "layer": "governance",
+          "slot": "lineage",
           "role": "Lineage emitted per query",
           "detail": true
         },
         {
           "component": "spark-connect-clients",
-          "layer": "consumers",
+          "slot": "spark-connect",
           "role": "Python, Scala, Go, Rust, OCaml, Swift clients"
         },
         {
           "component": "duckdb",
-          "layer": "consumers",
+          "slot": "sql",
           "role": "Joins Arrow results locally",
           "swaps": [
             "polars"
@@ -3072,12 +4016,12 @@
       "nodes": [
         {
           "component": "s3",
-          "layer": "storage",
+          "slot": "storage",
           "role": "Data bucket reached through a bucket-scoped storage role"
         },
         {
           "component": "unity-catalog",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Catalog server, digest-pinned and mirrored to ECR",
           "version": "0.7.0",
           "swaps": [
@@ -3088,7 +4032,7 @@
         },
         {
           "component": "neon",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Postgres for catalog metadata",
           "swaps": [
             "postgres"
@@ -3096,7 +4040,7 @@
         },
         {
           "component": "ecs-fargate",
-          "layer": "orchestration",
+          "slot": "deploy",
           "role": "Runs the server in a two-AZ VPC behind a public ALB",
           "swaps": [
             "kubernetes"
@@ -3104,7 +4048,7 @@
         },
         {
           "component": "terraform",
-          "layer": "orchestration",
+          "slot": "deploy",
           "role": "Declares the whole deployment",
           "version": ">= 1.11, AWS provider ~> 6.45",
           "swaps": [
@@ -3113,17 +4057,12 @@
         },
         {
           "component": "spark",
-          "layer": "compute",
+          "slot": "batch",
           "role": "Any engine with a Unity Catalog or Iceberg REST client",
           "swaps": [
             "trino",
             "duckdb"
           ]
-        },
-        {
-          "label": "Engines and users",
-          "layer": "consumers",
-          "role": "Reach the catalog through the ALB"
         }
       ],
       "steps": [
@@ -3236,34 +4175,29 @@
       "nodes": [
         {
           "component": "neon",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Per-branch Postgres and storage bucket"
         },
         {
           "component": "unitycatalog-rs",
-          "layer": "catalog",
+          "slot": "catalog",
           "role": "Catalog function (mangrove server)"
         },
         {
           "component": "headwaters",
-          "layer": "governance",
+          "slot": "lineage",
           "role": "OpenLineage ingest with Marquez-compatible reads"
         },
         {
           "component": "distributary",
-          "layer": "serving",
+          "slot": "sharing",
           "role": "Sharing function; built and tested, not yet deployed",
           "detail": true
         },
         {
           "component": "delta",
-          "layer": "format",
+          "slot": "format",
           "role": "Managed tables under s3://lakehouse/managed"
-        },
-        {
-          "label": "Engines and apps",
-          "layer": "consumers",
-          "role": "Call the functions over HTTPS"
         }
       ],
       "steps": [

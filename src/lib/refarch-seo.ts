@@ -13,7 +13,6 @@ import {
   componentById,
   industryFaqs,
   industryPath,
-  layerById,
   nodeName,
   patternBySlug,
   patternPath,
@@ -173,4 +172,3 @@ export function industryJsonLd(ind: Industry) {
   ];
 }
 
-export { layerById };

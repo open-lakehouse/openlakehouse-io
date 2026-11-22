@@ -14,16 +14,15 @@ Open data sharing is an architecture for giving another organization read access
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Provider pipelines | Maintain the tables to share |  |
-| Object storage | Amazon S3 | Provider's bucket; data never moves |  |
+| Source systems | Provider pipelines | Maintain the tables to share |  |
+| Batch and SQL | Apache Spark | Provider-side writes |  |
+| Catalog and credentials | Unity Catalog OSS | Source of shares and table locations |  |
 | Open table format | Delta Lake | Shared tables |  |
-| Catalog | Unity Catalog OSS | Source of shares and table locations |  |
-| Serving | Delta Sharing | Open REST protocol for recipients | server 1.3.10 in open-lakehouse |
-| Serving | distributary | Composable Rust sharing server with Postgres or SQLite stores |  |
-| Compute engines | Apache Spark | Provider-side writes |  |
-| Consumers | Recipients: pandas, Spark, BI tools | Read with a bearer token profile |  |
+| Object storage | Amazon S3 | Provider's bucket; data never moves |  |
+| Data sharing | Delta Sharing | Open REST protocol for recipients | server 1.3.10 in open-lakehouse |
+| Data sharing | distributary | Composable Rust sharing server with Postgres or SQLite stores |  |
 
 ## How data flows
 1. **Define a share.** The provider groups tables into a share and grants it to a recipient.

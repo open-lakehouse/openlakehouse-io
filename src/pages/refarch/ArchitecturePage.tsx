@@ -12,7 +12,10 @@ import {
   PATTERNS,
   componentById,
   industryPath,
-  layerById,
+  SLOTS,
+  slotById,
+  groupById,
+  teamsForNodes,
   patternBySlug,
   patternPath,
   patternUseCases,
@@ -120,7 +123,7 @@ const ArchitecturePage = () => {
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-secondary text-left">
                 <tr>
-                  <th className="p-3 font-semibold">Layer</th>
+                  <th className="p-3 font-semibold">Capability</th>
                   <th className="p-3 font-semibold">Component</th>
                   <th className="p-3 font-semibold">Role in this architecture</th>
                   <th className="p-3 font-semibold">Version</th>
@@ -128,11 +131,11 @@ const ArchitecturePage = () => {
                 </tr>
               </thead>
               <tbody>
-                {p.nodes.map((n, i) => {
+                {[...p.nodes].sort((a, b) => SLOTS.findIndex((x) => x.id === a.slot) - SLOTS.findIndex((x) => x.id === b.slot)).map((n, i) => {
                   const c = componentById(n.component);
                   return (
                     <tr key={i} className="border-t border-border">
-                      <td className="p-3 align-top text-muted-foreground">{layerById(n.layer).short}</td>
+                      <td className="p-3 align-top text-muted-foreground"><span className="block text-[10px] uppercase tracking-wider">{groupById(slotById(n.slot).group).name}</span>{slotById(n.slot).name}</td>
                       <td className="p-3 align-top">
                         <ComponentLink id={n.component} fallback={n.label} />
                         {n.swaps?.length ? (
@@ -147,6 +150,22 @@ const ArchitecturePage = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </section>
+
+        <section className="container pb-12 md:pb-16">
+          <SectionHeading id="teams" eyebrow="People and agents" title="Who works with it" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {teamsForNodes(p.nodes).map((t) => {
+              const used = t.slots.filter((sl) => p.nodes.some((n) => n.slot === sl));
+              return (
+                <div key={t.id} className="rounded-xl border border-border bg-card p-4">
+                  <p className="font-semibold">{t.name}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{t.cares}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">Works with: {used.map((sl) => slotById(sl).name).join(", ")}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
 

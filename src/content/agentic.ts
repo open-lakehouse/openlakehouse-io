@@ -64,6 +64,17 @@ export const AGENTIC_LAKEHOUSE: Guide = {
     "An agentic lakehouse is an open data lakehouse built so that AI agents can find, query and change data safely. It combines open tables such as Apache Iceberg or Delta Lake on object storage; a catalog that tells agents what data exists and what they may touch; tools that expose lakehouse actions to agents through the Model Context Protocol (MCP); declarative pipelines that agents write and the platform validates before anything runs; policies that allow a tool call, deny it, or ask a person first; and tracing and lineage that record what every agent did. Because the data, the governance and the agent harness are open source, agents built on any model or framework work against the same governed tables.",
   sections: [
     {
+      id: "how-it-fits",
+      heading: "How the pieces fit, from agent to table",
+      steps: [
+        { title: "A control plane decides what agents may do", text: "Omnigent runs each agent and checks every tool call, model request and file operation against policies set per session, per agent and server-wide; any DENY blocks the action and any ASK waits for a person. MLflow traces and evaluates each step and can front model providers through its AI Gateway." },
+        { title: "Each session runs in a sandbox", text: "The agent's code runs in a container or microVM, on a laptop or a Kubernetes cluster. Provider credentials stay outside the sandbox; the agent holds only its own identity." },
+        { title: "The agent gets a Spark client, not a database password", text: "Inside the sandbox it connects over Spark Connect. For fast iteration that can be a local Spark with Project Feather's shuffle-free single-task execution, working on a subset of the data; for production runs it is a remote endpoint pinned to the agent's or tenant's identity." },
+        { title: "Spark runs the work in the mode it needs", text: "Batch and SQL, Structured Streaming, Real-Time Mode for millisecond paths, and Spark Declarative Pipelines, which the platform dry-runs before anything executes." },
+        { title: "The catalog and the tables hold the line", text: "Unity Catalog OSS (or another Iceberg REST catalog) authorizes every request and vends storage credentials scoped to what the agent may touch; Apache Iceberg snapshots make every write inspectable and reversible." },
+      ],
+    },
+    {
       id: "why-a-lakehouse",
       heading: "Why a lakehouse is a good home for agents",
       paragraphs: [
@@ -132,6 +143,7 @@ export const AGENTIC_LAKEHOUSE: Guide = {
     },
   ],
   architectures: [
+    { slug: "agentic-lakehouse", why: "The whole picture on one board: Omnigent and MLflow over sandboxed Spark Connect sessions, on Iceberg and Unity Catalog." },
     { slug: "governed-ai-agents", why: "The production shape: PR-only agent output, dry runs in CI, identity-pinned Spark Connect and a governed Iceberg REST catalog." },
     { slug: "multi-engine-catalog", why: "One catalog that every engine and every agent tool reads, with credential vending." },
     { slug: "policy-and-lineage", why: "Access rules enforced inside each engine's plan, and lineage for every job." },
@@ -271,6 +283,7 @@ export const AGENTIC_DATA_ENGINEERING: Guide = {
     },
   ],
   architectures: [
+    { slug: "agentic-lakehouse", why: "Where the agent runs, how it reaches Spark and what the catalog lets it touch." },
     { slug: "governed-ai-agents", why: "The reference architecture for agents building Spark pipelines in governed, multi-tenant sandboxes." },
     { slug: "batch-medallion", why: "The declarative medallion pipelines agents write, scheduled by Airflow." },
     { slug: "change-data-capture", why: "AUTO CDC flows: a declarative target an agent can produce and the platform can check." },

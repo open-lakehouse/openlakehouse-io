@@ -4,6 +4,14 @@
 
 An agentic lakehouse is an open data lakehouse built so that AI agents can find, query and change data safely. It combines open tables such as Apache Iceberg or Delta Lake on object storage; a catalog that tells agents what data exists and what they may touch; tools that expose lakehouse actions to agents through the Model Context Protocol (MCP); declarative pipelines that agents write and the platform validates before anything runs; policies that allow a tool call, deny it, or ask a person first; and tracing and lineage that record what every agent did. Because the data, the governance and the agent harness are open source, agents built on any model or framework work against the same governed tables.
 
+## How the pieces fit, from agent to table
+
+1. **A control plane decides what agents may do.** Omnigent runs each agent and checks every tool call, model request and file operation against policies set per session, per agent and server-wide; any DENY blocks the action and any ASK waits for a person. MLflow traces and evaluates each step and can front model providers through its AI Gateway.
+2. **Each session runs in a sandbox.** The agent's code runs in a container or microVM, on a laptop or a Kubernetes cluster. Provider credentials stay outside the sandbox; the agent holds only its own identity.
+3. **The agent gets a Spark client, not a database password.** Inside the sandbox it connects over Spark Connect. For fast iteration that can be a local Spark with Project Feather's shuffle-free single-task execution, working on a subset of the data; for production runs it is a remote endpoint pinned to the agent's or tenant's identity.
+4. **Spark runs the work in the mode it needs.** Batch and SQL, Structured Streaming, Real-Time Mode for millisecond paths, and Spark Declarative Pipelines, which the platform dry-runs before anything executes.
+5. **The catalog and the tables hold the line.** Unity Catalog OSS (or another Iceberg REST catalog) authorizes every request and vends storage credentials scoped to what the agent may touch; Apache Iceberg snapshots make every write inspectable and reversible.
+
 ## Why a lakehouse is a good home for agents
 
 An agent can only act on what it can discover and only be trusted with what the platform can check. An open lakehouse provides both through interfaces that already exist for engines.
@@ -57,6 +65,7 @@ Agents that only answer questions still benefit from the same design: a semantic
 
 ## Reference architectures
 
+- https://openlakehouse.io/reference-architectures/agentic-lakehouse: The whole picture on one board: Omnigent and MLflow over sandboxed Spark Connect sessions, on Iceberg and Unity Catalog.
 - https://openlakehouse.io/reference-architectures/governed-ai-agents: The production shape: PR-only agent output, dry runs in CI, identity-pinned Spark Connect and a governed Iceberg REST catalog.
 - https://openlakehouse.io/reference-architectures/multi-engine-catalog: One catalog that every engine and every agent tool reads, with credential vending.
 - https://openlakehouse.io/reference-architectures/policy-and-lineage: Access rules enforced inside each engine's plan, and lineage for every job.
