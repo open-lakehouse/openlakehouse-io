@@ -22,6 +22,9 @@ import BlogCategory from "./pages/BlogCategory.tsx";
 import BlogPost from "./pages/BlogPost.tsx";
 import Authors from "./pages/Authors.tsx";
 import AuthorPage from "./pages/AuthorPage.tsx";
+import ReferenceArchitectures from "./pages/refarch/ReferenceArchitectures.tsx";
+import ArchitecturePage from "./pages/refarch/ArchitecturePage.tsx";
+import IndustryPage from "./pages/refarch/IndustryPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -39,6 +42,9 @@ const App = () => (
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/technologies" element={<TechnologiesPage />} />
             <Route path="/open-source-data-engineering" element={<OpenSourceDataEngineering />} />
+            <Route path="/reference-architectures" element={<ReferenceArchitectures />} />
+            <Route path="/reference-architectures/industries/:slug" element={<IndustryPage />} />
+            <Route path="/reference-architectures/:slug" element={<ArchitecturePage />} />
             <Route path="/technologies/delta-lake" element={<DeltaLakePillar />} />
             <Route path="/technologies/:slug" element={<TechnologyCategory />} />
             <Route path="/learn" element={<Learn />} />
