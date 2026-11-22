@@ -4,6 +4,7 @@ import { Hero } from "@/components/Hero";
 
 import { LogoMarquee } from "@/components/LogoMarquee";
 import { Technologies } from "@/components/Technologies";
+import { HomeArchitectures } from "@/components/refarch/HomeArchitectures";
 import { VideosCarousel } from "@/components/VideosCarousel";
 import { FAQ } from "@/components/FAQ";
 import { PodcastSection } from "@/components/PodcastSection";
@@ -27,6 +28,7 @@ const Index = () => (
       <Hero />
       <LogoMarquee />
       <Technologies />
+      <HomeArchitectures />
       <PodcastSection />
 
       {/* Query-language section. Gives the homepage a passage that matches how
@@ -60,6 +62,12 @@ const Index = () => (
               className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
             >
               Read the open source data engineering guide <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              to="/reference-architectures"
+              className="mt-3 flex w-fit items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
+            >
+              See the data engineering reference architectures <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>

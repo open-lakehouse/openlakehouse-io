@@ -411,3 +411,39 @@
 .animate-blob-3 { animation: blob-drift-3 25s ease-in-out infinite; }
 .animate-blob-4 { animation: blob-drift-4 30s ease-in-out infinite; }
 
+
+/* ---------- Open Reference Architectures board ---------- */
+@keyframes refarch-flow-x {
+  from { background-position: 0 0; }
+  to { background-position: 16px 0; }
+}
+@keyframes refarch-flow-y {
+  from { background-position: 0 0; }
+  to { background-position: 0 16px; }
+}
+.refarch-flow-x {
+  background-image: linear-gradient(90deg, hsl(var(--primary) / 0.85) 50%, transparent 50%);
+  background-size: 8px 2px;
+  background-repeat: repeat-x;
+  background-position: 0 0;
+  animation: refarch-flow-x 0.9s linear infinite;
+}
+.refarch-flow-y {
+  background-image: linear-gradient(180deg, hsl(var(--primary) / 0.85) 50%, transparent 50%);
+  background-size: 2px 8px;
+  background-repeat: repeat-y;
+  animation: refarch-flow-y 0.9s linear infinite;
+}
+.refarch-grid-bg {
+  background-image:
+    linear-gradient(hsl(var(--border) / 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / 0.5) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .refarch-flow-x, .refarch-flow-y { animation: none; }
+}
+@media print {
+  header, footer, .refarch-noprint { display: none !important; }
+  .refarch-board { break-inside: avoid; }
+}
