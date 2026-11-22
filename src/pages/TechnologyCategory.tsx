@@ -29,7 +29,7 @@ const data: Record<string, { title: string; blurb: string; items: { name: string
   },
   "agentic": {
     title: "Agentic",
-    blurb: "Tools that make the lakehouse a substrate for AI agents and ML workflows.",
+    blurb: "The projects behind the agentic lakehouse: tools that let AI agents and ML workflows use the lakehouse safely.",
     items: [
       { name: "MLflow", desc: "Open lifecycle for ML and agentic systems.", url: "https://mlflow.org" },
       { name: "Omnigent", desc: "A common layer over Claude Code, Codex, Pi, and the agents you write yourself: swap or combine harnesses without rewriting, keep them in check with policies and sandboxing, and collaborate in real time on the same live session, from any device.", url: "https://omnigent.ai/" },
@@ -151,6 +151,26 @@ const TechnologyCategory = () => {
               downloadName="delta-lake-definitive-guide.pdf"
               title="The Delta Lake Definitive Guide"
             />
+          </section>
+        )}
+
+        {slug === "agentic" && (
+          <section className="container pb-16">
+            <h2 className="text-2xl font-bold tracking-tight">Go deeper</h2>
+            <ul className="mt-4 grid gap-3 sm:grid-cols-3">
+              {[
+                { to: "/agentic-lakehouse", label: "The agentic lakehouse", text: "What it is, its layers and the guardrails that make it safe." },
+                { to: "/agentic-data-engineering", label: "Agentic data engineering", text: "How AI agents write, test and run pipelines under policy." },
+                { to: "/reference-architectures/governed-ai-agents", label: "Governed AI agents architecture", text: "The runnable reference architecture for agents on Spark." },
+              ].map((l) => (
+                <li key={l.to}>
+                  <Link to={l.to} className="block rounded-xl border border-border bg-card p-4 hover:border-primary">
+                    <span className="font-semibold">{l.label}</span>
+                    <span className="mt-1 block text-sm text-muted-foreground">{l.text}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 

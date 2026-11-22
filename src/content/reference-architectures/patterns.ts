@@ -568,6 +568,8 @@ const ALL_PATTERNS: Pattern[] = [
       "Unity Catalog OSS 0.5.0, evaluated as an alternate catalog, could not do per-principal authorization on its Iceberg REST path.",
     ],
     learn: [
+      { label: "Agentic data engineering (guide)", href: "/agentic-data-engineering" },
+      { label: "The agentic lakehouse (guide)", href: "/agentic-lakehouse" },
       { label: "Getting started with Omnigent", href: "/learn/getting-started/omnigent" },
       { label: "MLflow for agents", href: "/learn/getting-started/mlflow" },
       { label: "Safe Spark agents paper", href: "https://github.com/open-lakehouse/safe-spark-agents-paper" },
