@@ -135,6 +135,11 @@ const OpenSourceDataEngineering = () => (
           </table>
         </div>
 
+        <p>
+          To see these layers assembled into working systems, with versions and caveats, open the{" "}
+          <Link to="/reference-architectures">data engineering reference architectures</Link>.
+        </p>
+
         <h2 id="projects">Projects in the stack</h2>
         <p>
           These are the open-source projects most data engineering teams standardize on, and the
@@ -174,6 +179,11 @@ const OpenSourceDataEngineering = () => (
 
         <h2 id="learn-more">Keep going</h2>
         <ul className="not-prose space-y-2">
+          <li>
+            <Link to="/reference-architectures" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+              Data engineering reference architectures you can run <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </li>
           <li>
             <Link to="/technologies" className="inline-flex items-center gap-1.5 text-primary hover:underline">
               Browse every technology category <ArrowRight className="h-3.5 w-3.5" />
