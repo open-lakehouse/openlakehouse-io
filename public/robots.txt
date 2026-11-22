@@ -81,3 +81,6 @@ User-agent: *
 Allow: /
 
 Sitemap: https://openlakehouse.io/sitemap.xml
+
+# Open Lakehouse Wiki (MediaWiki at /wiki, sitemap rebuilt every 6 hours)
+Sitemap: https://openlakehouse.io/w/sitemap/sitemap-index-openlakehouse.xml
