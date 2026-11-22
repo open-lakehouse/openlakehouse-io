@@ -25,6 +25,8 @@ import AuthorPage from "./pages/AuthorPage.tsx";
 import ReferenceArchitectures from "./pages/refarch/ReferenceArchitectures.tsx";
 import ArchitecturePage from "./pages/refarch/ArchitecturePage.tsx";
 import IndustryPage from "./pages/refarch/IndustryPage.tsx";
+import AgenticLakehouse from "./pages/guides/AgenticLakehouse.tsx";
+import AgenticDataEngineering from "./pages/guides/AgenticDataEngineering.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -42,6 +44,8 @@ const App = () => (
             <Route path="/faq" element={<FaqPage />} />
             <Route path="/technologies" element={<TechnologiesPage />} />
             <Route path="/open-source-data-engineering" element={<OpenSourceDataEngineering />} />
+            <Route path="/agentic-lakehouse" element={<AgenticLakehouse />} />
+            <Route path="/agentic-data-engineering" element={<AgenticDataEngineering />} />
             <Route path="/reference-architectures" element={<ReferenceArchitectures />} />
             <Route path="/reference-architectures/industries/:slug" element={<IndustryPage />} />
             <Route path="/reference-architectures/:slug" element={<ArchitecturePage />} />
