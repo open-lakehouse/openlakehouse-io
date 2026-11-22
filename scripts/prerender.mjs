@@ -42,9 +42,14 @@ for (const url of routes) {
   const page = stripDefaults(template)
     .replace("</head>", `${head}\n  </head>`)
     .replace('<div id="root"></div>', `<div id="root">${html}</div>`);
-  const out = join(dist, url.replace(/^\//, ""), "index.html");
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, page);
+  // Write <route>.html (served at /<route> with cleanUrls on Vercel and by
+  // vite preview) and <route>/index.html (served at /<route>/).
+  const rel = url.replace(/^\//, "");
+  const outs = rel ? [join(dist, `${rel}.html`), join(dist, rel, "index.html")] : [join(dist, "index.html")];
+  for (const out of outs) {
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, page);
+  }
   count++;
 }
 rmSync(resolve("dist-ssr"), { recursive: true, force: true });
