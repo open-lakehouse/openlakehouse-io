@@ -1,6 +1,21 @@
 {
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/app-shell" }
+    {
+      "source": "/wiki",
+      "destination": "https://wiki-origin.systemsnull.net/wiki/"
+    },
+    {
+      "source": "/wiki/:path*",
+      "destination": "https://wiki-origin.systemsnull.net/wiki/:path*"
+    },
+    {
+      "source": "/w/:path*",
+      "destination": "https://wiki-origin.systemsnull.net/w/:path*"
+    },
+    {
+      "source": "/((?!api/|assets/|.*\\..*).*)",
+      "destination": "/app-shell"
+    }
   ]
 }
