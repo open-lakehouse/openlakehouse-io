@@ -28,6 +28,10 @@ related work:
   source of truth: color palette (Green primary, Blue accent, Yellow highlight,
   Navy ink), semantic tokens, gradients, logo, and favicon. Read this before any
   color, theming, or branding change; use tokens, never hardcoded hex.
+- [`docs/reference-architectures.md`](docs/reference-architectures.md): the
+  `/reference-architectures` section: content rules (public repos only,
+  pinned versions, cited numbers), how to add an architecture, and the
+  build-time prerender that makes pages readable without JavaScript.
 
 ## Republished content attribution
 
