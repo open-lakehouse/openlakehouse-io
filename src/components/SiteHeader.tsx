@@ -166,6 +166,8 @@ export const SiteHeader = () => {
           </Link>
           <Link to="/blog" className={desktopLinkClass}>Blog</Link>
           <LearnLink className={desktopLinkClass} />
+          {/* MediaWiki behind a vercel.json rewrite, not an SPA route: full page load. */}
+          <a href="/wiki/Main_Page" className={desktopLinkClass}>Wiki</a>
           <Link to="/community" className={desktopLinkClass}>Community</Link>
           <ThemeToggle />
         </nav>
@@ -286,6 +288,9 @@ export const SiteHeader = () => {
             Blog
           </Link>
           <LearnLink className={mobileLinkClass} mobile />
+          <a href="/wiki/Main_Page" className={mobileLinkClass}>
+            Wiki
+          </a>
           <Link to="/community" className={mobileLinkClass} onClick={() => setOpen(false)}>
             Community
           </Link>
