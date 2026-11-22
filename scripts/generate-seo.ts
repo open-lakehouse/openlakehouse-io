@@ -20,6 +20,7 @@ import {
   STACK as GUIDE_STACK,
   TITLE as GUIDE_TITLE,
 } from "../src/content/open-source-data-engineering";
+import { GUIDES, guideMarkdown } from "../src/content/agentic";
 import {
   HUB_DEFINITION as RA_DEFINITION,
   HUB_DESCRIPTION as RA_DESCRIPTION,
@@ -52,6 +53,8 @@ const staticEntries: SitemapEntry[] = [
   { path: "/", changefreq: "weekly", priority: "1.0" },
   { path: "/technologies", changefreq: "weekly", priority: "0.9" },
   { path: "/open-source-data-engineering", changefreq: "monthly", priority: "0.9" },
+  { path: "/agentic-lakehouse", changefreq: "monthly", priority: "0.9" },
+  { path: "/agentic-data-engineering", changefreq: "monthly", priority: "0.9" },
   { path: "/reference-architectures", changefreq: "weekly", priority: "0.9" },
   { path: "/learn", changefreq: "weekly", priority: "0.8" },
   { path: "/community", changefreq: "monthly", priority: "0.6" },
@@ -66,6 +69,10 @@ const NAV_DESCRIPTIONS: Record<string, string> = {
   "/technologies": "Every open-source building block, grouped by layer.",
   "/open-source-data-engineering":
     "What open source data engineering is, the reference stack, and the projects that make it up.",
+  "/agentic-lakehouse":
+    "What an agentic lakehouse is: open tables, a catalog agents can read, MCP tools, declarative pipelines, policies and tracing.",
+  "/agentic-data-engineering":
+    "How AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies.",
   "/reference-architectures":
     "Interactive open source data engineering reference architectures, each backed by a runnable repo, with industry lenses.",
   "/learn": "Curated guides, talks, and tutorials.",
@@ -350,6 +357,12 @@ function renderLlms(): string {
   }
   lines.push("");
 
+  lines.push("## Guides");
+  for (const g of GUIDES) {
+    lines.push(withDesc(g.title, g.slug, `${g.metaDescription} Markdown: ${url(g.slug)}.md`));
+  }
+  lines.push("");
+
   lines.push(`## ${RA_TITLE}`);
   lines.push(withDesc(RA_TITLE, RA_PATH, RA_DESCRIPTION));
   lines.push(withDesc("Machine-readable catalog (JSON)", "/reference-architectures.json", "Every architecture, component and industry lens as JSON."));
@@ -500,6 +513,10 @@ function renderLlmsFull(): string {
     out.push("");
   }
 
+  for (const g of GUIDES) {
+    out.push("---", "", `URL: ${url(g.slug)}`, "", guideMarkdown(g));
+  }
+
   // Open Reference Architectures: hub definition, then every pattern and
   // industry page as Markdown (the same text served at <path>.md).
   out.push("---");
@@ -528,6 +545,9 @@ const sitemapEntries = buildSitemapEntries();
 writeFileSync(resolve("public/sitemap.xml"), renderSitemap(sitemapEntries));
 writeFileSync(resolve("public/llms.txt"), renderLlms());
 writeFileSync(resolve("public/llms-full.txt"), renderLlmsFull());
+
+// Guides: Markdown twins.
+for (const g of GUIDES) writeFileSync(resolve(`public${g.slug}.md`), guideMarkdown(g));
 
 // Reference architectures: JSON dataset and Markdown twins of each page.
 writeFileSync(resolve("public/reference-architectures.json"), JSON.stringify(raDataset(), null, 2) + "\n");

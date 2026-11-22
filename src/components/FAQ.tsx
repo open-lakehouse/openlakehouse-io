@@ -1,5 +1,7 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Helmet } from "react-helmet-async";
+import { Link } from "react-router-dom";
+import { AGENTIC_DATA_ENGINEERING, AGENTIC_LAKEHOUSE } from "@/content/agentic";
 
 export type QA = { q: string; a: React.ReactNode; aText: string };
 
@@ -165,6 +167,41 @@ export const faqs: QA[] = [
         </p>
         <p>
           It is the same architecture used by Databricks, Netflix, Apple, Shopify, and most Fortune 500 data platforms.
+        </p>
+      </>
+    ),
+  },
+
+  {
+    q: "What is an agentic lakehouse?",
+    aText: AGENTIC_LAKEHOUSE.definition,
+    a: (
+      <>
+        <p>{AGENTIC_LAKEHOUSE.definition}</p>
+        <p>
+          <Link to="/agentic-lakehouse" className="text-primary hover:underline">
+            Read the agentic lakehouse guide
+          </Link>
+          .
+        </p>
+      </>
+    ),
+  },
+  {
+    q: "What is agentic data engineering?",
+    aText: AGENTIC_DATA_ENGINEERING.definition,
+    a: (
+      <>
+        <p>{AGENTIC_DATA_ENGINEERING.definition}</p>
+        <p>
+          <Link to="/agentic-data-engineering" className="text-primary hover:underline">
+            Read the agentic data engineering guide
+          </Link>
+          , or run it in the{" "}
+          <Link to="/reference-architectures/governed-ai-agents" className="text-primary hover:underline">
+            governed AI agents reference architecture
+          </Link>
+          .
         </p>
       </>
     ),

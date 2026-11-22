@@ -5,6 +5,7 @@ import { Hero } from "@/components/Hero";
 import { LogoMarquee } from "@/components/LogoMarquee";
 import { Technologies } from "@/components/Technologies";
 import { HomeArchitectures } from "@/components/refarch/HomeArchitectures";
+import { HomeAgentic } from "@/components/HomeAgentic";
 import { VideosCarousel } from "@/components/VideosCarousel";
 import { FAQ } from "@/components/FAQ";
 import { PodcastSection } from "@/components/PodcastSection";
@@ -17,7 +18,7 @@ import { gettingStartedTopics } from "./learn/GettingStarted";
 const Index = () => (
   <div className="min-h-screen flex flex-col">
     <Seo
-      title="Open Source Data Engineering — Open Lakehouse"
+      title="Open Source Data Engineering and the Agentic Lakehouse | Open Lakehouse"
       description={SITE_DESCRIPTION}
       path="/"
       suffix={false}
@@ -27,6 +28,7 @@ const Index = () => (
     <main className="flex-1">
       <Hero />
       <LogoMarquee />
+      <HomeAgentic />
       <Technologies />
       <HomeArchitectures />
       <PodcastSection />
@@ -68,6 +70,12 @@ const Index = () => (
               className="mt-3 flex w-fit items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
             >
               See the data engineering reference architectures <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              to="/agentic-data-engineering"
+              className="mt-3 flex w-fit items-center gap-1.5 text-sm font-medium text-primary hover:gap-2.5 transition-all"
+            >
+              Agentic data engineering: AI agents that build pipelines safely <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>

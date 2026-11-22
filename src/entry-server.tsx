@@ -9,12 +9,23 @@ import { HelmetProvider, type HelmetServerState } from "react-helmet-async";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index";
+import OpenSourceDataEngineering from "./pages/OpenSourceDataEngineering";
+import FaqPage from "./pages/FaqPage";
+import AgenticLakehouse from "./pages/guides/AgenticLakehouse";
+import AgenticDataEngineering from "./pages/guides/AgenticDataEngineering";
 import ReferenceArchitectures from "./pages/refarch/ReferenceArchitectures";
 import ArchitecturePage from "./pages/refarch/ArchitecturePage";
 import IndustryPage from "./pages/refarch/IndustryPage";
 import { INDUSTRIES, PATTERNS, HUB_PATH, industryPath, patternPath } from "./content/reference-architectures";
 
-export const routes = ["/", HUB_PATH, ...PATTERNS.map((p) => patternPath(p.slug)), ...INDUSTRIES.map((i) => industryPath(i.slug))];
+// /technologies/* is not prerendered: it imports a PDF viewer (pdfjs) that needs browser APIs.
+export const routes = [
+  "/",
+  "/open-source-data-engineering",
+  "/agentic-lakehouse",
+  "/agentic-data-engineering",
+  "/faq",
+  HUB_PATH, ...PATTERNS.map((p) => patternPath(p.slug)), ...INDUSTRIES.map((i) => industryPath(i.slug))];
 
 export function render(url: string) {
   const helmetContext: { helmet?: HelmetServerState } = {};
@@ -25,6 +36,10 @@ export function render(url: string) {
           <StaticRouter location={url}>
             <Routes>
               <Route path="/" element={<Index />} />
+              <Route path="/open-source-data-engineering" element={<OpenSourceDataEngineering />} />
+              <Route path="/agentic-lakehouse" element={<AgenticLakehouse />} />
+              <Route path="/agentic-data-engineering" element={<AgenticDataEngineering />} />
+              <Route path="/faq" element={<FaqPage />} />
               <Route path="/reference-architectures" element={<ReferenceArchitectures />} />
               <Route path="/reference-architectures/industries/:slug" element={<IndustryPage />} />
               <Route path="/reference-architectures/:slug" element={<ArchitecturePage />} />

@@ -43,6 +43,10 @@ export const HUB_FAQS = [
     a: "There is no single best stack; it depends on the workload. A common open baseline is Apache Spark for compute, Delta Lake or Apache Iceberg for tables, Unity Catalog OSS or an Iceberg REST catalog for governance, Apache Kafka for events, Apache Airflow for orchestration and MLflow for models. The architectures on this page show which combination fits batch, streaming, real-time, sharing and AI workloads.",
   },
   {
+    q: "Is there a reference architecture for an agentic lakehouse?",
+    a: "Yes. The governed AI agents architecture is the production shape of an agentic lakehouse: agents write Spark Declarative Pipelines as pull requests, CI dry-runs them against the real catalog, each tenant reaches Spark through an identity-pinned Spark Connect endpoint, and a governed Iceberg REST catalog authorizes every request. The agentic lakehouse and agentic data engineering guides on this site explain the concepts.",
+  },
+  {
     q: "Can I run these reference architectures myself?",
     a: "Yes. Every architecture links to at least one public repository with the versions it pins and the commands from its README, and most run on a laptop with Docker.",
   },

@@ -1882,6 +1882,14 @@
       ],
       "learn": [
         {
+          "label": "Agentic data engineering (guide)",
+          "href": "/agentic-data-engineering"
+        },
+        {
+          "label": "The agentic lakehouse (guide)",
+          "href": "/agentic-lakehouse"
+        },
+        {
           "label": "Getting started with Omnigent",
           "href": "/learn/getting-started/omnigent"
         },
