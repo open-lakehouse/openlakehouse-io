@@ -7,7 +7,7 @@
     "predev": "bunx tsx scripts/generate-seo.ts",
     "dev": "vite",
     "prebuild": "bunx tsx scripts/generate-seo.ts",
-    "build": "vite build",
+    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
