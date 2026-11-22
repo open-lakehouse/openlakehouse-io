@@ -14,22 +14,21 @@ Governed AI data engineering is an architecture in which AI agents author data p
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | AI coding agent | Writes inert pipeline specs as a pull request |  |
-| Orchestration | GitOps CI gate | PR-only output, dry run against the real catalog, reconcile |  |
-| Compute engines | Spark Declarative Pipelines | Declarative authoring: specs, not imperative jobs | Spark 4.1.2 |
-| Governance, lineage and policy | Envoy | mTLS on :15009; routes each client certificate to its tenant | 1.31.5 |
-| Serving | Spark Connect | The single identity-pinned ingress per tenant | 4.1.2 |
-| Orchestration | Kubernetes | Client-mode driver plus executor pods on EKS | EKS 1.31 |
-| Compute engines | Apache Spark | Executors do the work | 4.1.2 |
+| Source systems | AI coding agent | Writes inert pipeline specs as a pull request |  |
+| Agent harness and policy | Omnigent | Agent harness with tools and policies |  |
+| Models and gateway | Ollama | Local model for the course's agent chapter |  |
+| Spark Connect sessions | Spark Connect | The single identity-pinned ingress per tenant | 4.1.2 |
+| Batch and SQL | Apache Spark | Executors do the work | 4.1.2 |
+| Declarative pipelines | Spark Declarative Pipelines | Declarative authoring: specs, not imperative jobs | Spark 4.1.2 |
+| Catalog and credentials | Lakekeeper | Governed Iceberg REST catalog with per-principal authorization and credential vending | 0.13.1 |
 | Open table format | Apache Iceberg | Tables under per-tenant prefixes | 1.11.0 |
-| Catalog | Lakekeeper | Governed Iceberg REST catalog with per-principal authorization and credential vending | 0.13.1 |
-| Governance, lineage and policy | OpenFGA | Authorization model behind the catalog | 1.14.0 |
 | Object storage | Amazon S3 | Data under per-tenant prefixes with STS-scoped credentials |  |
-| ML and AI | Omnigent | Agent harness with tools and policies |  |
-| ML and AI | Ollama | Local model for the course's agent chapter |  |
-| Consumers | Reviewers and downstream jobs | Approve PRs, read the governed tables |  |
+| Access control and policy | Envoy | mTLS on :15009; routes each client certificate to its tenant | 1.31.5 |
+| Access control and policy | OpenFGA | Authorization model behind the catalog | 1.14.0 |
+| Runtime, CI/CD and IaC | GitOps CI gate | PR-only output, dry run against the real catalog, reconcile |  |
+| Runtime, CI/CD and IaC | Kubernetes | Client-mode driver plus executor pods on EKS | EKS 1.31 |
 
 ## How data flows
 1. **Agent proposes.** The agent writes Spark Declarative Pipelines specs and opens a pull request; it has no direct write path.

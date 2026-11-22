@@ -15,17 +15,16 @@ Change data capture (CDC) with slowly changing dimensions type 2 turns a feed of
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Operational database or service | Emits one event per insert, update or delete |  |
-| Ingestion and streaming | Debezium | Turns database transaction logs into change events |  |
-| Ingestion and streaming | Apache Kafka | The change feed topic (menu-changes in the demo) | apache/kafka 4.0.0 image |
-| Object storage | Local filesystem | Iceberg warehouse directory in the demo |  |
+| Source systems | Operational database or service | Emits one event per insert, update or delete |  |
+| Event streaming | Apache Kafka | The change feed topic (menu-changes in the demo) | apache/kafka 4.0.0 image |
+| Change data capture | Debezium | Turns database transaction logs into change events |  |
+| Change data capture | AUTO CDC (Spark Declarative Pipelines) | KEYS, SEQUENCE BY, APPLY AS DELETE WHEN, STORED AS SCD TYPE 2 |  |
+| Declarative pipelines | Spark Declarative Pipelines | Runs the pipeline with spark-pipelines run | pyspark==4.3.0 |
+| Catalog and credentials | Iceberg hadoop catalog | Declared in the pipeline spec |  |
 | Open table format | Apache Iceberg | SCD type 2 target with row-level operations | Spark 4.3 runtime built from source |
-| Catalog | Iceberg hadoop catalog | Declared in the pipeline spec |  |
-| Compute engines | Spark Declarative Pipelines | Runs the pipeline with spark-pipelines run | pyspark==4.3.0 |
-| Compute engines | AUTO CDC (Spark Declarative Pipelines) | KEYS, SEQUENCE BY, APPLY AS DELETE WHEN, STORED AS SCD TYPE 2 |  |
-| Consumers | Analysts and audit queries | Read current rows or any past version |  |
+| Object storage | Local filesystem | Iceberg warehouse directory in the demo |  |
 
 ## How data flows
 1. **Changes are published.** Each insert, update or delete arrives on a Kafka topic as one JSON event with a key, a sequence number and an operation.

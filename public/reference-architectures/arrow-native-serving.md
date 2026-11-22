@@ -14,19 +14,19 @@ Arrow-native serving delivers lakehouse query results as Apache Arrow record bat
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
+| Spark Connect sessions | Spark Connect | gRPC protocol for Spark clients |  |
+| Spark Connect sessions | Spark Connect clients | Python, Scala, Go, Rust, OCaml, Swift clients |  |
+| Batch and SQL | Apache Spark | Remote engine behind Spark Connect | 4.2.0 in the demos |
+| Other engines | Apache DataFusion | Query engine inside the Flight SQL server | 55 |
+| Other engines | DuckDB | Joins Arrow results locally |  |
+| Catalog and credentials | Unity Catalog OSS | Resolves tables and vends credentials |  |
 | Open table format | Delta Lake | Tables served |  |
-| Catalog | Unity Catalog OSS | Resolves tables and vends credentials |  |
-| Compute engines | Apache DataFusion | Query engine inside the Flight SQL server | 55 |
-| Compute engines | Apache Spark | Remote engine behind Spark Connect | 4.2.0 in the demos |
-| Serving | hydrofoil | Flight SQL server with Cedar policy and OpenLineage |  |
-| Serving | Arrow Flight SQL | Protocol |  |
-| Serving | Spark Connect | gRPC protocol for Spark clients |  |
-| Governance, lineage and policy | breakwater | Cedar enforcement in the DataFusion planner |  |
-| Governance, lineage and policy | OpenLineage | Lineage emitted per query |  |
-| Consumers | Spark Connect clients | Python, Scala, Go, Rust, OCaml, Swift clients |  |
-| Consumers | DuckDB | Joins Arrow results locally |  |
+| Access control and policy | breakwater | Cedar enforcement in the DataFusion planner |  |
+| Lineage | OpenLineage | Lineage emitted per query |  |
+| Apps and APIs | hydrofoil | Flight SQL server with Cedar policy and OpenLineage |  |
+| Apps and APIs | Arrow Flight SQL | Protocol |  |
 
 ## How data flows
 1. **Client sends a query or plan.** A Flight SQL client sends SQL, or a Spark Connect client sends an unresolved logical plan over gRPC.

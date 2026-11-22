@@ -263,6 +263,12 @@
     <priority>0.4</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/reference-architectures/agentic-lakehouse</loc>
+    <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/reference-architectures/batch-medallion</loc>
     <lastmod>2026-11-21</lastmod>
     <changefreq>monthly</changefreq>

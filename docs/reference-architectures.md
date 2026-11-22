@@ -8,7 +8,8 @@ industry lens, and machine-readable twins of all of it.
 
 | What | File |
 |---|---|
-| Layers and the component catalog | `src/content/reference-architectures/components.ts` |
+| Platform taxonomy: zones, groups, capability slots with typical open source choices, and teams | `src/content/reference-architectures/platform.ts` |
+| Component catalog | `src/content/reference-architectures/components.ts` |
 | Architectures (patterns) | `src/content/reference-architectures/patterns.ts` |
 | Industry lenses | `src/content/reference-architectures/industries.ts` |
 | Curated resources list | `src/content/reference-architectures/resources.ts` |
@@ -37,11 +38,21 @@ the SSR prerender and `scripts/generate-seo.ts` all read the same source.
   interface. A swap is shown as "not a tested configuration".
 - No em dashes in prose (a test enforces this on the dataset).
 
+## The board
+
+Every architecture is drawn on the same open platform: sources, ingestion,
+the platform (AI and agents, engine access, execution, data foundation, with
+governance and operations bands), serving and teams. An architecture's nodes
+fill capability slots (`slot` in each node). The simplified view shows the
+slots it uses plus the core ones; the full platform view shows every slot,
+with unused ones dimmed and labelled with their typical open source choice.
+Prefer Apache Iceberg wherever the reference repo supports it.
+
 ## Adding an architecture
 
 1. Add any missing components to `components.ts`.
-2. Add the pattern to `patterns.ts` (slug, definition paragraph, nodes,
-   steps, repos, caveats, FAQs, sources).
+2. Add the pattern to `patterns.ts` (slug, definition paragraph, nodes with
+   a `slot` from `platform.ts`, steps, repos, caveats, FAQs, sources).
 3. Point relevant industry use cases at the new slug in `industries.ts`.
 4. Run `bun run test` and `bun run build`. The build regenerates
    `sitemap.xml`, `llms.txt`, `llms-full.txt`,

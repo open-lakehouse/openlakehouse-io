@@ -14,19 +14,19 @@ A multi-engine catalog architecture puts an open catalog between the tables and 
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Pipelines and notebooks | Create and update tables |  |
-| Object storage | RustFS | S3-compatible storage with STS credentials | 1.0.0 |
+| Source systems | Pipelines and notebooks | Create and update tables |  |
+| Batch and SQL | Apache Spark | Delta notebooks on Spark 4.2.0; Iceberg notebooks on Spark 4.1.3 | 4.2.0 / 4.1.3 |
+| Other engines | PyIceberg | JVM-free Iceberg reads and writes |  |
+| Other engines | DuckDB | Attaches the Iceberg REST endpoint for SQL reads |  |
+| Other engines | Trino | Distributed SQL over the same catalog |  |
+| Catalog and credentials | Unity Catalog OSS | Delta API, Iceberg REST catalog and credential vending | 0.7.0 |
+| Catalog and credentials | PostgreSQL | Catalog metadata | 16.3 |
 | Open table format | Delta Lake | Catalog-managed Delta tables |  |
 | Open table format | Apache Iceberg | Native Iceberg tables through Iceberg REST |  |
-| Catalog | Unity Catalog OSS | Delta API, Iceberg REST catalog and credential vending | 0.7.0 |
-| Catalog | PostgreSQL | Catalog metadata | 16.3 |
-| Compute engines | Apache Spark | Delta notebooks on Spark 4.2.0; Iceberg notebooks on Spark 4.1.3 | 4.2.0 / 4.1.3 |
-| Compute engines | PyIceberg | JVM-free Iceberg reads and writes |  |
-| Compute engines | DuckDB | Attaches the Iceberg REST endpoint for SQL reads |  |
-| Compute engines | Trino | Distributed SQL over the same catalog |  |
-| Consumers | marimo | Reactive notebooks on :2718 and :2719 |  |
+| Object storage | RustFS | S3-compatible storage with STS credentials | 1.0.0 |
+| Dashboards and notebooks | marimo | Reactive notebooks on :2718 and :2719 |  |
 
 ## How data flows
 1. **Create through the catalog.** A Spark session configured with the Unity Catalog connector creates a managed Delta table, or an Iceberg table through the Iceberg REST endpoint.

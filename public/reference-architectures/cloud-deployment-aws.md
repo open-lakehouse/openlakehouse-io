@@ -13,15 +13,14 @@ A self-hosted open catalog on AWS runs Unity Catalog OSS as a container on Amazo
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
+| Batch and SQL | Apache Spark | Any engine with a Unity Catalog or Iceberg REST client |  |
+| Catalog and credentials | Unity Catalog OSS | Catalog server, digest-pinned and mirrored to ECR | 0.7.0 |
+| Catalog and credentials | Neon | Postgres for catalog metadata |  |
 | Object storage | Amazon S3 | Data bucket reached through a bucket-scoped storage role |  |
-| Catalog | Unity Catalog OSS | Catalog server, digest-pinned and mirrored to ECR | 0.7.0 |
-| Catalog | Neon | Postgres for catalog metadata |  |
-| Orchestration | Amazon ECS on Fargate | Runs the server in a two-AZ VPC behind a public ALB |  |
-| Orchestration | Terraform | Declares the whole deployment | >= 1.11, AWS provider ~> 6.45 |
-| Compute engines | Apache Spark | Any engine with a Unity Catalog or Iceberg REST client |  |
-| Consumers | Engines and users | Reach the catalog through the ALB |  |
+| Runtime, CI/CD and IaC | Amazon ECS on Fargate | Runs the server in a two-AZ VPC behind a public ALB |  |
+| Runtime, CI/CD and IaC | Terraform | Declares the whole deployment | >= 1.11, AWS provider ~> 6.45 |
 
 ## How data flows
 1. **Prepare a profile.** just init-profile and just doctor check AWS credentials and tooling.
