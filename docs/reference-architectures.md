@@ -72,7 +72,10 @@ markup, so there is no hydration contract to maintain.
 
 The homepage (`/`) is prerendered too, which overwrites `dist/index.html`.
 The untouched SPA shell is saved as `dist/app-shell.html`, and `vercel.json`
-(and `public/_redirects`) rewrite every other client-side route to it. Do not
+rewrites every other client-side route to `/app-shell` (extensionless,
+because `cleanUrls` serves `app-shell.html` at `/app-shell`; a rewrite to
+`/app-shell.html` returns 404). `public/_redirects` does the same for
+hosts that read it. Do not
 point the rewrite back at `/index.html`: every unprerendered route would then
 serve the homepage's content and canonical URL.
 
