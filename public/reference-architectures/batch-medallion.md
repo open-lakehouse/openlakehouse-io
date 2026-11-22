@@ -15,20 +15,19 @@ A batch medallion architecture organizes lakehouse tables into three layers: bro
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Order-event generator and batch extracts | Daily and hourly files |  |
-| Ingestion and streaming | Idempotent bronze loader | Appends each batch once, keyed so reruns do not duplicate |  |
-| Ingestion and streaming | AUTO CDC (Spark Declarative Pipelines) | Applies change feeds as SCD type 1 or 2 |  |
-| Object storage | SeaweedFS | s3://lakehouse/warehouse | 4.51 |
+| Source systems | Order-event generator and batch extracts | Daily and hourly files |  |
+| Batch and file ingestion | Idempotent bronze loader | Appends each batch once, keyed so reruns do not duplicate |  |
+| Change data capture | AUTO CDC (Spark Declarative Pipelines) | Applies change feeds as SCD type 1 or 2 |  |
+| ML lifecycle | MLflow | Logs the gold snapshot id with each model run | 3.1.0 |
+| Batch and SQL | Apache Spark | Runs the pipeline over Spark Connect | 4.3.0 |
+| Declarative pipelines | Spark Declarative Pipelines | Declares bronze to silver to gold and resolves order | pyspark[pipelines]==4.3.0 |
+| Other engines | DuckDB | Reads gold through Iceberg REST | 1.5.6 |
+| Catalog and credentials | Unity Catalog OSS | Writable Iceberg REST catalog | 0.7.0 |
 | Open table format | Apache Iceberg | Bronze, silver and gold tables | runtime 4.3_2.13 built from apache/iceberg#18749 |
-| Catalog | Unity Catalog OSS | Writable Iceberg REST catalog | 0.7.0 |
-| Compute engines | Apache Spark | Runs the pipeline over Spark Connect | 4.3.0 |
-| Compute engines | Spark Declarative Pipelines | Declares bronze to silver to gold and resolves order | pyspark[pipelines]==4.3.0 |
+| Object storage | SeaweedFS | s3://lakehouse/warehouse | 4.51 |
 | Orchestration | Apache Airflow | DAG with schedules and backfills | 3.3.2 |
-| ML and AI | MLflow | Logs the gold snapshot id with each model run | 3.1.0 |
-| Serving | DuckDB | Reads gold through Iceberg REST | 1.5.6 |
-| Consumers | Analysts and notebooks | Query gold tables |  |
 
 ## How data flows
 1. **Land bronze once.** Each batch is appended to a bronze Iceberg table with a key that makes reruns idempotent.

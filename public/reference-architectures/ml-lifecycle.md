@@ -14,16 +14,15 @@ The ML lifecycle on an open lakehouse ties experiments, models and GenAI traces 
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Gold feature tables | Training data |  |
+| Source systems | Gold feature tables | Training data |  |
+| ML lifecycle | MLflow | Tracking, registry, tracing, evaluation and AI Gateway | 3.14.0 in open-lakehouse; 3.1.0 in the course |
+| Batch and SQL | Apache Spark | Feature engineering and batch scoring |  |
+| Catalog and credentials | Unity Catalog OSS | Tables, and in the course, the catalog the run reads through |  |
 | Open table format | Apache Iceberg | Snapshot ids give reproducible training sets |  |
-| Catalog | Unity Catalog OSS | Tables, and in the course, the catalog the run reads through |  |
-| Compute engines | Apache Spark | Feature engineering and batch scoring |  |
-| ML and AI | MLflow | Tracking, registry, tracing, evaluation and AI Gateway | 3.14.0 in open-lakehouse; 3.1.0 in the course |
 | Orchestration | Apache Airflow | Retraining schedules |  |
-| Consumers | Jupyter | Experiments |  |
-| Consumers | Applications | Call registered models and gateway routes |  |
+| Dashboards and notebooks | Jupyter | Experiments |  |
 
 ## How data flows
 1. **Build features.** Spark reads gold tables and writes a feature table.

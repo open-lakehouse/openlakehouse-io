@@ -13,14 +13,13 @@ Serverless lakehouse services package the control plane of an open lakehouse (th
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Catalog | Neon | Per-branch Postgres and storage bucket |  |
-| Catalog | unitycatalog-rs | Catalog function (mangrove server) |  |
-| Governance, lineage and policy | headwaters | OpenLineage ingest with Marquez-compatible reads |  |
-| Serving | distributary | Sharing function; built and tested, not yet deployed |  |
+| Catalog and credentials | Neon | Per-branch Postgres and storage bucket |  |
+| Catalog and credentials | unitycatalog-rs | Catalog function (mangrove server) |  |
 | Open table format | Delta Lake | Managed tables under s3://lakehouse/managed |  |
-| Consumers | Engines and apps | Call the functions over HTTPS |  |
+| Lineage | headwaters | OpenLineage ingest with Marquez-compatible reads |  |
+| Data sharing | distributary | Sharing function; built and tested, not yet deployed |  |
 
 ## How data flows
 1. **Build.** Each Rust service is compiled to a linux-arm64 Node-API addon and bundled within Neon's size limits.

@@ -158,6 +158,14 @@ const OpenSourceDataEngineering = () => (
           ))}
         </dl>
 
+        <h2 id="agents">Open source data engineering with AI agents</h2>
+        <p>
+          The same open layers are what make a lakehouse safe for AI agents: a catalog agents can read for metadata and
+          permissions, declarative pipelines the platform can dry-run, and table snapshots that make changes reversible.
+          The practice is <Link to="/agentic-data-engineering">agentic data engineering</Link>, and the platform it runs on
+          is the <Link to="/agentic-lakehouse">agentic lakehouse</Link>.
+        </p>
+
         <h2 id="why-open">Why teams choose open source data engineering</h2>
         <ul>
           {PRINCIPLES.map((p) => (
@@ -179,6 +187,16 @@ const OpenSourceDataEngineering = () => (
 
         <h2 id="learn-more">Keep going</h2>
         <ul className="not-prose space-y-2">
+          <li>
+            <Link to="/agentic-data-engineering" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+              Agentic data engineering: AI agents that write and run pipelines <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </li>
+          <li>
+            <Link to="/agentic-lakehouse" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+              The agentic lakehouse: open data AI agents can use safely <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </li>
           <li>
             <Link to="/reference-architectures" className="inline-flex items-center gap-1.5 text-primary hover:underline">
               Data engineering reference architectures you can run <ArrowRight className="h-3.5 w-3.5" />

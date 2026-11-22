@@ -14,21 +14,20 @@ Policy pushdown and open lineage is a governance architecture for multi-engine l
 
 ## Components
 
-| Layer | Component | Role | Version |
+| Capability | Component | Role | Version |
 |---|---|---|---|
-| Sources | Policy authors | Write Cedar policies and tag templates |  |
-| Governance, lineage and policy | Cedar | Policy language; deny always wins | cedar-policy 4 |
-| Governance, lineage and policy | policast | Compiles Cedar to CEL and injects enforcement into the physical plan |  |
-| Governance, lineage and policy | breakwater | Row filters and column masks inside the DataFusion planner |  |
-| Catalog | Unity Catalog OSS | Policy decision point resolving tags | 0.4.1 in the demo |
+| Source systems | Policy authors | Write Cedar policies and tag templates |  |
+| Batch and SQL | Apache Spark | Enforcement as Catalyst rules | 4.2 plugin |
+| Other engines | Apache DataFusion | Enforcement as plan rewrites | 53.1 |
+| Catalog and credentials | Unity Catalog OSS | Policy decision point resolving tags | 0.4.1 in the demo |
+| Open table format | Apache Iceberg | Lineage event tables, written through Lakekeeper (Delta also supported) |  |
 | Object storage | RustFS | Demo object store |  |
-| Open table format | Delta Lake | Governed tables and the lineage table |  |
-| Compute engines | Apache Spark | Enforcement as Catalyst rules | 4.2 plugin |
-| Compute engines | Apache DataFusion | Enforcement as plan rewrites | 53.1 |
-| Governance, lineage and policy | OpenLineage | Lineage events from every job, column level from Spark |  |
-| Governance, lineage and policy | open-lineage-connect | Ingests events and writes them to Delta and Iceberg tables |  |
-| Governance, lineage and policy | headwaters | Lineage read API and UI |  |
-| Consumers | Analysts, auditors | See only permitted rows and columns; trace lineage |  |
+| Access control and policy | Cedar | Policy language; deny always wins | cedar-policy 4 |
+| Access control and policy | policast | Compiles Cedar to CEL and injects enforcement into the physical plan |  |
+| Access control and policy | breakwater | Row filters and column masks inside the DataFusion planner |  |
+| Lineage | OpenLineage | Lineage events from every job, column level from Spark |  |
+| Lineage | open-lineage-connect | Ingests events and writes them to Delta and Iceberg tables |  |
+| Lineage | headwaters | Lineage read API and UI |  |
 
 ## How data flows
 1. **Author once.** A policy author writes Cedar policies, including tag-based templates that apply to every column tagged, for example, as PHI.

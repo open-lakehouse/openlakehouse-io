@@ -1,11 +1,14 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
-import { BOARD_LAYERS, PATTERNS, PATTERN_GROUPS, layerById, nodeName, patternBySlug, patternPath } from "@/content/reference-architectures";
+import { PATTERNS, PATTERN_GROUPS, groupById, nodeName, patternBySlug, patternPath, slotById } from "@/content/reference-architectures";
 
 /** Homepage feature: the reference architectures, led by batch and streaming. */
 export const HomeArchitectures = () => {
-  const preview = patternBySlug("streaming-medallion")!;
-  const cols = BOARD_LAYERS.map((l) => ({ l, n: preview.nodes.filter((x) => x.layer === l && !x.detail) })).filter((c) => c.n.length);
+  const preview = patternBySlug("agentic-lakehouse")!;
+  const order = ["ai", "access", "execution", "data", "governance", "operations"];
+  const cols = order
+    .map((g) => ({ l: g, n: preview.nodes.filter((x) => slotById(x.slot).group === g && !x.detail) }))
+    .filter((c) => c.n.length);
   return (
     <section id="reference-architectures" aria-labelledby="home-refarch-heading" className="relative overflow-hidden border-y border-border/40 bg-hero-gradient text-white">
       <div aria-hidden className="refarch-grid-bg pointer-events-none absolute inset-0 opacity-20" />
@@ -17,7 +20,7 @@ export const HomeArchitectures = () => {
               Data engineering reference architectures you can run.
             </h2>
             <p className="mt-4 text-lg leading-relaxed text-white/80">
-              Interactive, open source blueprints for batch and streaming pipelines, each backed by a public repo with pinned versions. Swap any box, pick your industry, export the result.
+              Interactive, open source blueprints for the agentic lakehouse, batch and streaming pipelines, each backed by a public repo with pinned versions. Swap any box, pick your industry, export the result.
             </p>
           </div>
           <Link to="/reference-architectures" className="inline-flex items-center gap-2 rounded-lg bg-green-500 px-5 py-3 font-semibold text-navy-900 hover:bg-green-400">
@@ -32,9 +35,10 @@ export const HomeArchitectures = () => {
             {cols.map(({ l, n }, i) => (
               <li key={l} className="flex min-w-[120px] flex-1 items-stretch gap-2">
                 <div className="flex-1">
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/55">{layerById(l).short}</p>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/55">{groupById(l).name}</p>
                   {n.map((x) => (
-                    <p key={nodeName(x)} className="mb-1.5 rounded-md border border-white/15 bg-navy-900/60 px-2 py-1.5 text-xs font-medium">
+                    <p key={nodeName(x) + x.slot} className="mb-1.5 rounded-md border border-white/15 bg-navy-900/60 px-2 py-1.5 text-xs font-medium">
+                      <span className="block text-[9px] uppercase tracking-wider text-white/50">{slotById(x.slot).short}</span>
                       {nodeName(x)}
                     </p>
                   ))}

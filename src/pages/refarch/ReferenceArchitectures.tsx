@@ -7,6 +7,7 @@ import { ArchitectureBoard } from "@/components/refarch/ArchitectureBoard";
 import { ArchitectureSearch } from "@/components/refarch/ArchitectureSearch";
 import { FaqList, Hero, PatternCard, SectionHeading } from "@/components/refarch/parts";
 import { hubJsonLd } from "@/lib/refarch-seo";
+import { GuideNav } from "@/components/GuidePage";
 import {
   HUB_DEFINITION,
   HUB_FAQS,
@@ -216,6 +217,12 @@ const ReferenceArchitectures = () => (
         <div className="max-w-3xl">
           <FaqList faqs={HUB_FAQS} />
         </div>
+      </section>
+
+      {/* ---------- Guides ---------- */}
+      <section className="container pb-14">
+        <SectionHeading id="guides" eyebrow="Guides" title="Concepts behind the architectures" />
+        <GuideNav current="/reference-architectures" />
       </section>
 
       {/* ---------- Machine-readable ---------- */}

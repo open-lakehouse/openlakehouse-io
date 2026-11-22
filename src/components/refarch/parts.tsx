@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, ChevronRight, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  BOARD_LAYERS,
+  SLOTS,
   HUB_PATH,
   HUB_TITLE,
   componentById,
@@ -76,7 +76,7 @@ export const SectionHeading = ({ id, eyebrow, title, children }: { id: string; e
 
 /** A thin strip of the layers a pattern uses, for cards. */
 export const StackStrip = ({ pattern, className }: { pattern: Pattern; className?: string }) => {
-  const primary = BOARD_LAYERS.map((l) => pattern.nodes.find((n) => n.layer === l && !n.detail && n.component)).filter(Boolean);
+  const primary = SLOTS.map((sl) => pattern.nodes.find((n) => n.slot === sl.id && !n.detail && n.component)).filter(Boolean);
   return (
     <div className={cn("flex flex-wrap gap-1", className)}>
       {primary.slice(0, 6).map((n) => (
