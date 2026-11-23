@@ -1,0 +1,170 @@
+---
+title: "The Top 10 Data Engines in 2026, and What Each One Is Actually For"
+date: 2026-11-22
+authors: [lisa-cao]
+excerpt: "A ranked guide to the ten data engines that matter in 2026 (Apache Spark, Flink, DuckDB, Trino, DataFusion, Polars, ClickHouse, StarRocks, Ray and Velox), what each is best at, where it falls short, and how to choose."
+tags: [spark, data-engineering, duckdb, flink, trino, lakehouse, iceberg]
+include: [blog]
+kind: post
+---
+
+**Short answer:** the top data engines in 2026 are **Apache Spark** (general purpose batch, streaming and pipelines at any scale), **Apache Flink** (event-at-a-time streaming), **DuckDB** (single-node analytics), **Trino** (federated SQL over a lakehouse), **Apache DataFusion** (an embeddable query engine for building other engines), **Polars** (single-node DataFrames), **ClickHouse** (real-time analytical serving), **StarRocks** (low-latency lakehouse queries), **Ray** (distributed Python and multimodal AI data) and **Velox** (a native execution library that speeds up other engines). Spark ranks first because it is the only open engine that covers batch, low-latency streaming, declarative pipelines and remote multi-language clients over the same open tables.
+
+---
+
+Every year someone publishes a "top data engineering tools" list, and every year it's a logo wall: an orchestrator next to a BI tool next to a vector database next to a catalog, ranked by vibes. I wanted to write a narrower one, about engines specifically (the thing that actually reads your files, plans a query and runs it), because that's where the interesting change happened over the last couple of years, and because it's the decision people keep getting wrong in the same way. To be upfront about my bias, I work in DevRel at Databricks and I've spent most of this year writing about Spark, so weigh my first pick accordingly; I've tried to make the case for it on things you can check rather than on loyalty.
+
+The change is this: open table formats (Apache Iceberg and Delta Lake, plus the REST catalogs in front of them) made storage engine-neutral, so the same table can be written by Spark, queried by Trino, poked at by DuckDB on a laptop and served by StarRocks without anyone copying it. I went through exactly that in [How to Build an Open Lakehouse on Your Laptop](https://systemsnull.net/posts/data-engineering-ai/open-lakehouse-on-your-laptop) and again in [Spark Connect from Rust: Pull Spark outputs into DuckDB and Polars](https://systemsnull.net/posts/data-engineering-ai/spark-connect-rust-duckdb-polars), where Spark, DuckDB and Polars ended up passing the same Arrow data around like it was nothing. Once the data stops belonging to an engine, the old question ("which platform do we standardize on?") stops making sense.
+
+**My thesis: because open table formats made storage engine-neutral, a 2026 engine should be chosen by the shape of the workload rather than by where the data lives, and Spark ranks first because it is the only open engine that covers every shape (batch, streaming, pipelines and remote clients) well enough to be the default, with every other engine on this list best understood by the one shape it does better than Spark.**
+
+## How I ranked them
+
+The ranking weighs four things: how many distinct workload shapes an engine handles well, whether it reads and writes open tables (Iceberg or Delta) natively, how mature and widely deployed it is, and how actively it's developed this year. Versions and dates below were checked on 22 November 2026.
+
+| Rank | Engine | Shape it's best at | Scale | Open table formats | Current release (Nov 2026) |
+|---|---|---|---|---|---|
+| 1 | Apache Spark | Batch, streaming, pipelines, ML prep | Laptop to thousands of nodes | Iceberg, Delta (read and write) | 4.3.0 |
+| 2 | Apache Flink | Event-at-a-time streaming | Cluster | Iceberg, Paimon | 2.2.1 |
+| 3 | DuckDB | Interactive single-node analytics | One machine | Iceberg, Delta, DuckLake | 2.0.0 LTS |
+| 4 | Trino | Federated interactive SQL | Cluster | Iceberg, Delta, Hive | 48x line |
+| 5 | Apache DataFusion | Embedded query engine (a library) | Library | Via integrations | 55.x |
+| 6 | Polars | Single-node DataFrames | One machine (plus Polars Cloud) | Iceberg, Delta | 2.0 line |
+| 7 | ClickHouse | Real-time analytical serving | Cluster | Iceberg read and write | 26.x |
+| 8 | StarRocks | Low-latency lakehouse SQL | Cluster | Iceberg (native writes since 4.0) | 4.x |
+| 9 | Ray | Distributed Python, multimodal AI data | Cluster, GPU-heavy | Iceberg, Delta via Ray Data | |
+| 10 | Velox | Native vectorized execution (a library) | Library | Through host engine | |
+
+---
+
+## 1. Apache Spark: the default engine for everything that isn't a special case
+
+Spark is first because, as of [Spark 4.3](https://www.databricks.com/blog/introducing-apache-spark-43-now-available-databricks-runtime-19) (released at the end of October 2026, and the first release on Spark's new quarterly train), it's the only open engine where batch ETL, low-latency streaming, declarative pipelines and SQL all run over the same open tables with one execution model, and that breadth is precisely what you want in a default. The headline of 4.3 is stateful [Real-Time Mode](https://apache.github.io/spark/streaming/real-time-mode.html): Structured Streaming can now run aggregations, deduplication and `transformWithState` with sub-second latency (Databricks reported P99 end-to-end latencies of 136 to 141 ms across their three benchmarks), which removes the single most common reason teams ran Flink beside Spark. I walked through that in [Introducing Real-time Mode's Stateful Queries on Spark](https://systemsnull.net/posts/data-engineering-ai/real-time-mode-spark-43), and the rest of the release (ASOF JOIN in SQL, nanosecond timestamps, Variant improvements) is in [The Ultimate Guide to Apache Spark 4.3](https://systemsnull.net/posts/data-engineering-ai/ultimate-guide-spark-43).
+
+The other two things that changed Spark's position are less flashy. [Spark Declarative Pipelines](https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html) let you declare tables and flows and have Spark work out the order, retries and incremental processing (with AUTO CDC turning a change feed into current state, which I covered in [AUTO CDC with Spark Declarative Pipelines](https://systemsnull.net/posts/data-engineering-ai/auto-cdc-declarative-pipelines)), and Spark Connect split the client from the server, so a job can be driven from Python, Scala, Go, Rust or even OCaml without carrying a JVM around in your process ([An Idiot's Guide to Spark Connect Clients](https://systemsnull.net/posts/data-engineering-ai/idiots-guide-spark-connect-clients) has the full tour).
+
+- **Best for:** the bulk of a lakehouse's ETL; anything that has to scale past one machine; teams that want batch and streaming on one engine; feature and training-data preparation.
+- **Not ideal for:** sub-second interactive dashboards on small data (cluster startup and query planning overhead dominate), or a quick query on a laptop, where DuckDB or Polars will beat it on wall clock.
+
+```python
+# A stateful count per user in Real-Time Mode (Spark 4.3); swap the trigger
+# for processingTime=... and the same code runs as ordinary micro-batches
+events = (spark.readStream.format("kafka")
+          .option("kafka.bootstrap.servers", "broker:9092")
+          .option("subscribe", "events").load())
+(events.selectExpr("CAST(key AS STRING) AS user_id")
+   .groupBy("user_id").count()
+   .selectExpr("user_id AS key", "CAST(count AS STRING) AS value")
+   .writeStream.format("kafka")
+   .option("kafka.bootstrap.servers", "broker:9092")
+   .option("topic", "user_counts")
+   .option("checkpointLocation", "/chk/user_counts")
+   .outputMode("update")                 # Real-Time Mode requires update
+   .trigger(realTime="30 seconds")       # checkpoint interval; records don't wait for it
+   .start())
+```
+
+## 2. Apache Flink: still the specialist for event-at-a-time streaming
+
+Flink remains the engine built from the ground up for streams, with record-at-a-time processing, mature event-time semantics and very fine control over state and checkpoints, which is why it's still the choice for complex event processing and long-lived stateful applications. [Flink 2.2](https://flink.apache.org/2025/12/04/apache-flink-2.2.0-advancing-real-time-data--ai-and-empowering-stream-processing-for-the-ai-era/) (December 2025, with the 2.2.1 bug fix release in May 2026) leaned into AI with `VECTOR_SEARCH` in Flink SQL and Materialized Tables, and AWS's managed Flink picked up 2.2 in March. The honest pressure on Flink in 2026 is that Spark's Real-Time Mode now covers the common stateful cases, so the question for a new project is whether you need Flink's lower-level control or just low latency.
+
+- **Best for:** fraud detection, CEP, event-driven applications, very large keyed state.
+- **Not ideal for:** batch-heavy teams who'd be running a second engine only for streaming.
+
+## 3. DuckDB: the laptop that ate the small cluster
+
+DuckDB is the in-process analytical database that made "just run it locally" a serious answer for datasets that used to get a cluster by reflex, and it ranks third because a surprising share of real analytical work fits on one machine. [DuckDB 2.0.0 LTS](https://duckdb.org/2026/10/21/announcing-duckdb-200) arrived on 21 October 2026 as a feature release with breaking changes (and, sensibly, its own team is telling people to wait for the first patch before production), alongside the Quack protocol and continued work on Iceberg, Delta and its own DuckLake format.
+
+- **Best for:** interactive analysis, local development against lakehouse tables, embedded analytics in apps, CI tests for pipelines.
+- **Not ideal for:** data that doesn't fit on one machine's disk, or concurrent writers.
+
+## 4. Trino: SQL across everything you already have
+
+Trino is the federated SQL engine: one query can join an Iceberg table, a Postgres table and a Kafka topic, which is why it's the default interactive layer over many lakehouses. Its 2026 releases added [Python UDFs](https://trino.io/docs/current/release/release-481), Iceberg v3 geometry and geography types, and the [PIVOT clause](https://trino.io/docs/current/release/release-483.html).
+
+- **Best for:** ad hoc and BI queries across many sources without moving data.
+- **Not ideal for:** long-running, failure-prone ETL (it's improved here with fault-tolerant execution, but Spark is still the more natural fit).
+
+## 5. Apache DataFusion: the engine people build engines on
+
+DataFusion is a Rust query engine shipped as a library, and it's on this list because a growing number of the systems you use are DataFusion underneath, which makes it infrastructure rather than a product. The [Comet](https://datafusion.apache.org/blog/2026/08/07/datafusion-comet-1.0.0) accelerator for Spark, which swaps Spark's JVM operators for native DataFusion ones, reached 1.0 in August 2026 and started following semantic versioning, and the core project is on its 55.x line.
+
+- **Best for:** teams building a database, a query service or a domain-specific engine.
+- **Not ideal for:** anyone who wants an engine to run, rather than to build with.
+
+## 6. Polars: DataFrames that finally replaced pandas for serious work
+
+Polars is the Rust DataFrame library with a lazy query optimizer, and its 2.0 line makes the [streaming engine the default](https://pola.rs/posts/announcing-polars-2/), so out-of-core work on one machine is the normal path rather than an opt-in (with the caveat that the streaming engine doesn't preserve row order by default for joins and group-bys, which will surprise somebody). [Polars Cloud](https://pola.rs/posts/polars-cloud-launch) adds distributed execution, though that's still young next to Spark.
+
+- **Best for:** Python data work on one machine, feature engineering, replacing pandas.
+- **Not ideal for:** multi-node production pipelines today.
+
+## 7. ClickHouse: real-time analytics you can put behind a product
+
+ClickHouse is the columnar database built for fast aggregations on fresh data, which is why it ends up powering observability tools and customer-facing dashboards. Its move toward the lakehouse is the 2026 story: it [added full insert, delete, update and schema changes on Iceberg tables](https://clickhouse.com/blog/clickhouse-is-data-lake-ready), so it can serve open tables rather than only its own storage.
+
+- **Best for:** user-facing analytics, logs and metrics, high-concurrency queries on recent data.
+- **Not ideal for:** heavy multi-stage transformations and large joins.
+
+## 8. StarRocks: the low-latency query layer for the lakehouse
+
+StarRocks is an MPP SQL engine that competes with Trino and ClickHouse for sub-second queries directly on Iceberg, with native Iceberg writes since 4.0, a cost-based optimizer and materialized views that it rewrites queries against automatically.
+
+- **Best for:** dashboards and serving workloads that must query lakehouse tables directly at low latency.
+- **Not ideal for:** general ETL.
+
+## 9. Ray: the engine for Python and GPUs, where AI data lives
+
+Ray is a distributed runtime for Python, and Ray Data is its data processing layer, built for the workloads tabular engines handle badly: images, audio, video and documents flowing through GPU models for embedding, inference and training. It's here because AI data pipelines are now a real share of data engineering, and the usual pattern is Spark preparing tabular data and Ray handling the GPU-heavy, multimodal step.
+
+- **Best for:** batch inference, embedding pipelines, multimodal preprocessing.
+- **Not ideal for:** SQL-shaped analytics and classic ETL.
+
+## 10. Velox: the execution layer hiding inside other engines
+
+Velox, from Meta, is a C++ library of vectorized operators that other engines plug in to replace their own execution, and it closes the list because it's the clearest sign of where engines are heading: Apache Gluten uses it to run Spark plans natively, and Presto's native workers run on it. Like DataFusion, you're more likely to use Velox without knowing it than to choose it directly.
+
+- **Best for:** engine builders and platform teams accelerating Spark or Presto.
+- **Not ideal for:** anyone looking for something to run by itself.
+
+---
+
+## How to choose a data engine in 2026
+
+Most teams end up with two or three engines over the same open tables, and that's fine (it's the point of open tables), but there should be one default and a clear reason for each addition. In order:
+
+1. **Does the data fit on one machine?** If yes, start with DuckDB or Polars and add nothing until something breaks.
+2. **Is it ETL, pipelines, or anything bigger than one machine?** Use Spark; with Real-Time Mode in 4.3, that includes most streaming.
+3. **Do you need event-at-a-time processing with very fine state control?** Add Flink.
+4. **Do analysts need interactive SQL across many sources?** Add Trino.
+5. **Are you serving queries to users or dashboards at sub-second latency?** Add ClickHouse or StarRocks.
+6. **Is the data images, audio or text going through GPU models?** Add Ray.
+7. **Are you building an engine yourself?** Start from DataFusion or Velox.
+
+The only real mistake left is letting an engine own your data. Keep the tables in Iceberg or Delta behind an open catalog and every choice above becomes reversible, which is a better position than any single engine on this list can give you on its own.
+
+## FAQ
+
+**What is the most popular data engine in 2026?**
+Apache Spark is still the most widely deployed engine for large-scale data processing, and with Spark 4.3 it covers batch, low-latency streaming and declarative pipelines in one engine.
+
+**Is DuckDB replacing Spark?**
+No. DuckDB replaces Spark for work that fits on one machine, which is more work than people assumed; Spark is still the tool when data or concurrency outgrows a single node, and the two read the same Iceberg and Delta tables, so most teams use both.
+
+**Spark or Flink for streaming in 2026?**
+For most new projects, Spark: Real-Time Mode in Spark 4.3 handles stateful aggregations, deduplication and custom state at sub-second latency. Choose Flink when you need record-at-a-time semantics or very fine control over state and checkpoints.
+
+**What's the difference between a data engine and a data engineering tool?**
+An engine reads data, plans and executes queries (Spark, DuckDB, Trino). Tools around it orchestrate (Airflow), catalog (Unity Catalog, Polaris), store tables (Iceberg, Delta) or transform via SQL models (dbt), and those rely on an engine to do the actual work.
+
+**Which data engines support Apache Iceberg?**
+All ten on this list can work with Iceberg directly or through a host engine; Spark, Flink, Trino, StarRocks and ClickHouse support both reading and writing.
+
+## Further reading
+
+- [The Ultimate Guide to Apache Spark 4.3](https://systemsnull.net/posts/data-engineering-ai/ultimate-guide-spark-43): everything new in Spark 4.3, with runnable demos.
+- [Introducing Real-time Mode's Stateful Queries on Spark](https://systemsnull.net/posts/data-engineering-ai/real-time-mode-spark-43): what stateful Real-Time Mode does, measured.
+- [Spark Connect from Rust: Pull Spark outputs into DuckDB and Polars](https://systemsnull.net/posts/data-engineering-ai/spark-connect-rust-duckdb-polars): Spark, DuckDB and Polars sharing the same Arrow data.
+- [How to Build an Open Lakehouse on Your Laptop](https://systemsnull.net/posts/data-engineering-ai/open-lakehouse-on-your-laptop): running several of these engines over one open lakehouse at home.
+- [Apache Spark 4.3 announcement](https://www.databricks.com/blog/introducing-apache-spark-43-now-available-databricks-runtime-19): the release overview and Real-Time Mode benchmarks.
+- [DuckDB 2.0.0 announcement](https://duckdb.org/2026/10/21/announcing-duckdb-200): the LTS release and its breaking changes.

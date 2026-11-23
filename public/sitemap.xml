@@ -116,6 +116,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/blog/apache-spark/top-10-data-engines-2026</loc>
+    <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/blog/delta-lake/clickhouse-delta-kernel</loc>
     <lastmod>2026-05-18</lastmod>
     <changefreq>monthly</changefreq>
