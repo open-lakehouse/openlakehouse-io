@@ -13,6 +13,8 @@ import OpenSourceDataEngineering from "./pages/OpenSourceDataEngineering";
 import FaqPage from "./pages/FaqPage";
 import AgenticLakehouse from "./pages/guides/AgenticLakehouse";
 import AgenticDataEngineering from "./pages/guides/AgenticDataEngineering";
+import SparkMasterclass from "./pages/projects/SparkMasterclass";
+import SparkMatrix from "./pages/projects/SparkMatrix";
 import ReferenceArchitectures from "./pages/refarch/ReferenceArchitectures";
 import ArchitecturePage from "./pages/refarch/ArchitecturePage";
 import IndustryPage from "./pages/refarch/IndustryPage";
@@ -24,6 +26,8 @@ export const routes = [
   "/open-source-data-engineering",
   "/agentic-lakehouse",
   "/agentic-data-engineering",
+  "/spark-masterclass",
+  "/spark-matrix",
   "/faq",
   HUB_PATH, ...PATTERNS.map((p) => patternPath(p.slug)), ...INDUSTRIES.map((i) => industryPath(i.slug))];
 
@@ -39,6 +43,8 @@ export function render(url: string) {
               <Route path="/open-source-data-engineering" element={<OpenSourceDataEngineering />} />
               <Route path="/agentic-lakehouse" element={<AgenticLakehouse />} />
               <Route path="/agentic-data-engineering" element={<AgenticDataEngineering />} />
+              <Route path="/spark-masterclass" element={<SparkMasterclass />} />
+              <Route path="/spark-matrix" element={<SparkMatrix />} />
               <Route path="/faq" element={<FaqPage />} />
               <Route path="/reference-architectures" element={<ReferenceArchitectures />} />
               <Route path="/reference-architectures/industries/:slug" element={<IndustryPage />} />

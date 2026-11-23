@@ -21,6 +21,8 @@ import {
   TITLE as GUIDE_TITLE,
 } from "../src/content/open-source-data-engineering";
 import { GUIDES, guideMarkdown } from "../src/content/agentic";
+import * as masterclass from "../src/content/spark-masterclass";
+import * as matrix from "../src/content/spark-matrix";
 import {
   HUB_DEFINITION as RA_DEFINITION,
   HUB_DESCRIPTION as RA_DESCRIPTION,
@@ -55,6 +57,8 @@ const staticEntries: SitemapEntry[] = [
   { path: "/open-source-data-engineering", changefreq: "monthly", priority: "0.9" },
   { path: "/agentic-lakehouse", changefreq: "monthly", priority: "0.9" },
   { path: "/agentic-data-engineering", changefreq: "monthly", priority: "0.9" },
+  { path: masterclass.SLUG, changefreq: "monthly", priority: "0.8" },
+  { path: matrix.SLUG, changefreq: "monthly", priority: "0.8" },
   { path: "/reference-architectures", changefreq: "weekly", priority: "0.9" },
   { path: "/learn", changefreq: "weekly", priority: "0.8" },
   { path: "/community", changefreq: "monthly", priority: "0.6" },
@@ -73,6 +77,8 @@ const NAV_DESCRIPTIONS: Record<string, string> = {
     "What an agentic lakehouse is: open tables, a catalog agents can read, MCP tools, declarative pipelines, policies and tracing.",
   "/agentic-data-engineering":
     "How AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies.",
+  [masterclass.SLUG]: masterclass.META_DESCRIPTION,
+  [matrix.SLUG]: matrix.META_DESCRIPTION,
   "/reference-architectures":
     "Interactive open source data engineering reference architectures, each backed by a runnable repo, with industry lenses.",
   "/learn": "Curated guides, talks, and tutorials.",
@@ -516,6 +522,23 @@ function renderLlmsFull(): string {
   for (const g of GUIDES) {
     out.push("---", "", `URL: ${url(g.slug)}`, "", guideMarkdown(g));
   }
+
+  // Open Lakehouse project pages (React routes): definition, contents, FAQ.
+  out.push("---", "", `# ${masterclass.TITLE}`, "", `URL: ${url(masterclass.SLUG)}`, `Book: ${masterclass.BOOK_URL}`, `Repository: ${masterclass.REPO_URL}`, "");
+  out.push(masterclass.DEFINITION, "", "## Contents", "");
+  for (const p of masterclass.PARTS) {
+    out.push(`### Part ${p.numeral}: ${p.title}`, "");
+    for (const c of p.chapters) out.push(`${c.n}. [${c.title}](${masterclass.chapterUrl(c)})`);
+    out.push("");
+  }
+  for (const f of masterclass.FAQS) out.push(`### ${f.q}`, "", f.a, "");
+
+  out.push("---", "", `# ${matrix.TITLE}`, "", `URL: ${url(matrix.SLUG)}`, "", matrix.DEFINITION, "", "## Support levels", "");
+  for (const l of matrix.SUPPORT_LEVELS) out.push(`- **${l.label}.** ${l.meaning}`);
+  out.push("", `## Platforms covered (data build ${matrix.DATA_GENERATED})`, "");
+  for (const v of matrix.PLATFORMS_BY_VENDOR) out.push(`- **${v.vendor}:** ${v.platforms.join("; ")}`);
+  out.push("");
+  for (const f of matrix.FAQS) out.push(`### ${f.q}`, "", f.a, "");
 
   // Open Reference Architectures: hub definition, then every pattern and
   // industry page as Markdown (the same text served at <path>.md).

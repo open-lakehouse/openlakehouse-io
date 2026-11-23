@@ -12,6 +12,8 @@ full text of every article is mirrored in /llms-full.txt.
 - [Open Source Data Engineering](https://openlakehouse.io/open-source-data-engineering): What open source data engineering is, the reference stack, and the projects that make it up.
 - [Agentic Lakehouse](https://openlakehouse.io/agentic-lakehouse): What an agentic lakehouse is: open tables, a catalog agents can read, MCP tools, declarative pipelines, policies and tracing.
 - [Agentic Data Engineering](https://openlakehouse.io/agentic-data-engineering): How AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies.
+- [Spark Masterclass](https://openlakehouse.io/spark-masterclass): Spark Masterclass is a free, open-source online book on Apache Spark 4.3: 92 chapters from execution fundamentals to SQL, Spark Connect, streaming, Declarative Pipelines and internals, each backed by runnable code and saved output.
+- [Spark Matrix](https://openlakehouse.io/spark-matrix): Spark Matrix compares Apache Spark features across managed Spark platforms such as Amazon EMR, AWS Glue, Databricks, Google Cloud, Microsoft Fabric and Snowflake. Every cell is traced to the Apache Spark source or a primary vendor statement.
 - [Reference Architectures](https://openlakehouse.io/reference-architectures): Interactive open source data engineering reference architectures, each backed by a runnable repo, with industry lenses.
 - [Learn](https://openlakehouse.io/learn): Curated guides, talks, and tutorials.
 - [Community](https://openlakehouse.io/community): Where practitioners gather.
@@ -49,7 +51,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [open-lakehouse (Runnable stacks and courses)](https://github.com/open-lakehouse/open-lakehouse): Spark, Delta Lake, Unity Catalog, Kafka, Airflow and MLflow in Docker, with an AWS path.
 - [unitycatalog-playground (Runnable stacks and courses)](https://github.com/open-lakehouse/unitycatalog-playground): Unity Catalog OSS with Spark, Delta and Iceberg in marimo notebooks.
 - [lakehouse-masterclass (Runnable stacks and courses)](https://github.com/open-lakehouse/lakehouse-masterclass): A textbook course that builds an open lakehouse one service per chapter.
-- [Spark Masterclass (Runnable stacks and courses)](https://lisancao.github.io/spark-masterclass/): A runnable online book on Apache Spark 4.3; every number traces to a script.
+- [Spark Masterclass (Runnable stacks and courses)](https://open-lakehouse.github.io/spark-masterclass/): A runnable online book on Apache Spark 4.3; every number traces to a script.
 - [spark-demos (Runnable stacks and courses)](https://github.com/lisancao/spark-demos): One runnable demo per Spark feature: metric views, Spark Connect, Real-Time Mode and more.
 - [safe-spark-agents-paper (Runnable stacks and courses)](https://github.com/open-lakehouse/safe-spark-agents-paper): A reproducible study and reference architecture for AI agents building Spark pipelines.
 - [Delta Lake (Open table formats)](https://github.com/delta-io/delta): Transaction-log table format; the protocol is in PROTOCOL.md.
