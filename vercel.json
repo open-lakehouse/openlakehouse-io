@@ -1,5 +1,12 @@
 {
   "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/wiki/",
+      "destination": "/wiki/Main_Page",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/wiki",
