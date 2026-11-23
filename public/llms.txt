@@ -28,6 +28,10 @@ full text of every article is mirrored in /llms-full.txt.
 - [The Agentic Lakehouse](https://openlakehouse.io/agentic-lakehouse): An agentic lakehouse is an open data lakehouse built for AI agents: open tables, a catalog agents can read, MCP tools, declarative pipelines, policies and tracing. Architecture, guardrails and the open source stack. Markdown: https://openlakehouse.io/agentic-lakehouse.md
 - [Agentic Data Engineering](https://openlakehouse.io/agentic-data-engineering): Agentic data engineering: AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies. The declare, scope, context harness, four checks, evidence and open source stack. Markdown: https://openlakehouse.io/agentic-data-engineering.md
 
+## Spark Matrix
+- [Spark Matrix: the matrix](https://openlakehouse.io/spark-matrix): Spark Matrix compares Apache Spark features across managed Spark platforms such as Amazon EMR, AWS Glue, Databricks, Google Cloud, Microsoft Fabric and Snowflake. Every cell is traced to the Apache Spark source or a primary vendor statement. Data build 2026-11-22. Cite this page.
+- [Spark Matrix explorer](https://openlakehouse.io/spark-matrix/explorer/): Interactive explorer for the same data: every runtime of each service, the per-release Apache Spark inventory, release notes and runtime freshness.
+
 ## Data Engineering Reference Architectures
 - [Data Engineering Reference Architectures](https://openlakehouse.io/reference-architectures): Open source data engineering reference architectures: interactive, runnable blueprints for batch and streaming medallion pipelines, real-time streaming, multi-engine catalogs, governed AI agents and data sharing, mapped to industry use cases and backed by public repositories.
 - [Machine-readable catalog (JSON)](https://openlakehouse.io/reference-architectures.json): Every architecture, component and industry lens as JSON.

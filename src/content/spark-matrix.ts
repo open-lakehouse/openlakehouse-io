@@ -1,47 +1,49 @@
 // Single source of truth for the /spark-matrix project page.
 // Plain data only (no JSX) so both the React page and the SEO/llms.txt
-// generator can import it. The platform list, feature categories and Apache
-// release range below are copied from the Spark Matrix generated data
-// (data/platforms.json and data/matrix.json in open-lakehouse/spark-matrix);
-// refresh them from a new data build, never from memory.
+// generator can import it. Every data value (build date, Apache releases,
+// platforms, categories, the matrix itself) is read from the vendored Spark
+// Matrix data in src/data/spark-matrix/, which scripts/sync-spark-matrix.mjs
+// copies from open-lakehouse/spark-matrix. Refresh it with that script, never
+// by hand.
 //
-// The repository and the matrix viewer links live in
-// src/pages/projects/SparkMatrix.tsx (MATRIX_REPO, MATRIX_URL) because they
-// are pending the repository going public.
+// The repository link lives in src/pages/projects/SparkMatrix.tsx
+// (MATRIX_REPO) because it is pending the repository going public.
+import {
+  APACHE_MINORS,
+  CATEGORIES,
+  LEVEL_META,
+  RETIRED_PLATFORMS,
+  SHOWN_PLATFORMS,
+  SPARK_FEATURES,
+  cellFor,
+  defaultRuntime,
+  features,
+  hasIt,
+  meta,
+  platforms,
+  type Level,
+} from "../lib/spark-matrix";
 
 export const SLUG = "/spark-matrix";
 export const TITLE = "Spark Matrix";
 export const TAGLINE = "Apache Spark features across managed Spark platforms, every cell traced to a source";
+/** The repository's own interactive viewer, built into public/spark-matrix/explorer/. */
+export const EXPLORER_PATH = "/spark-matrix/explorer/";
 
-export const DATA_GENERATED = "2026-11-22";
-export const APACHE_LATEST = "4.3.0";
-export const APACHE_FEATURE_RELEASES = ["3.0.0", "3.1.1", "3.2.0", "3.3.0", "3.4.0", "3.5.0", "4.0.0", "4.1.0", "4.2.0", "4.3.0"];
-export const PLATFORMS_BY_VENDOR: { vendor: string; platforms: string[] }[] = [
-  { vendor: "AWS", platforms: ["Amazon EMR on EC2", "Amazon EMR on EKS", "Amazon EMR Serverless", "AWS Glue (Spark jobs)", "Amazon Athena for Apache Spark"] },
-  { vendor: "Microsoft", platforms: ["Microsoft Fabric (Spark runtime)", "Azure Synapse Analytics Apache Spark pools", "Azure HDInsight (Spark clusters)", "Azure HDInsight on AKS (Spark)"] },
-  { vendor: "Databricks", platforms: ["Databricks Runtime (classic compute)", "Databricks serverless compute for notebooks and jobs", "Databricks SQL warehouses", "Databricks Connect"] },
-  { vendor: "Google Cloud", platforms: ["Managed Service for Apache Spark clusters (formerly Dataproc on Compute Engine)", "Managed Service for Apache Spark serverless (formerly Google Cloud Serverless for Apache Spark / Dataproc Serverless)", "Managed Service for Apache Spark on GKE (formerly Dataproc on GKE)", "Spark in BigQuery Studio notebooks", "BigQuery stored procedures for Apache Spark"] },
-  { vendor: "Oracle", platforms: ["OCI Data Flow"] },
-  { vendor: "Cloudera", platforms: ["Cloudera Data Engineering (Cloudera on cloud)", "Cloudera Data Engineering (Cloudera Data Services on premises)", "Cloudera Runtime (Cloudera Base on premises / Data Hub on cloud)"] },
-  { vendor: "Snowflake", platforms: ["Snowpark Connect for Spark"] },
-  { vendor: "IBM", platforms: ["IBM watsonx.data Spark engine (Premium Edition 2.4.x)", "IBM watsonx.data Gluten-accelerated Spark engine (Premium Edition 2.4.x)", "IBM Analytics Engine (serverless)"] },
-  { vendor: "Alibaba Cloud", platforms: ["Alibaba Cloud EMR Serverless Spark"] },
-];
-export const FEATURE_CATEGORIES: { title: string; blurb: string }[] = [
-  { title: "Spark Connect", blurb: "The client/server protocol: thin clients in any language talk gRPC to a Spark server." },
-  { title: "Structured Streaming", blurb: "Incremental processing, state, triggers and the real-time mode." },
-  { title: "Declarative Pipelines", blurb: "Spark Declarative Pipelines (SDP): datasets and flows declared in SQL or Python, run as a graph." },
-  { title: "SQL language", blurb: "Statements, clauses and SQL semantics." },
-  { title: "Data types", blurb: "Types beyond the classics: variant, time, geospatial, collated strings." },
-  { title: "Semantic layer", blurb: "Metric views and other ways to define business logic once." },
-  { title: "PySpark", blurb: "Python APIs, UDFs, Arrow and Python-defined data sources." },
-  { title: "Data sources", blurb: "Formats and connectors that ship with Spark." },
-  { title: "Execution and performance", blurb: "How queries run: adaptive execution, caching, scheduling." },
-  { title: "Operations", blurb: "Logging, UI, deployment and the runtime platform." },
-  { title: "Machine learning", blurb: "Spark ML, including ML over Spark Connect." },
-  { title: "Platform capabilities", blurb: "What the vendor adds around Spark: table formats, native engines, GPUs. Vendor-documented only." },
-];
-export const HEADLINE_FEATURE_COUNT = 101;
+export const DATA_GENERATED = meta.generated;
+export const APACHE_LATEST = meta.latest;
+export const APACHE_FEATURE_RELEASES = meta.versions;
+export const PLATFORMS_BY_VENDOR: { vendor: string; platforms: string[] }[] = platforms.reduce(
+  (acc, p) => {
+    const v = acc.find((x) => x.vendor === p.vendor);
+    if (v) v.platforms.push(p.name);
+    else acc.push({ vendor: p.vendor, platforms: [p.name] });
+    return acc;
+  },
+  [] as { vendor: string; platforms: string[] }[],
+);
+export const FEATURE_CATEGORIES: { title: string; blurb: string }[] = CATEGORIES.map(({ title, blurb }) => ({ title, blurb }));
+export const HEADLINE_FEATURE_COUNT = features.length;
 
 export const PLATFORM_COUNT = PLATFORMS_BY_VENDOR.reduce((n, v) => n + v.platforms.length, 0);
 export const VENDOR_COUNT = PLATFORMS_BY_VENDOR.length;
@@ -76,24 +78,20 @@ export const INVENTORY_SOURCES: { item: string; source: string }[] = [
   { item: "Documentation and compatibility", source: "docs/, error-conditions.json and docs/index.md" },
 ];
 
-// Cell levels, strongest evidence first (from the viewer's legend).
-export const SUPPORT_LEVELS: { label: string; meaning: string }[] = [
-  { label: "Documented", meaning: "The vendor's documentation says the feature is supported on this runtime, with a quotation." },
-  { label: "Ahead of Apache", meaning: "The vendor documents the feature on a runtime whose Apache Spark base does not have it yet (a backport or vendor build)." },
-  { label: "In the Apache base", meaning: "The runtime's Apache Spark version contains the feature, verified in Spark's source at that release. The vendor's documentation says nothing either way." },
-  { label: "Partial", meaning: "The vendor documents limits, such as only some APIs, languages or sources." },
-  { label: "Preview", meaning: "Documented as preview, beta or experimental on this runtime." },
-  { label: "Off by default", meaning: "Available, but the vendor turns it off by default (for example ANSI mode)." },
-  { label: "Unsupported", meaning: "The vendor documents that the feature is not supported or not available." },
-  { label: "Not in this Spark", meaning: "The runtime's Apache Spark version predates the feature, and the vendor documents no backport." },
-  { label: "Not documented", meaning: "A platform capability (table format, engine) that the vendor's documentation does not mention for this runtime." },
-  { label: "Unknown", meaning: "The vendor does not state which Spark version the runtime is based on, and documents nothing about the feature." },
-];
+// Cell levels, strongest evidence first (the matrix legend).
+export const SUPPORT_LEVELS: { label: string; meaning: string }[] = Object.values(LEVEL_META).map(({ label, meaning }) => ({
+  label,
+  meaning,
+}));
 
 export const FAQS: { q: string; a: string }[] = [
   {
     q: "What is Spark Matrix?",
     a: "Spark Matrix is an open-source comparison of Apache Spark features across managed Spark platforms. It records which Apache Spark release each managed runtime is based on and which features that runtime has, and it traces every cell to the Apache Spark source or to a primary vendor statement.",
+  },
+  {
+    q: "Where can I see the matrix?",
+    a: `The matrix is on this page at ${SLUG}: one row per feature, one column per managed Spark service at its newest generally available runtime, and a cell for each that opens the vendor quotation or the Apache source behind it. The full explorer at ${EXPLORER_PATH} adds every runtime of each service, the per-release Apache Spark inventory of functions, configurations, syntax and APIs, release notes, and how far each runtime lags the Apache release.`,
   },
   {
     q: "Which managed Spark platforms does Spark Matrix cover?",
@@ -112,3 +110,54 @@ export const FAQS: { q: string; a: string }[] = [
     a: "A weekly refresh workflow reruns the harvester and opens a pull request when Apache release data changes. Vendor records are updated from vendor documentation, and each platform file records the date its cited pages were checked.",
   },
 ];
+
+// ---------- Text summary of the matrix (llms-full.txt) ----------
+
+const EXPLICIT: Level[] = ["ahead", "documented", "partial", "preview", "off-by-default", "unsupported"];
+
+/** The matrix as Markdown, from the vendored data: per service, its runtime, Spark base and documented levels. */
+export function matrixMarkdown(siteUrl: string): string {
+  const out: string[] = [];
+  out.push(
+    `## The matrix (data build ${DATA_GENERATED})`,
+    "",
+    `Each service is shown at its newest generally available runtime. "Spark features available" counts the ${SPARK_FEATURES.length} Apache Spark features that the runtime has at any level from Documented to Off by default. The interactive matrix is at ${siteUrl}${SLUG}; the full explorer is at ${siteUrl}${EXPLORER_PATH}.`,
+    "",
+    "| Service | Vendor | Runtime | Vendor Spark version | Apache Spark base | Spark features available |",
+    "|---|---|---|---|---|---|",
+  );
+  for (const p of SHOWN_PLATFORMS) {
+    const r = defaultRuntime(p);
+    const n = SPARK_FEATURES.filter((f) => hasIt(cellFor(p, r?.id, f).level)).length;
+    out.push(`| ${p.name} | ${p.vendor} | ${r?.label ?? "not stated"} | ${r?.spark ?? "not stated"} | ${r?.spark_base ?? "not stated"} | ${n} |`);
+  }
+  out.push("", "Apache Spark itself, for comparison:", "");
+  for (const m of APACHE_MINORS) {
+    const n = SPARK_FEATURES.filter((f) => f.in.some((v) => v.startsWith(m + "."))).length;
+    out.push(`- Apache Spark ${m}: ${n} of ${SPARK_FEATURES.length} features`);
+  }
+  if (RETIRED_PLATFORMS.length) {
+    out.push("", `Retired services (every runtime end of life or deprecated), not shown in the matrix: ${RETIRED_PLATFORMS.map((p) => p.name).join("; ")}.`);
+  }
+  out.push("", "### What each vendor documents", "", "Features with an explicit vendor statement on the runtime shown, by support level. Features not listed follow the runtime's Apache Spark base.", "");
+  for (const p of SHOWN_PLATFORMS) {
+    const r = defaultRuntime(p);
+    const by = new Map<Level, string[]>();
+    const absent: string[] = [];
+    for (const f of features) {
+      const c = cellFor(p, r?.id, f);
+      if (EXPLICIT.includes(c.level) && c.claims.length) by.set(c.level, [...(by.get(c.level) ?? []), f.title]);
+      else if (c.level === "absent" && !f.vendor_only) absent.push(f.title);
+    }
+    out.push(`#### ${p.name} (${r?.label ?? "runtime not stated"}, Apache Spark ${r?.spark_base ?? "base not stated"})`, "");
+    if (r?.source) out.push(`Version source: ${r.source}`, "");
+    for (const l of EXPLICIT) {
+      const fs = by.get(l);
+      if (fs?.length) out.push(`- ${LEVEL_META[l].label}: ${fs.join("; ")}`);
+    }
+    if (absent.length) out.push(`- Not in this Spark: ${absent.join("; ")}`);
+    if (!by.size && !absent.length) out.push("- No feature-level vendor statements recorded.");
+    out.push("");
+  }
+  return out.join("\n");
+}

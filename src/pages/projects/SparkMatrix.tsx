@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, ExternalLink, Github, Table2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ExternalLink, Github, Table2 } from "lucide-react";
+import { MatrixTable } from "@/components/spark-matrix/MatrixTable";
+import { SHOWN_PLATFORMS, RETIRED_PLATFORMS, SPARK_FEATURES, defaultRuntime } from "@/lib/spark-matrix";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
@@ -10,6 +12,7 @@ import {
   DATA_GENERATED,
   DEFINITION,
   DESCRIPTION,
+  EXPLORER_PATH,
   FAQS,
   FEATURE_CATEGORIES,
   HEADLINE_FEATURE_COUNT,
@@ -25,14 +28,10 @@ import {
   VENDOR_COUNT,
 } from "@/content/spark-matrix";
 
-// PENDING: the open-lakehouse/spark-matrix repository is private and its
-// viewer (site/) is not deployed yet. When the repository goes public, set
-// MATRIX_REPO to "https://github.com/open-lakehouse/spark-matrix"; when the
-// viewer is deployed, set MATRIX_URL to its address. Every repository and
-// "view the matrix" link on this page, and the JSON-LD, reads these two
-// constants, and the page states that the links are pending while they are null.
+// PENDING: the open-lakehouse/spark-matrix repository is private. When it
+// goes public, set MATRIX_REPO to "https://github.com/open-lakehouse/spark-matrix";
+// the repository links on this page and the JSON-LD read this constant.
 const MATRIX_REPO: string | null = null;
-const MATRIX_URL: string | null = null;
 
 // ---------- JSON-LD ----------
 
@@ -74,7 +73,15 @@ const datasetLd = {
   about: PLATFORMS_BY_VENDOR.flatMap((v) =>
     v.platforms.map((name) => ({ "@type": "SoftwareApplication", name, provider: { "@type": "Organization", name: v.vendor } })),
   ),
-  ...(MATRIX_URL ? { distribution: [{ "@type": "DataDownload", contentUrl: MATRIX_URL, encodingFormat: "text/html" }] } : {}),
+  distribution: [
+    { "@type": "DataDownload", name: "Spark Matrix explorer", contentUrl: canonicalUrl(EXPLORER_PATH), encodingFormat: "text/html" },
+    ...["matrix", "features", "platforms", "releases", "inventory"].map((name) => ({
+      "@type": "DataDownload",
+      name: `${name}.json`,
+      contentUrl: canonicalUrl(`${EXPLORER_PATH}data/${name}.json`),
+      encodingFormat: "application/json",
+    })),
+  ],
 };
 
 const faqLd = {
@@ -110,25 +117,29 @@ const SparkMatrix = () => (
     <SiteHeader />
     <main className="flex-1">
       <section className="bg-brand-gradient text-primary-foreground">
-        <div className="container py-20 md:py-28">
+        <div className="container py-10 md:py-14">
           <Link
             to="/technologies/compute-engines"
-            className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-6"
+            className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-4"
           >
             <ArrowLeft className="h-4 w-4" /> Compute Engines
           </Link>
           <p className="text-sm font-medium uppercase tracking-widest text-white/80">Open Lakehouse project</p>
-          <h1 className="mt-3 text-4xl md:text-6xl font-bold tracking-tight">{TITLE}</h1>
-          <p className="mt-4 text-lg md:text-xl text-white/85 max-w-3xl">{TAGLINE}</p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            {MATRIX_URL && (
-              <a
-                href={MATRIX_URL}
-                className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-white/90"
-              >
-                <Table2 className="h-4 w-4" /> View the matrix
-              </a>
-            )}
+          <h1 className="mt-2 text-4xl md:text-5xl font-bold tracking-tight">{TITLE}</h1>
+          <p className="mt-3 text-lg md:text-xl text-white/85 max-w-3xl">{TAGLINE}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a
+              href="#matrix"
+              className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-navy-800 hover:bg-white/90"
+            >
+              <ArrowDown className="h-4 w-4" /> The matrix
+            </a>
+            <a
+              href={EXPLORER_PATH}
+              className="inline-flex items-center gap-2 rounded-md border border-white/40 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
+            >
+              <Table2 className="h-4 w-4" /> Open the full explorer
+            </a>
             {MATRIX_REPO && (
               <a
                 href={MATRIX_REPO}
@@ -137,16 +148,35 @@ const SparkMatrix = () => (
                 <Github className="h-4 w-4" /> Source on GitHub
               </a>
             )}
-            {!MATRIX_URL && !MATRIX_REPO && (
-              <p className="text-sm text-white/80">
-                The repository and the interactive viewer are not public yet. This page will link to them when they are.
-              </p>
-            )}
           </div>
         </div>
       </section>
 
-      <article className="container py-16 md:py-24 max-w-3xl prose prose-neutral dark:prose-invert prose-headings:tracking-tight">
+      <section id="matrix" aria-labelledby="matrix-heading" className="container scroll-mt-20 py-8 md:py-12">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+          <div className="max-w-3xl">
+            <h2 id="matrix-heading" className="text-2xl md:text-3xl font-bold tracking-tight">
+              Apache Spark features by managed Spark service
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {SPARK_FEATURES.length} Apache Spark features and the vendor capabilities around them, across{" "}
+              {SHOWN_PLATFORMS.length} managed Spark services at their newest generally available runtime, next to Apache
+              Spark {APACHE_LATEST} and earlier releases. Select a cell for the vendor quotation or the Apache source
+              behind it.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Data build <time dateTime={DATA_GENERATED}>{DATA_GENERATED}</time>
+            <br />
+            <a href={EXPLORER_PATH} className="inline-flex items-center gap-1 text-primary hover:underline">
+              Every runtime, the Apache inventory and release notes: open the full explorer <ArrowRight className="h-3 w-3" />
+            </a>
+          </p>
+        </div>
+        <MatrixTable />
+      </section>
+
+      <article className="container py-12 md:py-16 max-w-3xl prose prose-neutral dark:prose-invert prose-headings:tracking-tight">
         <p className="lead text-lg">{DEFINITION}</p>
 
         <h2 id="why">Why a version number is not enough</h2>
@@ -238,21 +268,52 @@ const SparkMatrix = () => (
         <h2 id="platforms">Platforms covered</h2>
         <p>
           As of the {DATA_GENERATED} data build, the matrix records {PLATFORM_COUNT} managed Spark services from{" "}
-          {VENDOR_COUNT} vendors. Each runtime is listed with the Spark version string the vendor publishes and its
-          Apache Spark base.
+          {VENDOR_COUNT} vendors. The table lists the runtime each service is shown at in the matrix, the Spark version
+          string the vendor publishes, and its Apache Spark base.
         </p>
-        <div className="not-prose grid gap-4 sm:grid-cols-2 my-6">
-          {PLATFORMS_BY_VENDOR.map((v) => (
-            <div key={v.vendor} className="rounded-xl border border-border bg-card p-4">
-              <h3 className="font-semibold">{v.vendor}</h3>
-              <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                {v.platforms.map((p) => (
-                  <li key={p}>{p}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="overflow-x-auto not-prose my-6">
+          <table className="w-full text-sm border border-border">
+            <caption className="sr-only">Managed Spark services and the runtime shown in the matrix</caption>
+            <thead className="bg-secondary">
+              <tr>
+                <th scope="col" className="text-left p-2 font-semibold">Service</th>
+                <th scope="col" className="text-left p-2 font-semibold">Runtime shown</th>
+                <th scope="col" className="text-left p-2 font-semibold">Vendor Spark version</th>
+                <th scope="col" className="text-left p-2 font-semibold">Apache base</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SHOWN_PLATFORMS.map((p) => {
+                const r = defaultRuntime(p);
+                return (
+                  <tr key={p.id} className="border-t border-border align-top">
+                    <th scope="row" className="p-2 text-left font-normal">
+                      <span className="block text-xs text-muted-foreground">{p.vendor}</span>
+                      <span className="font-medium">{p.name}</span>
+                    </th>
+                    <td className="p-2">
+                      {r?.source ? (
+                        <a href={r.source} className="text-primary hover:underline" rel="noreferrer">
+                          {r.label}
+                        </a>
+                      ) : (
+                        (r?.label ?? "not stated")
+                      )}
+                    </td>
+                    <td className="p-2 font-mono text-xs">{r?.spark ?? "not stated"}</td>
+                    <td className="p-2 font-mono text-xs">{r?.spark_base ?? "not stated"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+        {RETIRED_PLATFORMS.length > 0 && (
+          <p>
+            Retired services, where every runtime is end of life or deprecated, are left out of the matrix and kept in the
+            explorer: {RETIRED_PLATFORMS.map((p) => p.name).join(", ")}.
+          </p>
+        )}
 
         <h2 id="how-to-use">How to use it</h2>
         <p>
@@ -263,28 +324,26 @@ const SparkMatrix = () => (
           changes; vendor records are updated from vendor documentation, and each records the date its cited pages were
           checked.
         </p>
-        {MATRIX_URL || MATRIX_REPO ? (
-          <ul className="not-prose space-y-2">
-            {MATRIX_URL && (
-              <li>
-                <a href={MATRIX_URL} className="inline-flex items-center gap-1.5 text-primary hover:underline">
-                  View the matrix <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              </li>
-            )}
-            {MATRIX_REPO && (
-              <li>
-                <a href={MATRIX_REPO} className="inline-flex items-center gap-1.5 text-primary hover:underline">
-                  Source, data and platform records on GitHub <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              </li>
-            )}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">
-            The repository and the interactive viewer are not public yet. This page will link to them when they are.
-          </p>
-        )}
+        <ul className="not-prose space-y-2">
+          <li>
+            <a href="#matrix" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+              The matrix, on this page <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </li>
+          <li>
+            <a href={EXPLORER_PATH} className="inline-flex items-center gap-1.5 text-primary hover:underline">
+              The full explorer: every runtime, the Apache Spark inventory, release notes and freshness{" "}
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </li>
+          {MATRIX_REPO && (
+            <li>
+              <a href={MATRIX_REPO} className="inline-flex items-center gap-1.5 text-primary hover:underline">
+                Source, data and platform records on GitHub <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </li>
+          )}
+        </ul>
 
         <h2 id="faq">Frequently asked questions</h2>
         <dl className="not-prose space-y-6">

@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sync:videos": "node scripts/sync-playlists.mjs",
+    "sync:spark-matrix": "node scripts/sync-spark-matrix.mjs",
     "strip-lock-proxy": "bun run scripts/strip-bun-lock-proxy.ts",
     "strip-lock-proxy:check": "bun run scripts/strip-bun-lock-proxy.ts --check"
   },
