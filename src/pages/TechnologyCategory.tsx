@@ -154,6 +154,25 @@ const TechnologyCategory = () => {
           </section>
         )}
 
+        {slug === "compute-engines" && (
+          <section className="container pb-16">
+            <h2 className="text-2xl font-bold tracking-tight">Go deeper on Apache Spark</h2>
+            <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+              {[
+                { to: "/spark-masterclass", label: "Spark Masterclass", text: "An open, runnable online book on Apache Spark 4.3." },
+                { to: "/spark-matrix", label: "Spark Matrix", text: "Spark features across managed Spark platforms, traced to sources." },
+              ].map((l) => (
+                <li key={l.to}>
+                  <Link to={l.to} className="block rounded-xl border border-border bg-card p-4 hover:border-primary">
+                    <span className="font-semibold">{l.label}</span>
+                    <span className="mt-1 block text-sm text-muted-foreground">{l.text}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {slug === "agentic" && (
           <section className="container pb-16">
             <h2 className="text-2xl font-bold tracking-tight">Go deeper</h2>

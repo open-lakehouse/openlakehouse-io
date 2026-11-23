@@ -24,7 +24,7 @@ export const RESOURCE_GROUPS: ResourceGroup[] = [
       { name: "open-lakehouse", url: "https://github.com/open-lakehouse/open-lakehouse", what: "Spark, Delta Lake, Unity Catalog, Kafka, Airflow and MLflow in Docker, with an AWS path." },
       { name: "unitycatalog-playground", url: "https://github.com/open-lakehouse/unitycatalog-playground", what: "Unity Catalog OSS with Spark, Delta and Iceberg in marimo notebooks." },
       { name: "lakehouse-masterclass", url: "https://github.com/open-lakehouse/lakehouse-masterclass", what: "A textbook course that builds an open lakehouse one service per chapter." },
-      { name: "Spark Masterclass", url: "https://lisancao.github.io/spark-masterclass/", what: "A runnable online book on Apache Spark 4.3; every number traces to a script." },
+      { name: "Spark Masterclass", url: "https://open-lakehouse.github.io/spark-masterclass/", what: "A runnable online book on Apache Spark 4.3; every number traces to a script." },
       { name: "spark-demos", url: "https://github.com/lisancao/spark-demos", what: "One runnable demo per Spark feature: metric views, Spark Connect, Real-Time Mode and more." },
       { name: "safe-spark-agents-paper", url: "https://github.com/open-lakehouse/safe-spark-agents-paper", what: "A reproducible study and reference architecture for AI agents building Spark pipelines." },
     ],

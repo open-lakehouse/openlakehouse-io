@@ -29,6 +29,19 @@ const resources = [
   },
 ];
 
+const sparkProjects = [
+  {
+    title: "Spark Masterclass",
+    desc: "An open, runnable online book on Apache Spark 4.3, from how Spark runs your code to streaming, pipelines and internals. Every result comes with the code and output behind it.",
+    to: "/spark-masterclass",
+  },
+  {
+    title: "Spark Matrix",
+    desc: "Apache Spark features compared across managed Spark platforms, with every cell traced to the Apache source or a vendor statement.",
+    to: "/spark-matrix",
+  },
+];
+
 const Learn = () => (
   <div className="min-h-screen flex flex-col">
     <Seo
@@ -85,6 +98,29 @@ const Learn = () => (
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{t.desc}</p>
               <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary group-hover:gap-2.5 transition-all">
                 Start <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* Open Lakehouse Spark projects */}
+      <section className="container pt-20 md:pt-24">
+        <div className="max-w-2xl mb-8">
+          <p className="text-sm font-medium uppercase tracking-widest text-primary">Apache Spark</p>
+          <h2 className="mt-3 text-3xl md:text-5xl font-semibold tracking-tight">Go deep on Spark.</h2>
+        </div>
+        <div className="grid gap-5 md:grid-cols-2">
+          {sparkProjects.map((p) => (
+            <Link
+              key={p.to}
+              to={p.to}
+              className="group rounded-2xl border border-border bg-card p-6 shadow-card hover:shadow-glow hover:-translate-y-0.5 transition-all flex flex-col"
+            >
+              <h3 className="text-lg font-semibold tracking-tight">{p.title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{p.desc}</p>
+              <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary group-hover:gap-2.5 transition-all">
+                Open <ArrowRight className="h-3.5 w-3.5" />
               </span>
             </Link>
           ))}

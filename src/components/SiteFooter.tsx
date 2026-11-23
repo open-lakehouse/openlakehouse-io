@@ -23,6 +23,8 @@ const learn = [
   
   { name: "DataFusion Tutorials", url: "https://datafusion.apache.org/user-guide" },
   { name: "Open Lakehouse Tutorials", url: "/learn/getting-started/" },
+  { name: "Spark Masterclass", url: "/spark-masterclass" },
+  { name: "Spark Matrix", url: "/spark-matrix" },
 ];
 
 const asfProjects = [

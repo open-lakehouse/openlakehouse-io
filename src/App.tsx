@@ -27,6 +27,8 @@ import ArchitecturePage from "./pages/refarch/ArchitecturePage.tsx";
 import IndustryPage from "./pages/refarch/IndustryPage.tsx";
 import AgenticLakehouse from "./pages/guides/AgenticLakehouse.tsx";
 import AgenticDataEngineering from "./pages/guides/AgenticDataEngineering.tsx";
+import SparkMasterclass from "./pages/projects/SparkMasterclass.tsx";
+import SparkMatrix from "./pages/projects/SparkMatrix.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -46,6 +48,8 @@ const App = () => (
             <Route path="/open-source-data-engineering" element={<OpenSourceDataEngineering />} />
             <Route path="/agentic-lakehouse" element={<AgenticLakehouse />} />
             <Route path="/agentic-data-engineering" element={<AgenticDataEngineering />} />
+            <Route path="/spark-masterclass" element={<SparkMasterclass />} />
+            <Route path="/spark-matrix" element={<SparkMatrix />} />
             <Route path="/reference-architectures" element={<ReferenceArchitectures />} />
             <Route path="/reference-architectures/industries/:slug" element={<IndustryPage />} />
             <Route path="/reference-architectures/:slug" element={<ArchitecturePage />} />
