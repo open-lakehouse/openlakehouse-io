@@ -117,6 +117,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [Unity Catalog posts](https://openlakehouse.io/blog/category/unity-catalog)
 
 ## Blog posts
+- [The Top 10 Data Engines in 2026, and What Each One Is Actually For](https://openlakehouse.io/blog/apache-spark/top-10-data-engines-2026): A ranked guide to the ten data engines that matter in 2026 (Apache Spark, Flink, DuckDB, Trino, DataFusion, Polars, ClickHouse, StarRocks, Ray and Velox), what each is best at, where it falls short, and how to choose.
 - [Unity Catalog Volumes: Unstructured Data for the Agentic Lakehouse](https://www.unitycatalog.io/blogs/uc-volumes/): Volumes govern unstructured data in Unity Catalog. Open one in a marimo
 - [An Idiot's Guide to Spark Connect Clients](https://systemsnull.net/posts/data-engineering-ai/idiots-guide-spark-connect-clients): Everything you need to go from “what is Spark?” to running jobs on a Spark Connect server from Python, Scala, Go, Rust or Swift, and working out what went wrong when it doesn't work.
 - [A Field Guide to Apache Iceberg 1.12](https://datacircus.substack.com/p/a-field-guide-to-apache-iceberg-112): This release is a consolidation effort that focuses on correctness, stability, and paving the path for V4 readiness.
