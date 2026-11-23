@@ -19,10 +19,6 @@
     {
       "source": "/w/:path*",
       "destination": "https://wiki-origin.systemsnull.net/w/:path*"
-    },
-    {
-      "source": "/((?!api/|assets/|.*\\..*).*)",
-      "destination": "/app-shell"
     }
   ]
 }

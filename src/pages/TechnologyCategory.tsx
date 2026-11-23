@@ -1,3 +1,4 @@
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -5,7 +6,14 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
 import { PolicastFlow } from "@/components/PolicastFlow";
 import { OpenLineageFlow } from "@/components/OpenLineageFlow";
-import { PdfReader } from "@/components/PdfReader";
+// pdfjs needs browser APIs, so the reader loads only in the browser; the
+// build-time prerender renders the download link without it.
+const PdfReader = lazy(() => import("@/components/PdfReader").then((m) => ({ default: m.PdfReader })));
+const ClientOnly = ({ children }: { children: React.ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? <Suspense fallback={null}>{children}</Suspense> : null;
+};
 import { Download } from "lucide-react";
 
 const data: Record<string, { title: string; blurb: string; items: { name: string; desc: string; url: string }[] }> = {
@@ -146,11 +154,13 @@ const TechnologyCategory = () => {
                 </a>
               </div>
             </div>
-            <PdfReader
-              file="/resources/delta-lake-definitive-guide.pdf"
-              downloadName="delta-lake-definitive-guide.pdf"
-              title="The Delta Lake Definitive Guide"
-            />
+            <ClientOnly>
+              <PdfReader
+                file="/resources/delta-lake-definitive-guide.pdf"
+                downloadName="delta-lake-definitive-guide.pdf"
+                title="The Delta Lake Definitive Guide"
+              />
+            </ClientOnly>
           </section>
         )}
 
@@ -205,5 +215,7 @@ const TechnologyCategory = () => {
     </div>
   );
 };
+
+export const TECH_SLUGS = Object.keys(data);
 
 export default TechnologyCategory;

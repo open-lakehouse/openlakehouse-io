@@ -57,7 +57,7 @@ Prefer Apache Iceberg wherever the reference repo supports it.
 4. Run `bun run test` and `bun run build`. The build regenerates
    `sitemap.xml`, `llms.txt`, `llms-full.txt`,
    `public/reference-architectures.json` and the `.md` twins, then prerenders
-   static HTML for every route in `src/entry-server.tsx`.
+   static HTML for every route in `prerenderRoutes()` (`src/AppRoutes.tsx`).
 
 ## Why the prerender exists
 
@@ -70,15 +70,16 @@ Open Graph tags and JSON-LD. Vercel serves those files before the SPA
 rewrite. The client mounts with `createRoot`, which replaces the static
 markup, so there is no hydration contract to maintain.
 
-The homepage (`/`) is prerendered too, which overwrites `dist/index.html`.
-The untouched SPA shell is saved as `dist/app-shell.html`, and `vercel.json`
-rewrites every other client-side route to `/app-shell` (extensionless,
-because `cleanUrls` serves `app-shell.html` at `/app-shell`; a rewrite to
-`/app-shell.html` returns 404). `public/_redirects` does the same for
-hosts that read it. Do not
-point the rewrite back at `/index.html`: every unprerendered route would then
-serve the homepage's content and canonical URL.
+Every route is prerendered now, not only this section. The route table
+lives in `src/AppRoutes.tsx`, shared by the browser app and
+`src/entry-server.tsx`; `prerenderRoutes()` there lists every URL. The
+homepage overwrites `dist/index.html`; the untouched shell is kept as
+`dist/app-shell.html` but nothing rewrites to it any more. Unknown paths get
+`dist/404.html` with a real 404 status (no SPA catch-all in `vercel.json`).
 
-To prerender other sections, add their routes to `src/entry-server.tsx`
-(components must not touch `window`, `document` or `localStorage` during
-render).
+The build fails if a sitemap URL has no prerendered page, or if a listed
+route renders the 404 page or nothing (a "soft 404"). To add a route, add it
+to `AppRoutes` and to `prerenderRoutes()`. Components must not touch
+`window`, `document` or `localStorage` during render; browser-only widgets
+(like the PDF reader on `/technologies/lakehouse-formats`) load client-side
+only.

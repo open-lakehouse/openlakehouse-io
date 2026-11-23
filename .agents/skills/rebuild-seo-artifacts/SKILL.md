@@ -32,7 +32,7 @@ use to discover and cite content. They are generated, never hand-edited.
   `originalUrl`, `originalPublisher`).
 - **Static routes**: `staticEntries`, `TECH_CATEGORIES`, and `TECH_PILLARS` in
   [scripts/generate-seo.ts](../../../scripts/generate-seo.ts) must mirror the
-  routes in [src/App.tsx](../../../src/App.tsx).
+  routes in [src/AppRoutes.tsx](../../../src/AppRoutes.tsx). Podcast episodes come from `src/content/podcast/episodes.json`, written by `scripts/fetch-podcast.ts` (runs first in predev/prebuild).
 
 ## Regenerate
 
