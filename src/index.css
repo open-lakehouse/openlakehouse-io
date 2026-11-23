@@ -447,3 +447,42 @@
   header, footer, .refarch-noprint { display: none !important; }
   .refarch-board { break-inside: avoid; }
 }
+
+/* ---------- Spark Matrix (/spark-matrix) ----------
+   Short class names on purpose: the matrix has thousands of cells and is
+   prerendered into the page HTML. Level colours use the brand scales.
+   Not in @layer, so Tailwind keeps the level classes, which the page builds
+   from the level name (smx-${level}). */
+.smx-scroll { @apply relative overflow-auto rounded-xl border border-border bg-card; max-height: 80vh; }
+.smx { @apply border-separate border-spacing-0 text-sm; }
+.smx th, .smx td { @apply border-b border-border; }
+.smx thead th { @apply sticky top-0 z-20 bg-muted p-1.5 align-bottom font-normal; }
+.smx thead th.smx-corner { @apply left-0 z-30 text-left; }
+.smx-feat { @apply sticky left-0 z-10 bg-card p-2 text-left align-top font-normal; min-width: 9rem; max-width: 9rem; }
+@media (min-width: 768px) { .smx-feat { min-width: 16rem; max-width: 16rem; } }
+.smx-feat b { @apply block text-[0.8rem] font-medium leading-snug text-foreground; }
+.smx-feat small { @apply block text-[0.7rem] text-muted-foreground; }
+.smx-pcol { @apply border-l border-border; min-width: 5.75rem; max-width: 7rem; }
+.smx-acol { min-width: 3.25rem; }
+.smx td { @apply p-1 text-center; }
+.smx td.smx-pcol { @apply border-l; }
+.smx tbody tr:hover > td { @apply bg-primary/10; }
+.smx tbody tr:hover > th.smx-feat { @apply bg-muted; }
+.smx-cat > th { @apply bg-secondary p-0 text-left; }
+.smx-cat > th > div { @apply sticky left-0 inline-block px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-secondary-foreground; max-width: min(60rem, calc(100vw - 4.5rem)); }
+.smx-cat > th > div span { @apply ml-1 font-normal normal-case tracking-normal text-muted-foreground; }
+.smx tfoot th, .smx tfoot td { @apply sticky bottom-0 z-10 border-t border-b-0 border-border bg-muted p-1.5 text-xs font-semibold; }
+.smx tfoot th { @apply left-0 z-20 text-left font-medium; }
+
+.smx-c { @apply inline-flex h-6 w-full min-w-[2.5rem] items-center justify-center rounded text-xs font-semibold leading-none; }
+button.smx-c { @apply cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 hover:ring-2 hover:ring-primary/60; }
+.smx-documented { @apply bg-green-600 text-white dark:bg-green-500 dark:text-navy-900; }
+.smx-ahead { @apply bg-blue-600 text-white dark:bg-blue-500 dark:text-navy-900; }
+.smx-inherited { @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200; }
+.smx-partial { @apply bg-yellow-400 text-navy-900 dark:bg-yellow-700 dark:text-yellow-100; }
+.smx-preview { @apply bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100; }
+.smx-off-by-default { @apply bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-500 dark:bg-yellow-900 dark:text-yellow-200; }
+.smx-unsupported { @apply bg-destructive text-destructive-foreground; }
+.smx-absent { @apply bg-muted text-muted-foreground; }
+.smx-undocumented { @apply bg-transparent text-muted-foreground ring-1 ring-inset ring-border; }
+.smx-unknown { @apply bg-navy-200 text-navy-600 dark:bg-navy-700 dark:text-navy-300; }

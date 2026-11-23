@@ -4080,9 +4080,258 @@ Spark Matrix is an open-source comparison of Apache Spark features across manage
 - **IBM:** IBM watsonx.data Spark engine (Premium Edition 2.4.x); IBM watsonx.data Gluten-accelerated Spark engine (Premium Edition 2.4.x); IBM Analytics Engine (serverless)
 - **Alibaba Cloud:** Alibaba Cloud EMR Serverless Spark
 
+## The matrix (data build 2026-11-22)
+
+Each service is shown at its newest generally available runtime. "Spark features available" counts the 95 Apache Spark features that the runtime has at any level from Documented to Off by default. The interactive matrix is at https://openlakehouse.io/spark-matrix; the full explorer is at https://openlakehouse.io/spark-matrix/explorer/.
+
+| Service | Vendor | Runtime | Vendor Spark version | Apache Spark base | Spark features available |
+|---|---|---|---|---|---|
+| Databricks Connect | Databricks | Databricks Connect 19 (latest Python release 19.3.0; pairs with Databricks Runtime 19) | 4.3.0 | 4.3.0 | 95 |
+| Databricks Runtime (classic compute) | Databricks | Databricks Runtime 19 (GA feature development phase; LTS transition date not yet set) | 4.3.0 | 4.3.0 | 95 |
+| Databricks serverless compute for notebooks and jobs | Databricks | Serverless compute, weekly releases since August 17, 2026 (include updates from Databricks Runtime 19) | 4.3.0 | 4.3.0 | 93 |
+| Managed Service for Apache Spark clusters (formerly Dataproc on Compute Engine) | Google Cloud | Image 4.0.0 (debian13 / ubuntu24 / ml-ubuntu24 / rocky9) | 4.2.0 | 4.2.0 | 85 |
+| Managed Service for Apache Spark serverless (formerly Google Cloud Serverless for Apache Spark / Dataproc Serverless) | Google Cloud | Spark runtime 4.0.0 | 4.2.0 | 4.2.0 | 85 |
+| Amazon EMR on EC2 | AWS | EMR Spark 8.2.0 (AWS runtime for Apache Spark) | 4.1.3-amzn-0 | 4.1.3 | 79 |
+| Amazon EMR on EKS | AWS | EMR Spark 8.2.0 on EKS | 4.1.3-amzn-0 | 4.1.3 | 79 |
+| Amazon EMR Serverless | AWS | EMR Spark 8.2.0 (Serverless) | 4.1.3-amzn-0 | 4.1.3 | 79 |
+| Alibaba Cloud EMR Serverless Spark | Alibaba Cloud | esr-5.3.0 (Spark 4.1.1, Scala 2.13) | 4.1.1 | 4.1.1 | 79 |
+| AWS Glue (Spark jobs) | AWS | AWS Glue 6.0 | 4.1.1 | 4.1.1 | 79 |
+| Microsoft Fabric (Spark runtime) | Microsoft | Fabric Runtime 2.0 | 4.1.1 | 4.1.1 | 79 |
+| IBM Analytics Engine (serverless) | IBM | Spark 4.0 | 4.0 | 4.0 | 67 |
+| IBM watsonx.data Gluten-accelerated Spark engine (Premium Edition 2.4.x) | IBM | Apache Spark 4.0 | Apache Spark 4.0 | 4.0 | 66 |
+| IBM watsonx.data Spark engine (Premium Edition 2.4.x) | IBM | Apache Spark 4.0.0 | Apache Spark 4.0.0 | 4.0.0 | 67 |
+| Cloudera Runtime (Cloudera Base on premises / Data Hub on cloud) | Cloudera | Cloudera Runtime 7.3.3 | 3.5.8.7.3.3.0-56 | 3.5.8 | 31 |
+| Amazon Athena for Apache Spark | AWS | Apache Spark version 3.5 | 3.5.6 | 3.5.6 | 32 |
+| Azure Synapse Analytics Apache Spark pools | Microsoft | Azure Synapse Runtime for Apache Spark 3.5 | 3.5.5 | 3.5.5 | 32 |
+| Cloudera Data Engineering (Cloudera Data Services on premises) | Cloudera | Spark 3.5.4 (CDE 1.27.0 / Data Services 1.5.5 SP4) | Spark 3.5.4 | 3.5.4 | 32 |
+| Cloudera Data Engineering (Cloudera on cloud) | Cloudera | Spark 3.5.4 (CDE 1.26.2, Data Lake 7.3.1 / 7.3.2) | Spark 3.5.4 | 3.5.4 | 32 |
+| Snowpark Connect for Spark | Snowflake | snowpark-connect 1.51.0 (PySpark 3.5.3 Spark Connect API) | PySpark 3.5.3 Spark Connect API | 3.5.3 | 30 |
+| Managed Service for Apache Spark on GKE (formerly Dataproc on GKE) | Google Cloud | Spark engine 3.5-dataproc-28 | 3.5 | 3.5 | 32 |
+| OCI Data Flow | Oracle | Spark 3.5.0 | 3.5.0 | 3.5.0 | 32 |
+| Azure HDInsight (Spark clusters) | Microsoft | HDInsight 5.1 | 3.3.1 | 3.3.1 | 8 |
+| BigQuery stored procedures for Apache Spark | Google Cloud | No version published | not stated | not stated | 0 |
+| Databricks SQL warehouses | Databricks | No version published | not stated | not stated | 9 |
+| Spark in BigQuery Studio notebooks | Google Cloud | No version published | not stated | not stated | 2 |
+
+Apache Spark itself, for comparison:
+
+- Apache Spark 4.3: 95 of 95 features
+- Apache Spark 4.2: 85 of 95 features
+- Apache Spark 4.1: 79 of 95 features
+- Apache Spark 4.0: 67 of 95 features
+- Apache Spark 3.5: 32 of 95 features
+
+Retired services (every runtime end of life or deprecated), not shown in the matrix: Azure HDInsight on AKS (Spark).
+
+### What each vendor documents
+
+Features with an explicit vendor statement on the runtime shown, by support level. Features not listed follow the runtime's Apache Spark base.
+
+#### Databricks Connect (Databricks Connect 19 (latest Python release 19.3.0; pairs with Databricks Runtime 19), Apache Spark 4.3.0)
+
+Version source: https://docs.databricks.com/aws/en/release-notes/dbconnect/
+
+- Documented: Apache Iceberg bundled or supported; Delta Lake bundled or supported; Native / vectorized engine; Spark Connect server; Spark ML over Connect; Real-time mode; transformWithState (Scala/Java); State data source (read state as a table); Spark Declarative Pipelines (SDP); ANSI SQL mode on by default; SQL scripting; SQL pipe syntax; Recursive CTEs; QUALIFY clause; VARIANT type; Variant shredding in Parquet; GEOMETRY and GEOGRAPHY types; Sketch aggregates (HLL, Theta, KLL); Metric views; Python data source API; Java 21 support
+- Partial: GPU acceleration
+- Preview: Collations; TIME type; Python UDTFs
+
+#### Databricks Runtime (classic compute) (Databricks Runtime 19 (GA feature development phase; LTS transition date not yet set), Apache Spark 4.3.0)
+
+Version source: https://docs.databricks.com/aws/en/release-notes/runtime/19
+
+- Documented: Apache Iceberg bundled or supported; Delta Lake bundled or supported; Native / vectorized engine; Spark Connect server; Spark ML over Connect; Real-time mode; transformWithState (Scala/Java); State data source (read state as a table); Spark Declarative Pipelines (SDP); ANSI SQL mode on by default; SQL scripting; SQL pipe syntax; Recursive CTEs; QUALIFY clause; VARIANT type; Variant shredding in Parquet; GEOMETRY and GEOGRAPHY types; Sketch aggregates (HLL, Theta, KLL); Metric views; Python data source API; Java 21 support
+- Partial: GPU acceleration
+- Preview: Collations; TIME type; Python UDTFs
+
+#### Databricks serverless compute for notebooks and jobs (Serverless compute, weekly releases since August 17, 2026 (include updates from Databricks Runtime 19), Apache Spark 4.3.0)
+
+Version source: https://docs.databricks.com/aws/en/release-notes/serverless/
+
+- Documented: Apache Iceberg bundled or supported; Delta Lake bundled or supported; Native / vectorized engine; Spark Connect server; Spark ML over Connect; transformWithState (Scala/Java); Spark Declarative Pipelines (SDP); ANSI SQL mode on by default; SQL scripting; SQL pipe syntax; Recursive CTEs; QUALIFY clause; VARIANT type; Variant shredding in Parquet; GEOMETRY and GEOGRAPHY types; Sketch aggregates (HLL, Theta, KLL); Metric views; Python data source API; Java 21 support
+- Partial: GPU acceleration
+- Preview: Collations; TIME type; Python UDTFs
+- Unsupported: Real-time mode; State data source (read state as a table)
+
+#### Managed Service for Apache Spark clusters (formerly Dataproc on Compute Engine) (Image 4.0.0 (debian13 / ubuntu24 / ml-ubuntu24 / rocky9), Apache Spark 4.2.0)
+
+Version source: https://docs.cloud.google.com/managed-spark/docs/concepts/versioning/image-release-4.0
+
+- Documented: Apache Iceberg bundled or supported; Delta Lake bundled or supported; Apache Hudi bundled or supported
+- Preview: Native / vectorized engine
+- Not in this Spark: Stateful real-time mode; Auto CDC flows; ASOF JOIN; JSON_TABLE; ANSI UNNEST; VARIANT transformation functions; Nanosecond timestamps; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries
+
+#### Managed Service for Apache Spark serverless (formerly Google Cloud Serverless for Apache Spark / Dataproc Serverless) (Spark runtime 4.0.0, Apache Spark 4.2.0)
+
+Version source: https://docs.cloud.google.com/managed-spark/docs/concepts/versions/spark-runtime-4.0
+
+- Documented: Apache Iceberg bundled or supported; Native / vectorized engine; GPU acceleration; Spark Connect server; Python UDFs over Connect
+- Not in this Spark: Stateful real-time mode; Auto CDC flows; ASOF JOIN; JSON_TABLE; ANSI UNNEST; VARIANT transformation functions; Nanosecond timestamps; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries
+
+#### Amazon EMR on EC2 (EMR Spark 8.2.0 (AWS runtime for Apache Spark), Apache Spark 4.1.3)
+
+Version source: https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark820-release.html
+
+- Documented: Apache Iceberg bundled or supported; Apache Hudi bundled or supported; Native / vectorized engine; GPU acceleration; transformWithState (Scala/Java); Spark Declarative Pipelines (SDP); ANSI SQL mode on by default; SQL scripting; SQL pipe syntax; VARIANT type; Java 21 support
+- Partial: Spark Connect server; Python UDFs over Connect
+- Not in this Spark: Operation status RPC; Stateful real-time mode; Auto CDC flows; Cursors in SQL scripts; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Change data feed reads (CHANGES clause); VARIANT transformation functions; Nanosecond timestamps; Metric views; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### Amazon EMR on EKS (EMR Spark 8.2.0 on EKS, Apache Spark 4.1.3)
+
+Version source: https://docs.aws.amazon.com/emr/latest/EMR-on-EKS-DevelopmentGuide/emr-eks-spark-8.2.0.html
+
+- Documented: Apache Iceberg bundled or supported; Apache Hudi bundled or supported; GPU acceleration; ANSI SQL mode on by default
+- Partial: Spark Connect server; Python UDFs over Connect
+- Not in this Spark: Operation status RPC; Stateful real-time mode; Auto CDC flows; Cursors in SQL scripts; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Change data feed reads (CHANGES clause); VARIANT transformation functions; Nanosecond timestamps; Metric views; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### Amazon EMR Serverless (EMR Spark 8.2.0 (Serverless), Apache Spark 4.1.3)
+
+Version source: https://docs.aws.amazon.com/emr/latest/EMR-Serverless-UserGuide/release-version-emr-spark-8.2.0.html
+
+- Documented: Apache Iceberg bundled or supported
+- Partial: Spark Connect server; Python UDFs over Connect
+- Not in this Spark: Operation status RPC; Stateful real-time mode; Auto CDC flows; Cursors in SQL scripts; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Change data feed reads (CHANGES clause); VARIANT transformation functions; Nanosecond timestamps; Metric views; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### Alibaba Cloud EMR Serverless Spark (esr-5.3.0 (Spark 4.1.1, Scala 2.13), Apache Spark 4.1.1)
+
+Version source: https://www.alibabacloud.com/help/en/emr/emr-serverless-spark/product-overview/engine-version-introduction
+
+- Documented: Delta Lake bundled or supported; Native / vectorized engine
+- Unsupported: Apache Iceberg bundled or supported; Apache Hudi bundled or supported
+- Not in this Spark: Operation status RPC; Stateful real-time mode; Auto CDC flows; Cursors in SQL scripts; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Change data feed reads (CHANGES clause); VARIANT transformation functions; Nanosecond timestamps; Metric views; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### AWS Glue (Spark jobs) (AWS Glue 6.0, Apache Spark 4.1.1)
+
+Version source: https://docs.aws.amazon.com/glue/latest/dg/release-notes.html
+
+- Documented: Apache Iceberg bundled or supported; Delta Lake bundled or supported; Apache Hudi bundled or supported; Spark Declarative Pipelines (SDP); ANSI SQL mode on by default; VARIANT type; Python UDTFs; Arrow-optimized Python UDFs; Structured Streaming
+- Partial: Spark Connect server; Real-time mode
+- Not in this Spark: Operation status RPC; Stateful real-time mode; Auto CDC flows; Cursors in SQL scripts; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Change data feed reads (CHANGES clause); VARIANT transformation functions; Nanosecond timestamps; Metric views; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### Microsoft Fabric (Spark runtime) (Fabric Runtime 2.0, Apache Spark 4.1.1)
+
+Version source: https://learn.microsoft.com/en-us/fabric/data-engineering/runtime-2-0-migration-guide
+
+- Documented: Delta Lake bundled or supported; Native / vectorized engine; transformWithState (Scala/Java); SQL pipe syntax; VARIANT type; Collations; Python data source API; Python UDTFs; Pandas API on Spark; Java 21 support; Structured Streaming
+- Partial: Apache Iceberg bundled or supported
+- Off by default: ANSI SQL mode on by default
+- Not in this Spark: Operation status RPC; Stateful real-time mode; Auto CDC flows; Cursors in SQL scripts; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Change data feed reads (CHANGES clause); VARIANT transformation functions; Nanosecond timestamps; Metric views; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### IBM Analytics Engine (serverless) (Spark 4.0, Apache Spark 4.0)
+
+Version source: https://github.com/ibm-cloud-docs/AnalyticsEngine/blob/master/release-notes-serverless.md
+
+- Not in this Spark: Operation status RPC; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; Cursors in SQL scripts; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); Change data feed reads (CHANGES clause); VARIANT transformation functions; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Arrow UDFs (pyarrow-native); Python worker logging; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### IBM watsonx.data Gluten-accelerated Spark engine (Premium Edition 2.4.x) (Apache Spark 4.0, Apache Spark 4.0)
+
+Version source: https://www.ibm.com/docs/en/SSK0MP_2.4.x/lh-over/topics/glutn_overview.html
+
+- Documented: Delta Lake bundled or supported; Native / vectorized engine
+- Unsupported: ANSI SQL mode on by default
+- Not in this Spark: Operation status RPC; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; Cursors in SQL scripts; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); Change data feed reads (CHANGES clause); VARIANT transformation functions; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Arrow UDFs (pyarrow-native); Python worker logging; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### IBM watsonx.data Spark engine (Premium Edition 2.4.x) (Apache Spark 4.0.0, Apache Spark 4.0.0)
+
+Version source: https://www.ibm.com/docs/en/SSK0MP_2.4.x/lh-over/topics/spk_overview.html
+
+- Documented: Apache Iceberg bundled or supported; Delta Lake bundled or supported; Apache Hudi bundled or supported
+- Not in this Spark: Operation status RPC; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; Cursors in SQL scripts; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); Change data feed reads (CHANGES clause); VARIANT transformation functions; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Arrow UDFs (pyarrow-native); Python worker logging; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Java 25 support
+
+#### Cloudera Runtime (Cloudera Base on premises / Data Hub on cloud) (Cloudera Runtime 7.3.3, Apache Spark 3.5.8)
+
+Version source: https://docs.cloudera.com/runtime/7.3.3/public-release-notes/topics/rt-runtime-component-versions_733.html
+
+- Documented: Apache Iceberg bundled or supported
+- Partial: Structured Streaming
+- Unsupported: Apache Hudi bundled or supported; Spark Connect server
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### Amazon Athena for Apache Spark (Apache Spark version 3.5, Apache Spark 3.5.6)
+
+Version source: https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark-release-versions.html
+
+- Documented: Spark Connect server; Arrow-optimized Python UDFs
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### Azure Synapse Analytics Apache Spark pools (Azure Synapse Runtime for Apache Spark 3.5, Apache Spark 3.5.5)
+
+Version source: https://github.com/microsoft/synapse-spark-runtime/blob/main/Synapse/spark3.5/Official-Spark3.5-Rel-2026-09-15.3-rc.1.md
+
+- Documented: Delta Lake bundled or supported
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### Cloudera Data Engineering (Cloudera Data Services on premises) (Spark 3.5.4 (CDE 1.27.0 / Data Services 1.5.5 SP4), Apache Spark 3.5.4)
+
+Version source: https://docs.cloudera.com/data-engineering/latest/release-notes/topics/cde-spark-airflow-versions.html
+
+- Documented: Apache Iceberg bundled or supported; Spark Connect server
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### Cloudera Data Engineering (Cloudera on cloud) (Spark 3.5.4 (CDE 1.26.2, Data Lake 7.3.1 / 7.3.2), Apache Spark 3.5.4)
+
+Version source: https://docs.cloudera.com/data-engineering/cloud/release-notes/topics/cde-dl-compatibility.html
+
+- Documented: Apache Iceberg bundled or supported
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### Snowpark Connect for Spark (snowpark-connect 1.51.0 (PySpark 3.5.3 Spark Connect API), Apache Spark 3.5.3)
+
+Version source: https://docs.snowflake.com/en/developer-guide/snowpark-connect/snowpark-connect-dataframe-support
+
+- Documented: Apache Iceberg bundled or supported
+- Partial: Spark Connect server
+- Unsupported: Spark ML over Connect; Pandas API on Spark; Structured Streaming
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### Managed Service for Apache Spark on GKE (formerly Dataproc on GKE) (Spark engine 3.5-dataproc-28, Apache Spark 3.5)
+
+Version source: https://docs.cloud.google.com/managed-spark/docs/release-notes#July_30_2026
+
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### OCI Data Flow (Spark 3.5.0, Apache Spark 3.5.0)
+
+Version source: https://docs.oracle.com/iaas/data-flow/using/dfs_before_you_begin_with_data_flow.htm
+
+- Documented: Delta Lake bundled or supported; Structured Streaming
+- Not in this Spark: Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; Nanosecond timestamps; Metric views; Python data source API; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only)
+
+#### Azure HDInsight (Spark clusters) (HDInsight 5.1, Apache Spark 3.3.1)
+
+Version source: https://learn.microsoft.com/en-us/azure/hdinsight/hdinsight-5x-component-versioning
+
+- Documented: Structured Streaming
+- Not in this Spark: Spark Connect server; PySpark Connect client; Scala Connect client; Pure-Python client package (pyspark-client); Reattachable execution; Artifact upload; Session release and cloning; Rich error details; Python UDFs over Connect; Python UDTFs over Connect; Streaming over Connect; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Operation status RPC; Execute external commands; Server plugins; JDBC driver for Spark Connect; Real-time mode; Stateful real-time mode; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; RocksDB changelog checkpointing; Async progress tracking; dropDuplicatesWithinWatermark; Chained stateful operators; StreamingQueryListener in Python; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Auto CDC flows; ANSI SQL mode on by default; SQL scripting; Cursors in SQL scripts; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; IDENTIFIER clause; Parameterized queries; Named function arguments; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; Recursive CTEs; Lateral column alias; QUALIFY clause; ASOF JOIN; JSON_TABLE; ANSI UNNEST; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); CLUSTER BY on tables; DESCRIBE ... AS JSON; Change data feed reads (CHANGES clause); VARIANT type; Variant shredding in Parquet; VARIANT transformation functions; Collations; TIME type; GEOMETRY and GEOGRAPHY types; TIMESTAMP_NTZ; Nanosecond timestamps; Sketch aggregates (HLL, Theta, KLL); Metric views; Python data source API; Python UDTFs; Arrow-optimized Python UDFs; Arrow UDFs (pyarrow-native); applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; Python worker logging; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; Protobuf functions; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries; Structured (JSON) logging; Java 21 support; Java 25 support; Java 17 minimum (Scala 2.13 only); Spark Connect UI tab
+
+#### BigQuery stored procedures for Apache Spark (No version published, Apache Spark base not stated)
+
+Version source: https://docs.cloud.google.com/bigquery/docs/spark-procedures
+
+- No feature-level vendor statements recorded.
+
+#### Databricks SQL warehouses (No version published, Apache Spark base not stated)
+
+Version source: https://docs.databricks.com/aws/en/sql/release-notes/
+
+- Documented: Apache Iceberg bundled or supported; Delta Lake bundled or supported; Native / vectorized engine; ANSI SQL mode on by default; SQL scripting; SQL pipe syntax; Recursive CTEs; QUALIFY clause; Collations; GEOMETRY and GEOGRAPHY types
+- Partial: Sketch aggregates (HLL, Theta, KLL)
+- Preview: TIME type
+
+#### Spark in BigQuery Studio notebooks (No version published, Apache Spark base not stated)
+
+Version source: https://docs.cloud.google.com/bigquery/docs/use-spark
+
+- Documented: Python UDFs over Connect
+- Partial: Spark Connect server
+
+
 ### What is Spark Matrix?
 
 Spark Matrix is an open-source comparison of Apache Spark features across managed Spark platforms. It records which Apache Spark release each managed runtime is based on and which features that runtime has, and it traces every cell to the Apache Spark source or to a primary vendor statement.
+
+### Where can I see the matrix?
+
+The matrix is on this page at /spark-matrix: one row per feature, one column per managed Spark service at its newest generally available runtime, and a cell for each that opens the vendor quotation or the Apache source behind it. The full explorer at /spark-matrix/explorer/ adds every runtime of each service, the per-release Apache Spark inventory of functions, configurations, syntax and APIs, release notes, and how far each runtime lags the Apache release.
 
 ### Which managed Spark platforms does Spark Matrix cover?
 

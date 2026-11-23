@@ -28,8 +28,8 @@ import IndustryPage from "./pages/refarch/IndustryPage.tsx";
 import AgenticLakehouse from "./pages/guides/AgenticLakehouse.tsx";
 import AgenticDataEngineering from "./pages/guides/AgenticDataEngineering.tsx";
 import SparkMasterclass from "./pages/projects/SparkMasterclass.tsx";
-import SparkMatrix from "./pages/projects/SparkMatrix.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import { SparkMatrix } from "./lazyPages";
 
 const queryClient = new QueryClient();
 

@@ -369,6 +369,11 @@ function renderLlms(): string {
   }
   lines.push("");
 
+  lines.push(`## ${matrix.TITLE}`);
+  lines.push(withDesc(`${matrix.TITLE}: the matrix`, matrix.SLUG, `${matrix.META_DESCRIPTION} Data build ${matrix.DATA_GENERATED}. Cite this page.`));
+  lines.push(withDesc(`${matrix.TITLE} explorer`, matrix.EXPLORER_PATH, "Interactive explorer for the same data: every runtime of each service, the per-release Apache Spark inventory, release notes and runtime freshness."));
+  lines.push("");
+
   lines.push(`## ${RA_TITLE}`);
   lines.push(withDesc(RA_TITLE, RA_PATH, RA_DESCRIPTION));
   lines.push(withDesc("Machine-readable catalog (JSON)", "/reference-architectures.json", "Every architecture, component and industry lens as JSON."));
@@ -538,6 +543,7 @@ function renderLlmsFull(): string {
   out.push("", `## Platforms covered (data build ${matrix.DATA_GENERATED})`, "");
   for (const v of matrix.PLATFORMS_BY_VENDOR) out.push(`- **${v.vendor}:** ${v.platforms.join("; ")}`);
   out.push("");
+  out.push(matrix.matrixMarkdown(BASE_URL), "");
   for (const f of matrix.FAQS) out.push(`### ${f.q}`, "", f.a, "");
 
   // Open Reference Architectures: hub definition, then every pattern and
