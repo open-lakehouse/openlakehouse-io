@@ -33,6 +33,7 @@ export const SHOW = {
   spotifyUrl: "https://open.spotify.com/show/4k97PCeKwCIyrWLYXVijSZ",
   appleUrl: "https://podcasts.apple.com/us/podcast/this-week-in-open-lakehouse/id6817521501",
   rssUrl: "https://api.riverside.com/hosting/aeXB70YD.rss",
+  youtubeUrl: "https://www.youtube.com/@OpenLakehouseAI",
   path: "/podcast",
 };
 
