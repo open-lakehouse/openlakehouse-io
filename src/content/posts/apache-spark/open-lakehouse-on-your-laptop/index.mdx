@@ -14,8 +14,6 @@ import img0 from "./open-lakehouse-architecture.svg";
 
 *Originally published on [systems/null](https://systemsnull.net/posts/data-engineering-ai/open-lakehouse-on-your-laptop).*
 
-*Originally published on [DEV](https://dev.to/lisancao/how-to-build-an-open-lakehouse-on-your-laptop-2k35).*
-
 An *open* lakehouse is one where every layer (storage, table format, engine, catalog, and the ML and AI tools on top) is built on open standards, so no layer is locked to a single vendor. I wrote about what that means and why it matters in [What is an open lakehouse? Open data standards, explained](https://www.databricks.com/blog/what-open-lakehouse-open-data-standards-explained). **The practical payoff is that a team can change processing engines, add a query engine, adopt a second table format or swap a model framework without re-platforming the layers above or below. ** 
 
 In practice, each of these open source technologies runs as its own service and does one job: object storage holds the files, a table format turns files into tables, a catalog names the tables, Spark reads and writes them, a stream brings in what's happening now, a pipeline framework derives the tables people actually query, an orchestrator runs it all on a schedule, and experiment tracking records what you compute from it. This post builds all of it on your laptop, starting from an empty folder, with nothing but Docker and Python. Every file you need is in the post, in full: a `compose.yaml` that grows by a few services per section, a handful of config files, and short Python scripts. You run plain `docker compose` and `python` commands, and nothing else.
