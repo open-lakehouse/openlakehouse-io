@@ -1,0 +1,160 @@
+{
+  "ai-special-mistrals-le-chonk-agent-standards-glm-5-3-evaluation": {
+    "title": "Most of This Week's AI News Happened Outside the Model",
+    "excerpt": "This Week in Open Lakehouse AI special: Mistral open-sources Le Chonk with its cyber variant held back, Irregular catches GLM-5.3 breaking a rule to get right answers, the Agentic AI Foundation takes in Agent Skills and Open Responses, llm-d reaches 1.0, and everyone ships a harness.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "agents",
+      "mistral",
+      "agentic-ai-foundation",
+      "llm-d",
+      "kubernetes"
+    ]
+  },
+  "apache-spark-4-3-parquet-finite-vector-datafusion-comet-1-2-nvidias": {
+    "title": "Staying on an Old Version Got More Expensive This Week",
+    "excerpt": "This Week in Open Lakehouse, episode 9: Apache Spark 4.3.0 ships stateful real-time mode, Parquet adds FINITE_VECTOR, DataFusion Comet 1.2 and NVIDIA's cuDF plugin push Spark acceleration further, Airflow 3.4 adds task loops, and the catalogs tighten what a privilege actually lets you do.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "spark",
+      "parquet",
+      "iceberg",
+      "datafusion",
+      "airflow",
+      "lakekeeper"
+    ]
+  },
+  "datafusion-ballista-55-0-unity-catalog-native-iceberg-support-parquet": {
+    "title": "Guarantees Belong in the Layer That Can Enforce Them",
+    "excerpt": "This Week in Open Lakehouse, episode 5: Unity Catalog 0.7 ships native Iceberg tables, DataFusion Comet 1.1.0 writes Iceberg natively and Ballista 55.0 turns AQE on by default, Parquet works out what a vector is allowed to contain, and MLflow 3.17 and Omnigent 0.17 put more rules around agents.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "datafusion",
+      "iceberg",
+      "parquet",
+      "unity-catalog",
+      "delta-lake",
+      "arrow"
+    ]
+  },
+  "duckdb-2-0-external-lookup-joins-arrow-database-connectivity": {
+    "title": "Every Engine Wants to Be a Server Now",
+    "excerpt": "This Week in Open Lakehouse, episode 7: DuckDB 2.0 turns into a server with Quack, Spark proposes an ADBC data source and external lookup joins, Comet votes to leave DataFusion, Arrow patches a KMS URL leak, and OpenCode 2.0 becomes a background service.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "duckdb",
+      "spark",
+      "iceberg",
+      "arrow",
+      "datafusion",
+      "airflow"
+    ]
+  },
+  "filetypes-language-agnostic-udfs-parquet-versioning-and-iceberg": {
+    "title": "The Open Lakehouse Is Mostly Arguing About Types Now",
+    "excerpt": "This Week in Open Lakehouse, episode 2: Parquet Format 2.14 ships the FILE logical type, Spark accepts a FileType SPIP, iceberg-datafusion moves to Apache DataFusion, and Iceberg 1.12 heads to a vote with an expression spec and early v4 groundwork.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "parquet",
+      "spark",
+      "iceberg",
+      "datafusion",
+      "lakekeeper",
+      "unity-catalog"
+    ]
+  },
+  "graphframes-joins-spark-iceberg-view-spec-updates-parquet-serialized": {
+    "title": "GraphFrames Comes Back to Spark, and Everything Else Turns Into a Spec",
+    "excerpt": "This Week in Open Lakehouse, episode 10: GraphFrames returns to Apache Spark, real-time mode goes after batch queries, DataFusion adopts datafusion-distributed, and Iceberg, Parquet and Arrow keep writing down what used to be tribal knowledge.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "spark",
+      "iceberg",
+      "parquet",
+      "arrow",
+      "datafusion",
+      "airflow"
+    ]
+  },
+  "iceberg-1-12-oidc-credentials-spark-connect-gateway-arrow-json-schemas": {
+    "title": "Your Lakehouse Moves at the Speed of Its Slowest Integration",
+    "excerpt": "This Week in Open Lakehouse, episode 4: Iceberg 1.12 lands, delta-rs reaches 1.0, Spark works through row filters, OIDC credentials and a Spark Connect gateway, Arrow wants a JSON form for its schemas, and the maintainers keep four release branches alive at once.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "iceberg",
+      "spark",
+      "delta-lake",
+      "arrow",
+      "governance"
+    ]
+  },
+  "nanosecond-timestamp-precision-iceberg-datafusion-spark-connect-rust": {
+    "title": "Integration Code Should Live With the Engine That Breaks It",
+    "excerpt": "This Week in Open Lakehouse, episode 1: Parquet 2.14 ships and nanosecond timestamps pass a vote, iceberg-datafusion moves into Apache DataFusion, Spark votes in a FILE type and releases a Rust Connect client, and Lance, Polars and hudi-rs push the Rust side of the stack forward.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "parquet",
+      "iceberg",
+      "datafusion",
+      "spark",
+      "lance",
+      "polars"
+    ]
+  },
+  "unity-catalog-0-7-paimon-2-1-hudi-1-1-2-arrow-26-0-and-new-asf-top": {
+    "title": "Hygiene Releases: Unity Catalog 0.7, Paimon 2.1, and Three New Apache Top-Level Projects",
+    "excerpt": "This Week in Open Lakehouse, episode 6: Unity Catalog 0.7 serves Iceberg tables over the Iceberg REST catalog, Paimon 2.1 refuses to publish Iceberg metadata it can't stand behind, Hudi, Kafka and Arrow ship patch and release work, and Auron, Reqsign and ResilientDB become Apache top-level projects.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "unity-catalog",
+      "iceberg",
+      "paimon",
+      "hudi",
+      "arrow",
+      "kafka"
+    ]
+  },
+  "xml-functions-polars-2-0-delta-rs-and-agent-thrashing-policies": {
+    "title": "Deprecation Week: Iceberg, Flink, Arrow and delta-rs decide what to stop carrying",
+    "excerpt": "This Week in Open Lakehouse, episode 3: Iceberg forbids new equality deletes in v4, Flink proposes native XML functions and votes to sunset StateFun, Polars 2.0 makes streaming the default, delta-rs reaches 1.0, Arrow weighs dropping macOS Intel, and an Omnigent policy catches an agent thrashing.",
+    "authors": [
+      "lisa-cao"
+    ],
+    "tags": [
+      "podcast",
+      "iceberg",
+      "flink",
+      "polars",
+      "delta-rs",
+      "arrow",
+      "parquet"
+    ]
+  }
+}

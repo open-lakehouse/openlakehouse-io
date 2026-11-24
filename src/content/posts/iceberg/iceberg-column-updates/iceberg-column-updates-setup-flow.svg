@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" font-family="IBM Plex Sans, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="One base table copied into a copy-on-write table and a merge-on-read table; against each copy, a backfill update, a read of the snapshot and files tables, a partial update, and another read">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a98b3"/></marker></defs>
+<rect width="880" height="300" rx="16" fill="#0e1a33"/>
+<rect x="20" y="110" width="150" height="80" rx="8" fill="#3a5f96" fill-opacity="0.85"/>
+<text x="95.0" y="128" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">wide table</text>
+<text x="95.0" y="143" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">id + c_1 … c_200</text>
+<text x="95.0" y="158" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">200,000 rows</text>
+<text x="95.0" y="173" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">one file, 300.9 MB</text>
+<rect x="220" y="40" width="150" height="56" rx="8" fill="#6b4a9b" fill-opacity="0.85"/>
+<text x="295.0" y="58" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">copy 1</text>
+<text x="295.0" y="73" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">update mode:</text>
+<text x="295.0" y="88" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">copy-on-write</text>
+<rect x="220" y="204" width="150" height="56" rx="8" fill="#6b4a9b" fill-opacity="0.85"/>
+<text x="295.0" y="222" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">copy 2</text>
+<text x="295.0" y="237" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">update mode:</text>
+<text x="295.0" y="252" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">merge-on-read</text>
+<line x1="170" y1="140" x2="220" y2="70" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<line x1="170" y1="160" x2="220" y2="230" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="410" y="40" width="120" height="56" rx="8" fill="#c0661a" fill-opacity="0.85"/>
+<text x="470.0" y="58" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">backfill</text>
+<text x="470.0" y="73" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">SET c_1 = c_1 + 1</text>
+<text x="470.0" y="88" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">every row</text>
+<line x1="370" y1="68" x2="410" y2="68" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="555" y="40" width="95" height="56" rx="8" fill="#3a5f96" fill-opacity="0.85"/>
+<text x="602.5" y="58" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">read</text>
+<text x="602.5" y="73" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">snapshots</text>
+<text x="602.5" y="88" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">+ .files</text>
+<line x1="530" y1="68" x2="555" y2="68" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="675" y="40" width="120" height="56" rx="8" fill="#c0661a" fill-opacity="0.85"/>
+<text x="735.0" y="58" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">partial</text>
+<text x="735.0" y="73" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">SET c_2 = c_2 + 1</text>
+<text x="735.0" y="88" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">one row in ten</text>
+<line x1="650" y1="68" x2="675" y2="68" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="820" y="40" width="50" height="56" rx="8" fill="#3a5f96" fill-opacity="0.85"/>
+<text x="845.0" y="58" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">read</text>
+<text x="845.0" y="73" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">again</text>
+<text x="845.0" y="88" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle"></text>
+<line x1="795" y1="68" x2="820" y2="68" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="410" y="204" width="120" height="56" rx="8" fill="#c0661a" fill-opacity="0.85"/>
+<text x="470.0" y="222" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">backfill</text>
+<text x="470.0" y="237" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">SET c_1 = c_1 + 1</text>
+<text x="470.0" y="252" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">every row</text>
+<line x1="370" y1="232" x2="410" y2="232" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="555" y="204" width="95" height="56" rx="8" fill="#3a5f96" fill-opacity="0.85"/>
+<text x="602.5" y="222" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">read</text>
+<text x="602.5" y="237" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">snapshots</text>
+<text x="602.5" y="252" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">+ .files</text>
+<line x1="530" y1="232" x2="555" y2="232" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="675" y="204" width="120" height="56" rx="8" fill="#c0661a" fill-opacity="0.85"/>
+<text x="735.0" y="222" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">partial</text>
+<text x="735.0" y="237" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">SET c_2 = c_2 + 1</text>
+<text x="735.0" y="252" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">one row in ten</text>
+<line x1="650" y1="232" x2="675" y2="232" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<rect x="820" y="204" width="50" height="56" rx="8" fill="#3a5f96" fill-opacity="0.85"/>
+<text x="845.0" y="222" font-size="12" font-weight="600" fill="#e6ecf5" text-anchor="middle">read</text>
+<text x="845.0" y="237" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle">again</text>
+<text x="845.0" y="252" font-size="12" font-weight="400" fill="#e6ecf5" text-anchor="middle"></text>
+<line x1="795" y1="232" x2="820" y2="232" stroke="#8a98b3" stroke-width="1.5" marker-end="url(#ah)"/>
+<text x="20" y="24" font-size="13" font-weight="600" fill="#e6ecf5">Setup and flow: write once, copy twice, run the same two updates against each copy, read what each commit added</text>
+<text x="20" y="286" font-size="11" fill="#8a98b3">Same run on v2 tables (position delete files instead of deletion vectors); only v3 shown in the results.</text>
+</svg>

@@ -1,0 +1,161 @@
+{
+  "$comment": "Fixes for words the transcription service mishears. Applied to every transcript by scripts/fetch-podcast.ts on each run (idempotent). Each entry: [regex, replacement]; matching is case-insensitive on word boundaries. Add new mishearings here rather than editing transcripts by hand.",
+  "corrections": [
+    [
+      "pypymon",
+      "PyPaimon"
+    ],
+    [
+      "lake ?keeper",
+      "Lakekeeper"
+    ],
+    [
+      "lakey bird",
+      "Lakekeeper"
+    ],
+    [
+      "hootie|hoodie|foodie",
+      "Hudi"
+    ],
+    [
+      "hudi ?e?rs",
+      "hudi-rs"
+    ],
+    [
+      "pymon",
+      "Paimon"
+    ],
+    [
+      "proto ?f|proto ?puff|preta ?buff|proto ?buff",
+      "protobuf"
+    ],
+    [
+      "scholar(?= like PySpark)",
+      "Scala"
+    ],
+    [
+      "giro",
+      "JIRA"
+    ],
+    [
+      "claud code",
+      "Claude Code"
+    ],
+    [
+      "omnigen",
+      "Omnigent"
+    ],
+    [
+      "data fusion",
+      "DataFusion"
+    ],
+    [
+      "oak amal",
+      "OCaml"
+    ],
+    [
+      "wasam",
+      "Wasm"
+    ],
+    [
+      "huashin",
+      "Huaxin"
+    ],
+    [
+      "dongjun",
+      "Dongjoon"
+    ],
+    [
+      "nillish",
+      "Neelesh"
+    ],
+    [
+      "julian(?= also responded)",
+      "Julien"
+    ],
+    [
+      "dub ?list|deb ?list|dev ?list",
+      "dev list"
+    ],
+    [
+      "sav zero",
+      "Sev Zero"
+    ],
+    [
+      "s pips",
+      "SPIPs"
+    ],
+    [
+      "quayio",
+      "Quay.io"
+    ],
+    [
+      "tree number",
+      "Trino"
+    ],
+    [
+      "gosync",
+      "Go sync"
+    ],
+    [
+      "spar sink",
+      "Spark sync"
+    ],
+    [
+      "synks",
+      "syncs"
+    ],
+    [
+      "(?<=the )sinks(?= if you can't make it)",
+      "syncs"
+    ],
+    [
+      "stream fusion",
+      "StreamFusion"
+    ],
+    [
+      "polycast",
+      "Policast"
+    ],
+    [
+      "gintake",
+      "Jungtaek"
+    ],
+    [
+      "tococo",
+      "tokoko"
+    ],
+    [
+      "(?<=we see )eon",
+      "Ion"
+    ],
+    [
+      "agentcon",
+      "AGNTCon"
+    ],
+    [
+      "ml ?flow",
+      "MLflow"
+    ],
+    [
+      "delta[ -]rs",
+      "delta-rs"
+    ],
+    [
+      "open code",
+      "OpenCode"
+    ],
+    [
+      "tsi hanho",
+      "Szehon Ho"
+    ],
+    [
+      "hugh chin",
+      "Hyukjin"
+    ],
+    [
+      "raman garib",
+      "Ramin Gharib"
+    ]
+  ]
+}

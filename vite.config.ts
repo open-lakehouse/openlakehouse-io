@@ -10,6 +10,7 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import rehypePrettyCode from "rehype-pretty-code";
 import { componentTagger } from "lovable-tagger";
 import { postMarkdownPlugin } from "./scripts/vite-post-markdown";
+import remarkMermaid from "./scripts/remark-mermaid.mjs";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -25,7 +26,7 @@ export default defineConfig(({ mode }) => ({
       jsxRuntime: "automatic",
       development: mode === "development",
       providerImportSource: "@mdx-js/react",
-      remarkPlugins: [remarkGfm, remarkFrontmatter, [remarkMdxFrontmatter, { name: "frontmatter" }]],
+      remarkPlugins: [remarkGfm, remarkFrontmatter, [remarkMdxFrontmatter, { name: "frontmatter" }], remarkMermaid],
       rehypePlugins: [
         rehypeSlug,
         [rehypeAutolinkHeadings, { behavior: "wrap" }],

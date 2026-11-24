@@ -2,11 +2,13 @@ import { ExternalLink, Mic } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getAuthor } from "@/content/content";
 
-const SHOW_TITLE = "This Week in Open Lakehouse";
-const SHOW_ID = "4k97PCeKwCIyrWLYXVijSZ";
-const SHOW_URL = `https://open.spotify.com/show/${SHOW_ID}`;
-const EMBED_URL = `https://open.spotify.com/embed/show/${SHOW_ID}`;
-const HOST_SLUGS = ["lisa-cao", "scott-haines"];
+import { SHOW, episodes, episodePath, episodeTitle } from "@/content/podcast";
+
+const SHOW_TITLE = SHOW.title;
+const SHOW_URL = SHOW.spotifyUrl;
+const EMBED_URL = `https://open.spotify.com/embed/show/${SHOW.spotifyId}`;
+const HOST_SLUGS = SHOW.hostSlugs;
+const latest = episodes[0];
 
 const hosts = HOST_SLUGS.map(getAuthor).filter(Boolean);
 
@@ -54,14 +56,32 @@ export const PodcastSection = () => (
           </div>
         )}
 
+        {latest && (
+          <p className="mt-8 text-sm text-white/80">
+            <span className="text-xs font-semibold uppercase tracking-widest text-white/60">Latest episode</span>
+            <br />
+            <Link to={episodePath(latest)} className="font-semibold text-white underline-offset-4 hover:underline">
+              {episodeTitle(latest)}
+            </Link>
+          </p>
+        )}
+
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+        <Link
+          to={SHOW.path}
+          className="inline-flex items-center gap-2 rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          All episodes and transcripts
+        </Link>
         <a
           href={SHOW_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-green-700 shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-800"
+          className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-green-700 shadow-lg transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-800"
         >
           Listen on Spotify <ExternalLink aria-hidden="true" className="h-4 w-4" />
         </a>
+        </div>
       </div>
 
       {/* Spotify's show player renders at a fixed 352px; a taller iframe only adds blank space.

@@ -42,6 +42,59 @@ import {
 
 const BASE_URL = SITE_URL;
 
+// Podcast episodes, written by scripts/fetch-podcast.ts (runs first in prebuild).
+type PodcastEpisode = { slug: string; title: string; date: string; episodeNumber?: number; duration?: string; summary: string; notesHtml: string; hasTranscript: boolean };
+const PODCAST_TITLE = "This Week in Open Lakehouse";
+const podcastEpisodes: PodcastEpisode[] = JSON.parse(readFileSync(resolve("src/content/podcast/episodes.json"), "utf8"));
+// Same rule as episodeTitle() in src/content/podcast.ts.
+const episodeTitle = (e: PodcastEpisode) =>
+  `TWIOL #${e.episodeNumber ?? podcastEpisodes.length - podcastEpisodes.indexOf(e)}: ${e.title}`;
+const podcastTranscript = (slug: string) => {
+  try {
+    return readFileSync(resolve(`src/content/podcast/transcripts/${slug}.txt`), "utf8");
+  } catch {
+    return undefined;
+  }
+};
+const notesToMarkdown = (html: string) =>
+  html
+    .replace(/<li>/g, "\n- ")
+    .replace(/<\/p>|<br \/>|<\/ul>|<\/ol>/g, "\n")
+    .replace(/<a href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g, "[$2]($1)")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+const podcastWriteups: Record<string, { title: string; excerpt?: string }> = JSON.parse(
+  readFileSync(resolve("src/content/podcast/writeups.json"), "utf8"),
+);
+const writeupBody = (slug: string) => {
+  try {
+    return readFileSync(resolve(`src/content/podcast/writeups/${slug}.mdx`), "utf8").replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+  } catch {
+    return undefined;
+  }
+};
+const episodeMarkdown = (e: PodcastEpisode) => {
+  const w = podcastWriteups[e.slug];
+  const body = writeupBody(e.slug);
+  const lines = [
+    `# ${episodeTitle(e)}`,
+    "",
+    `${PODCAST_TITLE}${e.episodeNumber ? `, episode ${e.episodeNumber}` : ""}. Published ${e.date.slice(0, 10)}${e.duration ? `, ${e.duration} long` : ""}. Hosts: Lisa Cao and Scott Haines.`,
+    "",
+    `Canonical page: ${SITE_URL}/podcast/${e.slug}`,
+    "",
+    ...(body ? ["By Lisa Cao.", "", body, ""] : []),
+    "## Show notes",
+    "",
+    notesToMarkdown(e.notesHtml),
+  ];
+  const t = podcastTranscript(e.slug);
+  if (t) lines.push("", "## Transcript (machine-generated)", "", t.trim());
+  return lines.join("\n") + "\n";
+};
+
 interface SitemapEntry {
   path: string;
   lastmod?: string;
@@ -65,6 +118,7 @@ const staticEntries: SitemapEntry[] = [
   { path: "/authors", changefreq: "monthly", priority: "0.6" },
   { path: "/blog", changefreq: "daily", priority: "0.9" },
   { path: "/faq", changefreq: "monthly", priority: "0.8" },
+  { path: "/podcast", changefreq: "weekly", priority: "0.9", lastmod: podcastEpisodes[0]?.date.slice(0, 10) },
 ];
 
 // Short descriptions for the primary navigation pages, surfaced in llms.txt.
@@ -85,6 +139,7 @@ const NAV_DESCRIPTIONS: Record<string, string> = {
   "/community": "Where practitioners gather.",
   "/authors": "Maintainers, authors, and practitioners in the Open Lakehouse community.",
   "/blog": "Release notes, deep dives, and republished posts from upstream projects.",
+  "/podcast": `${PODCAST_TITLE}: a weekly podcast on open source data engineering news, with show notes and transcripts.`,
   "/faq": "Direct, citable Q&A about the Open Lakehouse, Delta Lake, Iceberg, Unity Catalog, MLflow, and Spark.",
 };
 
@@ -301,6 +356,10 @@ function buildSitemapEntries(): SitemapEntry[] {
     entries.push({ path: industryPath(i.slug), lastmod: RA_UPDATED, changefreq: "monthly", priority: "0.7" });
   }
 
+  for (const e of podcastEpisodes) {
+    entries.push({ path: `/podcast/${e.slug}`, lastmod: e.date.slice(0, 10), changefreq: "monthly", priority: "0.7" });
+  }
+
   return entries;
 }
 
@@ -418,6 +477,15 @@ function renderLlms(): string {
     lines.push("## Learn");
     for (const p of learnPosts) {
       lines.push(withDesc(p.title, `/learn/${p.category}/${p.slug}`, p.excerpt));
+    }
+    lines.push("");
+  }
+
+  if (podcastEpisodes.length) {
+    lines.push(`## Podcast: ${PODCAST_TITLE}`);
+    for (const e of podcastEpisodes) {
+      const w = podcastWriteups[e.slug];
+      lines.push(withDesc(episodeTitle(e), `/podcast/${e.slug}`, `${w?.excerpt ?? e.summary} Write-up, show notes and transcript in Markdown: ${url(`/podcast/${e.slug}`)}.md`));
     }
     lines.push("");
   }
@@ -584,6 +652,11 @@ rmSync(resolve("public/reference-architectures"), { recursive: true, force: true
 mkdirSync(resolve("public/reference-architectures/industries"), { recursive: true });
 for (const p of RA_PATTERNS) writeFileSync(resolve(`public${patternPath(p.slug)}.md`), patternMarkdown(p));
 for (const i of RA_INDUSTRIES) writeFileSync(resolve(`public${industryPath(i.slug)}.md`), industryMarkdown(i));
+
+// Podcast: Markdown twin of each episode (show notes plus transcript).
+rmSync(resolve("public/podcast"), { recursive: true, force: true });
+mkdirSync(resolve("public/podcast"), { recursive: true });
+for (const e of podcastEpisodes) writeFileSync(resolve(`public/podcast/${e.slug}.md`), episodeMarkdown(e));
 
 console.log(
   `SEO artifacts written: sitemap.xml (${sitemapEntries.length} urls), ` +
