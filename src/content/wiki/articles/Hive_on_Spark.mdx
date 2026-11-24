@@ -1,0 +1,85 @@
+---
+title: "Hive on Spark"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark execution engine for Hive, `hive.execution.engine=spark`</Field>
+  <Field name="field">SQL query execution</Field>
+  <Field name="introduced">Apache Hive 1.1.0 (2015)</Field>
+  <Field name="key_parts">Hive compiler and metastore, Spark as the execution engine, the `spark-client` module</Field>
+  <Field name="implementations">[Apache Hive](/wiki/Apache_Hive) 1.1 to 3.1</Field>
+  <Field name="related">[Apache Hive](/wiki/Apache_Hive), [Hive Metastore](/wiki/Hive_Metastore), [Apache Spark](/wiki/Apache_Spark), [Spark Thrift Server](/wiki/Spark_Thrift_Server)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">HIVE-7292, HIVE-26134 and HIVE-23885, HiveConf.java, pom.xml and the ql and spark-client modules at the rel/release-3.1.3, 4.0.0-alpha-1, 4.0.0-alpha-2 and 4.0.0 tags of apache/hive, the Apache Hive downloads page, the Hive on Spark getting started page and the v4.3.0 tag of apache/spark (Hive tables and distributed SQL engine docs)</Verified>
+
+<Status level="removed">Removed in Apache Hive 4.0.0 (first in 4.0.0-alpha-2). Use Apache Tez as the Hive engine, or Spark SQL with Hive support instead. Hive never marked the engine deprecated first; HIVE-26134 removed it from the main branch in April 2022. The last Hive line that had it, 3.x, was declared end of life in October 2024.[^hive26134]</Status>
+
+**Hive on Spark** was an execution engine option in [Apache Hive](/wiki/Apache_Hive) that ran HiveQL queries as [Apache Spark](/wiki/Apache_Spark) jobs instead of MapReduce or Apache Tez jobs; users turned it on with `set hive.execution.engine=spark;`.[^gs] It was a Hive project feature: Hive kept its own parser, optimizer and [Hive Metastore](/wiki/Hive_Metastore), and used Spark only to run the work. It first shipped in Hive 1.1.0 and was removed in Hive 4.0, so it is unavailable in every maintained Hive release.[^hive7292][^hive26134]
+
+## Status
+
+Hive on Spark was removed without a deprecation release in between.
+
+- **Removed from Hive's main branch in April 2022.** HIVE-26134, "Remove Hive on Spark from the main branch", was resolved on 26 April 2022. Its description links a dev-list discussion and says there was no activity on keeping the feature up to date, and that removing it would help ongoing development and make testing cheaper.[^hive26134] In that thread, a reply from February 2022 says the last development was around October 2018 and calls the code dead weight.[^thread]
+- **First releases without it.** The `spark-client` module and the Spark execution package (`ql/.../exec/spark`) are present at the Hive 4.0.0-alpha-1 tag, which was cut before the removal, and absent from 4.0.0-alpha-2 (released 16 November 2022) and 4.0.0 (released 29 March 2024).[^downloads][^tree400] In Hive 4.0.0, `hive.execution.engine` accepts only `mr` and `tez`; in Hive 3.1.3 it also accepted `spark`.[^conf400][^conf313]
+- **No maintained release has it.** The Hive community declared the 2.x line end of life in May 2024 and the 3.x line end of life in October 2024, which leaves only the 4.x line, where the engine does not exist.[^downloads]
+
+An earlier ticket, HIVE-23885 "Remove Hive on Spark", was opened in July 2020 and closed as a duplicate.[^n1]
+
+## History
+
+HIVE-7292, the umbrella ticket for Hive on Spark, was opened in June 2014. It gave three reasons: many Hive users already ran Spark and could drop MapReduce or Tez from their clusters; the option would bring Spark users to Hive; and queries with several reduce stages would run faster.[^hive7292] The feature shipped in Hive 1.1.0, released on 8 March 2015.[^hive7292][^downloads]
+
+Each Hive line was tested against one Spark version. The getting started page lists Spark 1.2.0 for Hive 1.1.x, Spark 2.0.0 for Hive 2.3.x and Spark 2.3.0 for Hive 3.0.x, and the Hive 3.1.3 build file still sets `spark.version` to 2.3.0.[^gs][^n2] No Hive release lists support for Spark 3 or later.
+
+## How it worked
+
+Hive compiled a HiveQL query into a plan of map and reduce work, as it did for its other engines, and with the Spark engine submitted that plan to a Spark application through its `spark-client` module. The getting started page required a Spark build that does not include the Hive jars, and it recommends building Spark with the `parquet-provided` profile (and `orc-provided` for Spark 2.3.0 and later) to avoid dependency conflicts.[^gs]
+
+```sql
+-- Hive 3.1.x and earlier only; Hive 4 rejects this value
+set hive.execution.engine=spark;
+SELECT country, count(*) FROM page_views GROUP BY country;
+```
+
+## What Hive on Spark is not
+
+Several Spark and Hive combinations have similar names. Only the first row below is Hive on Spark.
+
+| Name | Which project runs the SQL | Status |
+| --- | --- | --- |
+| **Hive on Spark** (`hive.execution.engine=spark`) | Hive parses and plans; Spark executes | Removed in Hive 4.0[^hive26134] |
+| **Shark** | A Spark-based project that replaced Hive's execution engine with Spark | Development ended in July 2014 in favor of Spark SQL[^shark] |
+| **Spark SQL with Hive support** (`enableHiveSupport()`) | Spark parses, plans and executes; Hive supplies the metastore and SerDes | Active in Spark 4.3.0[^sparkhive] |
+| **[Spark Thrift Server](/wiki/Spark_Thrift_Server)** | Spark SQL, behind a JDBC/ODBC server that corresponds to HiveServer2 | Active in Spark 4.3.0[^sts] |
+
+The 2014 post that ended Shark described Hive on Spark as a separate Hive community effort, aimed at organizations with existing Hive investments that wanted to run them on Spark, while Spark SQL became the main path for SQL on Spark.[^shark] In Spark 4.3.0, Hive support means reading and writing Hive tables through a Hive metastore; Spark 4.3.0 bundles a Hive 2.3.10 client and can connect to metastores from 2.0.0 to 4.1.0.[^sparkhive]
+
+## Replacements
+
+A Hive deployment that used the Spark engine has two paths. It can stay on Hive and move to Hive 4 with Tez, the engine that Hive 4.1 and later use by default (see [Apache Hive](/wiki/Apache_Hive)). Or it can move the SQL to Spark itself: Spark SQL reads the same tables through the [Hive Metastore](/wiki/Hive_Metastore), and the Spark Thrift Server gives JDBC and ODBC clients a HiveServer2-compatible endpoint.[^sparkhive][^sts] Queries need checking on either path, because HiveQL behavior and Spark SQL behavior differ.
+
+## See also
+
+- [Apache Hive](/wiki/Apache_Hive)
+- [Hive Metastore](/wiki/Hive_Metastore)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Thrift Server](/wiki/Spark_Thrift_Server)
+
+## References
+
+[^hive26134]: [HIVE-26134: Remove Hive on Spark from the main branch](https://issues.apache.org/jira/browse/HIVE-26134). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^gs]: [Hive on Spark: Getting Started](https://cwiki.apache.org/confluence/display/Hive/Hive+on+Spark%3A+Getting+Started). *Apache Hive wiki*. Retrieved 2026-11-22.
+[^hive7292]: [HIVE-7292: Hive on Spark](https://issues.apache.org/jira/browse/HIVE-7292). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^thread]: [Time to Remove Hive-on-Spark](https://lists.apache.org/thread/nxg2jpngp72t6clo90407jgqxnmdm5g4). *dev@hive.apache.org*, 2022-02-10. Retrieved 2026-11-22.
+[^downloads]: [Downloads](https://hive.apache.org/general/downloads/). *Apache Hive*. Retrieved 2026-11-22.
+[^tree400]: [ql/src/java/org/apache/hadoop/hive/ql/exec at rel/release-4.0.0](https://github.com/apache/hive/tree/rel/release-4.0.0/ql/src/java/org/apache/hadoop/hive/ql/exec). *GitHub*. Retrieved 2026-11-22.
+[^conf400]: [HiveConf.java at rel/release-4.0.0](https://github.com/apache/hive/blob/rel/release-4.0.0/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java). *GitHub*. Retrieved 2026-11-22.
+[^conf313]: [HiveConf.java at rel/release-3.1.3](https://github.com/apache/hive/blob/rel/release-3.1.3/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java). *GitHub*. Retrieved 2026-11-22.
+[^n1]: [HIVE-23885: Remove Hive on Spark](https://issues.apache.org/jira/browse/HIVE-23885). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n2]: [pom.xml at rel/release-3.1.3](https://github.com/apache/hive/blob/rel/release-3.1.3/pom.xml). *GitHub*. Retrieved 2026-11-22.
+[^shark]: [Shark, Spark SQL, Hive on Spark, and the future of SQL on Apache Spark](https://www.databricks.com/blog/2014/07/01/shark-spark-sql-hive-on-spark-and-the-future-of-sql-on-spark.html). *Databricks*, 2014-07-01. Retrieved 2026-11-22.
+[^sparkhive]: [Hive Tables (docs/sql-data-sources-hive-tables.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/sql-data-sources-hive-tables.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sts]: [Distributed SQL Engine (docs/sql-distributed-sql-engine.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/sql-distributed-sql-engine.md). *Apache Software Foundation*. Retrieved 2026-11-22.

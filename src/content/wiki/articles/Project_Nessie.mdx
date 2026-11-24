@@ -1,0 +1,82 @@
+---
+title: "Project Nessie"
+categories: ["Catalogs"]
+---
+
+<Infobox type="software">
+  <Field name="developer">Project Nessie contributors; started at Dremio</Field>
+  <Field name="initial_release">Announced October 2020</Field>
+  <Field name="latest_release">0.110.1</Field>
+  <Field name="latest_release_date">2026-11-21</Field>
+  <Field name="written_in">Java</Field>
+  <Field name="type">Transactional data catalog with Git-like versioning</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[projectnessie.org](https://projectnessie.org/)</Field>
+  <Field name="repo">[github.com/projectnessie/nessie](https://github.com/projectnessie/nessie)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog), [Apache Polaris](/wiki/Apache_Polaris), [Data catalog](/wiki/Data_catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the projectnessie/nessie GitHub releases (latest nessie-0.110.1) and CHANGELOG.md, the Nessie README, transactions guide, Iceberg REST guide and configuration reference, the August 2024 Nessie blog post on Apache Polaris, the October 2020 Dremio announcement, CatalogUtil.java at apache-iceberg-1.12.0 and the Trino 484 metastore documentation</Verified>
+
+<Status level="active">Nessie is still released (0.110.1 on 21 November 2026) and no Nessie release or announcement deprecates it. In 2024 the Nessie team announced an intent to contribute Nessie's versioning features to [Apache Polaris](/wiki/Apache_Polaris); that plan has not retired Nessie.[^releases]</Status>
+
+**Project Nessie** is an open source transactional [data catalog](/wiki/Data_catalog) for data lakes that versions table metadata with Git-like commits, branches and tags.[^readme] A change to several tables can be made on a branch and published with one merge, so readers see all of the changes or none of them.[^tx] Nessie works with [Apache Iceberg](/wiki/Apache_Iceberg) tables and is reached through its own API or through the [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) API.[^readme][^rest]
+
+## How it works
+
+Nessie keeps a commit log of catalog changes, not of data files. Each commit records the operations it made, a timestamp and the user, and a single commit can change many tables at once.[^tx] For an Iceberg table, the catalog entry points to the table's current metadata; the data and metadata files stay in object storage.
+
+- **Branches** are named, movable pointers to commits. Work done on a branch is invisible on `main` until it is merged.[^tx]
+- **Tags** are named references to a fixed commit, used to pin a consistent state of many tables.[^guides]
+- **Merges** publish a series of commits from one branch to another as one consistent view, which is how Nessie gives cross-table visibility to engines that have no multi-table transactions of their own.[^tx]
+
+The transactions guide describes three optimistic isolation levels (read committed, repeated read and serializable), with conflicts detected per table; pessimistic locking is not available.[^tx] Nessie stores its commit log in a pluggable version store; the configuration reference covers JDBC, RocksDB, Cassandra, DynamoDB, MongoDB, Bigtable and in-memory stores.[^config]
+
+## How engines connect
+
+Engines reach Nessie in two ways.
+
+|  | Nessie catalog client | Iceberg REST API |
+| --- | --- | --- |
+| Endpoint | Nessie's own REST API | `/iceberg` on the Nessie server (port 19120 in the default Docker image)[^rest][^readme] |
+| Client side | Iceberg's `NessieCatalog` (catalog type `nessie`); Trino's `nessie` Iceberg catalog type[^icebergcat][^n1] | Any Iceberg REST client |
+| Choosing a branch | A client property naming the reference | The branch or tag name in the URI, with a mandatory `\|` before the warehouse name, for example `/iceberg/experiments\|sales`[^rest] |
+| Maturity | The original integration | Added in Nessie 0.90.2 (June 2024) as beta;[^changelog] the current guide calls it experimental[^rest] |
+
+With the Iceberg REST API, Nessie also manages table locations and vends storage credentials; the guide requires at least one object store and one warehouse to be configured, and notes that some storage integrations are still experimental.[^rest]
+
+## Status
+
+Nessie is an active project. Its latest release is 0.110.1, published on 21 November 2026, and the 0.x version numbers continue; no release marks the project or its server as deprecated.[^releases] Individual parts have been deprecated inside the project, for example the older JDBC, Cassandra and MongoDB version store types in favor of their `JDBC2`, `CASSANDRA2` and `MONGODB2` replacements.[^changelog]
+
+On 2 August 2024, after Snowflake open-sourced the Polaris catalog, the Nessie project wrote that the intent is to contribute Nessie's capabilities, such as catalog-level versioning, Git-like semantics and multi-table transactions, to [Apache Polaris](/wiki/Apache_Polaris).[^polaris] The post did not announce an end date for Nessie, and Nessie releases have continued since.[^polaris][^releases]
+
+## History
+
+Dremio announced Project Nessie on 1 October 2020; the announcement by Jacques Nadeau said a small team at Dremio had spent more than a year building it.[^n2] In October 2024 Dremio announced a commercial catalog built on Nessie.[^n3]
+
+## See also
+
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Apache Polaris](/wiki/Apache_Polaris)
+- [Unity Catalog](/wiki/Unity_Catalog)
+- [Hive Metastore](/wiki/Hive_Metastore)
+- [Data catalog](/wiki/Data_catalog)
+- [Trino](/wiki/Trino)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^releases]: [Releases (projectnessie/nessie)](https://github.com/projectnessie/nessie/releases). *GitHub*. Retrieved 2026-11-22.
+[^readme]: [Project Nessie README](https://github.com/projectnessie/nessie/blob/main/README.md). *GitHub*. Retrieved 2026-11-22.
+[^tx]: [Transactions (Nessie guides)](https://projectnessie.org/guides/transactions/). *Project Nessie*. Retrieved 2026-11-22.
+[^rest]: [Iceberg REST (Nessie guides)](https://projectnessie.org/guides/iceberg-rest/). *Project Nessie*. Retrieved 2026-11-22.
+[^guides]: [Guides (Project Nessie)](https://projectnessie.org/guides/). *Project Nessie*. Retrieved 2026-11-22.
+[^config]: [Configuration (Nessie)](https://projectnessie.org/nessie-latest/configuration/). *Project Nessie*. Retrieved 2026-11-22.
+[^icebergcat]: [CatalogUtil.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/core/src/main/java/org/apache/iceberg/CatalogUtil.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Metastores (Trino 484)](https://trino.io/docs/current/object-storage/metastores.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^changelog]: [Nessie Changelog (CHANGELOG.md)](https://github.com/projectnessie/nessie/blob/main/CHANGELOG.md). *GitHub*. Retrieved 2026-11-22.
+[^polaris]: [Open Source Polaris announcement](https://projectnessie.org/blog/2024/08/02/open-source-polaris-announcement/). *Project Nessie*, 2024-08-02. Retrieved 2026-11-22.
+[^n2]: [Introducing Project Nessie](https://www.dremio.com/blog/introducing-project-nessie/). *Dremio*, 2020-10-01. Retrieved 2026-11-22.
+[^n3]: [Dremio Goes Hybrid with Nessie-Based Metadata Catalog](https://www.dremio.com/newsroom/dremio-goes-hybrid-with-nessie-based-metadata-catalog/). *Dremio*, 2024-10-29. Retrieved 2026-11-22.

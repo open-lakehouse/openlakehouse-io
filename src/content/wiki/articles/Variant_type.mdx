@@ -1,0 +1,114 @@
+---
+title: "Variant type"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">VARIANT, variant data type</Field>
+  <Field name="field">Data types, semi-structured data</Field>
+  <Field name="introduced">Apache Spark 4.0.0 (2025); Parquet format 2.11.0; Iceberg format v3; Delta Lake 4.0.0</Field>
+  <Field name="key_parts">`metadata` and `value` binaries, primitive / array / object values, shredding into `typed_value` columns</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Apache Parquet](/wiki/Apache_Parquet), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake)</Field>
+  <Field name="related">[Logical type](/wiki/Logical_type), [Open table format](/wiki/Open_table_format), [Predicate pushdown](/wiki/Predicate_pushdown)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark, the Spark 4.0.0, 4.1.0 and 4.3.0 release notes, apache/parquet-format tags 2.11.0 and 2.14.0, the Apache Iceberg table spec, Delta Lake PROTOCOL.md at v4.4.1 and the Delta and Iceberg release notes</Verified>
+
+A **variant** (SQL type `VARIANT`) is a data type for semi-structured data such as JSON, in which each value carries its own structure in a compact binary encoding, so that rows in the same column can have different shapes and nested fields can be read by path without a fixed schema.[^enc] In the [open lakehouse](/wiki/Open_lakehouse), the same variant binary encoding is defined once in the [Apache Parquet](/wiki/Apache_Parquet) project and referenced by [Apache Spark](/wiki/Apache_Spark), the [Apache Iceberg](/wiki/Apache_Iceberg) table spec and the [Delta Lake](/wiki/Delta_Lake) protocol.[^sparkreadme][^ice][^delta]
+
+## Encoding
+
+The Variant Binary Encoding specification defines a variant as one of three things: a **primitive** (a type and a value, such as an integer or a string), an **array** (an ordered list of variant values) or an **object** (an unordered set of string keys with variant values, without duplicate keys). Each variant is stored as two binary values:[^enc]
+
+- **metadata**: a header and a dictionary of the field-name strings used in the value.
+- **value**: the encoded data. Object keys are stored as indexes into the metadata dictionary.
+
+The specification states that the encoding is designed for efficient access by path, even in very wide or deep structures, and that each nested value is contiguous and self-contained: an inner value, paired with the metadata of the whole variant, is itself a valid variant.[^enc] The allowed primitive types are a subset of Parquet's [logical types](/wiki/Logical_type).[^enc]
+
+In a Parquet file, a variant column is a group annotated with the `VARIANT` logical type that contains a required binary field `metadata` and a binary field `value`. The `value` field is required for an unshredded variant and optional when parts of the value are shredded.[^lt]
+
+```
+optional group event (VARIANT(1)) {
+  required binary metadata;
+  required binary value;
+}
+```
+
+## Shredding
+
+**Shredding** stores selected paths of a variant as ordinary typed Parquet columns next to the binary value. Each `value` field may have a sibling field named `typed_value` that holds the value when it matches a given type, and readers must reconstruct the full variant from both. All field names stay in the shared metadata.[^shred]
+
+The shredding specification gives the reason: data is often partly homogeneous, and shredded fields gain columnar encoding, column statistics for data skipping and partial projection. A query that extracts one field from a variant can read only that shredded column, and a filter on a shredded field can use its statistics to skip data.[^shred] Shredding is a storage choice. It does not change the logical value a reader returns.
+
+## Origin of the specification
+
+The variant encoding began in Apache Spark. In 2024 the Spark and Parquet communities agreed to move the Spark variant specification into the Parquet project, tracked as parquet-format issue 455.[^n1] `VariantEncoding.md`, `VariantShredding.md` and the `VARIANT` logical type are present in parquet-format from release 2.11.0, and are not in 2.10.0.[^lt]
+
+At the v4.3.0 tag, Spark's own variant README says the spec "is being developed in the Apache Parquet project", that Spark implements a specific commit of the Parquet spec, and that Spark does not yet support variant values containing UUID, Time or nanosecond-precision timestamps.[^sparkreadme]
+
+## Apache Spark
+
+Spark 4.0.0 added the `VARIANT` data type (SPARK-45827), with `VariantVal` for PySpark, variant support in PySpark UDFs, UDTFs and UDAFs, and variant support in the Spark Connect Scala client.[^r400] Spark 4.1.0 describes VARIANT as generally available "with shredding for faster reads on semi-structured data". That release enabled the Parquet variant logical type and the shredding configurations by default (SPARK-54454), infers a shredding schema in the Parquet writer (SPARK-53659), reads the Parquet `VARIANT` logical type, and adds the colon operator for field access.[^r410] Spark 4.3.0 added functions that modify variant values (`variant_set`, `variant_insert`, `variant_delete`, `variant_array_append`, `variant_strip_nulls`), `JSON_TABLE`, and pushdown of `variant_get` filters to DataSource V2 sources.[^r430]
+
+The main functions in Spark 4.3 are `parse_json` (parse a JSON string into a variant; `try_parse_json` returns null on invalid input), `variant_get` (extract a path and cast it to a type; `try_variant_get` returns null when the cast fails), `schema_of_variant`, `is_variant_null`, `to_variant_object` and the `variant_explode` generator.[^fn] The JSON, CSV and XML readers can also load each record into a single variant column with the `singleVariantColumn` option.[^n2]
+
+The following Spark SQL query runs on Spark 4.3 and returns `42` and `b`:[^fn]
+
+```sql
+SELECT
+  variant_get(v, '$.user.id', 'int')    AS user_id,
+  variant_get(v, '$.tags[1]', 'string') AS second_tag
+FROM (SELECT parse_json('{"user": {"id": 42}, "tags": ["a", "b"]}') AS v);
+```
+
+## Apache Iceberg
+
+The Iceberg table spec adds `variant` in format version 3, along with nanosecond timestamps, geometry, geography and unknown types.[^ice] The spec classes variant as a semi-structured type, neither primitive nor nested, and states that "the variant type and binary encoding are defined in the Parquet project, with support currently available for V1". In Parquet files Iceberg uses the Parquet `VARIANT` encoding and shredding; in Avro and ORC a variant is a record or struct with `metadata` and `value` fields. The spec also defines lower and upper bounds for fields inside a variant, keyed by normalized JSON path, and defines no 32-bit hash for variant because equal values can have several representations.[^ice]
+
+In the Java implementation, Iceberg 1.9.0 added the variant type to core with Parquet variant readers and writers, and Iceberg 1.10.0 added variant read support for Spark Iceberg tables.[^i190][^i1100]
+
+## Delta Lake
+
+The Delta Lake protocol defines variant as the `variantType` table feature, which requires reader version 3 and writer version 7. Variant data is written to Parquet as a struct of two binaries, `value` and `metadata`, following the Parquet Variant binary encoding. A variant column cannot be a partition or clustering column, because variant is not a comparable type.[^delta] A separate `variantShredding` feature, which depends on `variantType`, allows shredded variants, and with it Delta can keep min and max statistics for variant columns.[^delta]
+
+Delta Lake 4.0.0 made the variant type generally available (it was a preview in the Delta 4.0.0 preview release) and added shredded variants as a preview.[^d400] In Delta Lake 4.3.0 the variant shredding RFC was accepted into the protocol, and Delta Spark began collecting variant statistics on write.[^d430]
+
+## Support summary
+
+| Project | Variant type | Shredding | Notes |
+| --- | --- | --- | --- |
+| Apache Parquet (format) | Encoding spec and `VARIANT` logical type from 2.11.0[^lt] | `VariantShredding.md` from 2.11.0[^lt] | Home of the shared specification |
+| Apache Spark | 4.0.0[^r400] | Writer infers shredding schema by default from 4.1.0[^r410] | Implements a pinned commit of the Parquet spec; no UUID, Time or nanosecond timestamp values as of 4.3.0[^sparkreadme] |
+| Apache Iceberg (spec) | Format v3[^ice] | Uses Parquet shredding[^ice] | Variant v1 encoding |
+| Apache Iceberg (Java) | 1.9.0 (core and Parquet)[^i190]; 1.10.0 (Spark read)[^i1100] | Shredding fixes and Flink shredded writes listed in 1.11.0 and 1.12.0[^i1110][^i1120] | Variant is a v3 type[^ice] |
+| Delta Lake | 4.0.0, `variantType` feature[^d400] | Preview in 4.0.0[^d400]; RFC accepted in 4.3.0[^d430] | Reader v3 / writer v7[^delta] |
+
+## See also
+
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Logical type](/wiki/Logical_type)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Open table format](/wiki/Open_table_format)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+
+## References
+
+[^enc]: [Variant Binary Encoding (VariantEncoding.md, parquet-format 2.14.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.14.0/VariantEncoding.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkreadme]: [common/variant/README.md at v4.3.0](https://github.com/apache/spark/blob/v4.3.0/common/variant/README.md). *GitHub*. Retrieved 2026-11-22.
+[^ice]: [Iceberg Table Spec: Semi-structured Types](https://iceberg.apache.org/spec/#semi-structured-types). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^delta]: [Delta Transaction Log Protocol: Variant Data Type (PROTOCOL.md at v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md#variant-data-type). *GitHub*. Retrieved 2026-11-22.
+[^lt]: [Parquet Logical Type Definitions: VARIANT (parquet-format 2.11.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.11.0/LogicalTypes.md#variant). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^shred]: [Variant Shredding (VariantShredding.md, parquet-format 2.14.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.14.0/VariantShredding.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Add the Variant Specification Docs (apache/parquet-format#455)](https://github.com/apache/parquet-format/issues/455). *GitHub*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^fn]: [Variant Functions (Spark SQL, Built-in Functions, 4.3.0)](https://spark.apache.org/docs/4.3.0/api/sql/variant-functions/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [JSON Files (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-data-sources-json.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^i190]: [Apache Iceberg 1.9.0](https://github.com/apache/iceberg/releases/tag/apache-iceberg-1.9.0). *GitHub*. Retrieved 2026-11-22.
+[^i1100]: [Apache Iceberg 1.10.0](https://github.com/apache/iceberg/releases/tag/apache-iceberg-1.10.0). *GitHub*. Retrieved 2026-11-22.
+[^d400]: [Delta Lake 4.0.0](https://github.com/delta-io/delta/releases/tag/v4.0.0). *GitHub*. Retrieved 2026-11-22.
+[^d430]: [Delta Lake 4.3.0](https://github.com/delta-io/delta/releases/tag/v4.3.0). *GitHub*. Retrieved 2026-11-22.
+[^i1110]: [Apache Iceberg 1.11.0](https://github.com/apache/iceberg/releases/tag/apache-iceberg-1.11.0). *GitHub*. Retrieved 2026-11-22.
+[^i1120]: [Apache Iceberg 1.12.0](https://github.com/apache/iceberg/releases/tag/apache-iceberg-1.12.0). *GitHub*. Retrieved 2026-11-22.

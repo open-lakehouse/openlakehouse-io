@@ -1,0 +1,121 @@
+---
+title: "Spark Declarative Pipelines"
+categories: ["Pipelines and orchestration", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 4.1.0 (2025-12-16)</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala, Python</Field>
+  <Field name="type">Declarative data pipeline framework</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[Programming guide](https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html)</Field>
+  <Field name="repo">[github.com/apache/spark (python/pyspark/pipelines)](https://github.com/apache/spark/tree/v4.3.0/python/pyspark/pipelines)</Field>
+  <Field name="related">[Structured Streaming](/wiki/Structured_Streaming), [Spark Connect](/wiki/Spark_Connect), [Medallion architecture](/wiki/Medallion_architecture)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Spark 4.3.0 Declarative Pipelines programming guide, the pyspark.pipelines and SparkPipelines sources at tag v4.3.0, SPARK-51727, and the Spark 4.1.0, 4.2.0 and 4.3.0 release notes</Verified>
+
+**Spark Declarative Pipelines** (**SDP**) is a framework in [Apache Spark](/wiki/Apache_Spark) for building batch and streaming data pipelines by declaring the datasets a pipeline should produce and the queries that fill them, while Spark handles execution order, parallelism, checkpoints and retries.[^r410] SDP was added in Spark 4.1.0.[^r410] Pipelines are written in Python or SQL and run with the `spark-pipelines` command line tool.[^guide]
+
+## Key concepts
+
+A **flow** reads data from a source, applies processing logic and writes the result into a target dataset. Flows support both streaming and batch semantics. A statement such as `CREATE STREAMING TABLE target_table AS SELECT * FROM STREAM source_table` creates both the table and a flow that writes new source data into it.[^guide]
+
+A **dataset** is a queryable object produced by one or more flows. SDP has three kinds of dataset:[^guide]
+
+| Dataset | Written by | Description |
+| --- | --- | --- |
+| Streaming table | One or more streaming flows | A table that processes only new data as it arrives (incremental processing). |
+| Materialized view | Exactly one batch flow | A view whose result is precomputed and stored as a table. |
+| Temporary view | Its defining query | A view scoped to one run of the pipeline, used to share intermediate logic between flows; it cannot be read outside the pipeline. |
+
+A **pipeline** is the unit of development and execution. When a pipeline runs, SDP analyzes the dependencies between its datasets and flows and decides the order of execution and which parts run in parallel.[^guide]
+
+A **sink** lets a pipeline write to a destination outside its own tables, such as Apache Kafka, using any target that a [Structured Streaming](/wiki/Structured_Streaming) query can write to.[^guide]
+
+## Pipeline spec file
+
+A **pipeline project** is a set of `.py` and `.sql` source files plus a YAML spec file, conventionally named `spark-pipeline.yml` or `spark-pipeline.yaml`. The spec requires `name`, `libraries` (paths to the source files) and `storage` (a directory for streaming checkpoints). It may also set a default `catalog`, a default `database` (alias `schema`) and a `configuration` map of Spark properties.[^guide] An example for Spark 4.3:
+
+```yaml
+name: my_pipeline
+libraries:
+  - glob:
+      include: transformations/**
+storage: file:///absolute/path/to/storage/dir
+catalog: my_catalog
+database: my_db
+configuration:
+  spark.sql.shuffle.partitions: "1000"
+```
+
+## Defining datasets
+
+The Python API lives in the `pyspark.pipelines` module, conventionally imported as `dp`. In Spark 4.3 it exports `materialized_view`, `table`, `temporary_view`, `append_flow`, `create_streaming_table`, `create_auto_cdc_flow` and `create_sink`.[^n1] A function decorated with `@dp.materialized_view` that returns a batch DataFrame defines a materialized view; one decorated with `@dp.table` that returns a streaming DataFrame defines a streaming table. The dataset takes the function's name unless a `name` argument is given.[^guide]
+
+Since Spark 4.2, SDP injects the `spark` session into each pipeline file, so the file does not need to create one. In Spark 4.1 each file had to assign `spark = SparkSession.active()` itself.[^guide]
+
+```python
+from pyspark import pipelines as dp
+from pyspark.sql import DataFrame
+
+@dp.table
+def raw_orders() -> DataFrame:
+    return spark.readStream.table("orders_source")
+
+@dp.materialized_view
+def orders_by_state() -> DataFrame:
+    return spark.table("raw_orders").groupBy("state").count()
+```
+
+The same datasets can be declared in SQL with `CREATE STREAMING TABLE ... AS SELECT ... FROM STREAM ...`, `CREATE MATERIALIZED VIEW` and `CREATE TEMPORARY VIEW`. Several flows can append to one streaming table with `@dp.append_flow` in Python or `CREATE FLOW` in SQL.[^guide]
+
+## The spark-pipelines CLI
+
+The `spark-pipelines` CLI is built on `spark-submit` and accepts all of its arguments except `--class`, so it works with every cluster manager that `spark-submit` supports.[^guide] It has three commands:[^guide]
+
+- `spark-pipelines init --name my_pipeline` creates a new project directory with a spec file and example definitions.
+- `spark-pipelines run` runs the pipeline and monitors it until it completes. Options include `--spec` (path to the spec file), `--refresh` (update listed datasets), `--full-refresh` (clear and recompute listed datasets, including their checkpoints) and `--full-refresh-all`. Without these options, the run is an incremental update.
+- `spark-pipelines dry-run` builds and checks the pipeline without reading or writing any data.
+
+In Spark 4.3, the launcher always runs the pipeline in Spark Connect mode: it sets `spark.api.mode=connect` and fails if a user passes any other value.[^n2] A run can target a remote [Spark Connect](/wiki/Spark_Connect) server with `--remote sc://host:15002`.[^guide]
+
+### Dry runs
+
+A dry run catches many errors that would otherwise appear only during a real run: syntax errors in Python or SQL code, analysis errors such as a reference to a table or column that does not exist, and graph validation errors such as cyclic dependencies between datasets.[^guide] Because it reads and writes no data, a dry run can check a pipeline before it uses compute on real data.
+
+## Change data capture
+
+Spark 4.2.0 added **Auto CDC** to SDP, which applies a stream of insert, update and delete events to a target streaming table as Slowly Changing Dimension (SCD) Type 1 upserts.[^n3] Spark 4.3.0 added SCD Type 2, which keeps the history of how each record changed.[^r430] An Auto CDC flow needs key columns and a sequencing expression, and its target must be a streaming table backed by a format that supports row-level operations (MERGE); Spark's built-in file formats, including Parquet, do not qualify.[^guide]
+
+## History
+
+SDP was proposed in the Spark Project Improvement Proposal tracked as SPARK-51727, opened in April 2025 and resolved with fix version 4.1.0.[^n4] On 11 June 2025, Databricks announced that it would contribute its declarative ETL framework to Apache Spark as Spark Declarative Pipelines.[^n5] A Databricks blog post from the next day traces that framework to Databricks' DLT product.[^n6] Databricks documentation states that its Lakeflow pipelines product is built on SDP.[^n7]
+
+## Use in an open lakehouse
+
+SDP writes its datasets through Spark's catalogs, so the spec's `catalog` and `database` fields can point at a catalog such as an [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) or [Unity Catalog](/wiki/Unity_Catalog). A pipeline of streaming tables feeding materialized views maps onto the bronze, silver and gold layers of a [medallion architecture](/wiki/Medallion_architecture). An orchestrator such as [Apache Airflow](/wiki/Apache_Airflow) can run `spark-pipelines` as one task in a larger workflow.
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Medallion architecture](/wiki/Medallion_architecture)
+- [Apache Airflow](/wiki/Apache_Airflow)
+
+## References
+
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^guide]: [Spark Declarative Pipelines Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/declarative-pipelines-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [pyspark/pipelines/__init__.py (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/__init__.py). *Apache Spark on GitHub*. Retrieved 2026-11-22.
+[^n2]: [SparkPipelines.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/SparkPipelines.scala). *Apache Spark on GitHub*. Retrieved 2026-11-22.
+[^n3]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [SPARK-51727: SPIP: Declarative Pipelines](https://issues.apache.org/jira/browse/SPARK-51727). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n5]: [Databricks Donates Declarative Pipelines to Apache Spark Open Source Project](https://www.databricks.com/company/newsroom/press-releases/databricks-donates-declarative-pipelines-apache-sparktm-open-source). *Databricks*, 2025-06-11. Retrieved 2026-11-22.
+[^n6]: [Bringing Declarative Pipelines to the Apache Spark Open Source Project](https://www.databricks.com/blog/bringing-declarative-pipelines-apache-spark-open-source-project). *Databricks*, 2025-06-12. Retrieved 2026-11-22.
+[^n7]: [Spark Declarative Pipelines](https://docs.databricks.com/aws/en/ldp/concepts/spark-declarative-pipelines). *Databricks documentation*. Retrieved 2026-11-22.

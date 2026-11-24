@@ -39,8 +39,15 @@ import {
   patternMarkdown,
   patternPath,
 } from "../src/content/reference-architectures";
+import { buildWikiIndex, pageMarkdown } from "./wiki-index";
 
 const BASE_URL = SITE_URL;
+
+// The Open Lakehouse Wiki (src/content/wiki), same index the app uses.
+const wiki = buildWikiIndex().pages;
+const wikiArticles = wiki.filter((p) => p.kind === "article").sort((a, b) => a.title.localeCompare(b.title));
+const WIKI_TAGLINE =
+  "The open reference for the open lakehouse and the agentic lakehouse: open table formats, catalogs, engines, pipelines, and the AI agents that work on them. Every fact is cited and dated.";
 
 // Podcast episodes, written by scripts/fetch-podcast.ts (runs first in prebuild).
 type PodcastEpisode = { slug: string; title: string; date: string; episodeNumber?: number; duration?: string; summary: string; notesHtml: string; hasTranscript: boolean };
@@ -360,6 +367,16 @@ function buildSitemapEntries(): SitemapEntry[] {
     entries.push({ path: `/podcast/${e.slug}`, lastmod: e.date.slice(0, 10), changefreq: "monthly", priority: "0.7" });
   }
 
+  entries.push({ path: "/wiki/Main_Page", changefreq: "weekly", priority: "0.9" });
+  for (const p of wiki) {
+    entries.push({
+      path: p.path,
+      ...(p.verified ? { lastmod: p.verified } : {}),
+      changefreq: p.kind === "article" ? "monthly" : "weekly",
+      priority: p.kind === "article" ? "0.8" : "0.5",
+    });
+  }
+
   return entries;
 }
 
@@ -431,6 +448,13 @@ function renderLlms(): string {
   lines.push(`## ${matrix.TITLE}`);
   lines.push(withDesc(`${matrix.TITLE}: the matrix`, matrix.SLUG, `${matrix.META_DESCRIPTION} Data build ${matrix.DATA_GENERATED}. Cite this page.`));
   lines.push(withDesc(`${matrix.TITLE} explorer`, matrix.EXPLORER_PATH, "Interactive explorer for the same data: every runtime of each service, the per-release Apache Spark inventory, release notes and runtime freshness."));
+  lines.push("");
+
+  lines.push("## Open Lakehouse Wiki");
+  lines.push(withDesc("Open Lakehouse Wiki", "/wiki/Main_Page", `${WIKI_TAGLINE} Each article is also served as Markdown at its URL plus .md.`));
+  for (const p of wikiArticles) {
+    lines.push(withDesc(p.displayTitle ?? p.title, p.path, p.summary || p.title));
+  }
   lines.push("");
 
   lines.push(`## ${RA_TITLE}`);
@@ -613,6 +637,12 @@ function renderLlmsFull(): string {
   out.push("");
   out.push(matrix.matrixMarkdown(BASE_URL), "");
   for (const f of matrix.FAQS) out.push(`### ${f.q}`, "", f.a, "");
+
+  // Open Lakehouse Wiki: every article as Markdown (the same text served at <path>.md).
+  out.push("---", "", "# Open Lakehouse Wiki", "", `URL: ${url("/wiki/Main_Page")}`, "", WIKI_TAGLINE, "");
+  for (const p of wikiArticles) {
+    out.push("---", "", pageMarkdown(p));
+  }
 
   // Open Reference Architectures: hub definition, then every pattern and
   // industry page as Markdown (the same text served at <path>.md).

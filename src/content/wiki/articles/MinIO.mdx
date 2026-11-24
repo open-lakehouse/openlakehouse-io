@@ -1,0 +1,80 @@
+---
+title: "MinIO"
+categories: ["Object storage"]
+---
+
+<Infobox type="software">
+  <Field name="developer">MinIO, Inc.</Field>
+  <Field name="initial_release">2014 (first commit in the GitHub repository)</Field>
+  <Field name="latest_release">RELEASE.2025-10-15T17-29-55Z (last community release on GitHub)</Field>
+  <Field name="latest_release_date">2025-10-16</Field>
+  <Field name="written_in">Go</Field>
+  <Field name="type">Object storage server with an Amazon S3 compatible API</Field>
+  <Field name="license">GNU Affero General Public License v3.0 (Apache License 2.0 before 2021)</Field>
+  <Field name="website">[github.com/minio/minio](https://github.com/minio/minio)</Field>
+  <Field name="repo">[github.com/minio/minio](https://github.com/minio/minio) (archived)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Open lakehouse](/wiki/Open_lakehouse)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the minio/minio GitHub repository (archive state, LICENSE history, README commits and releases), the MinIO blog post on the AGPLv3 change and apache/iceberg PR 18247</Verified>
+
+<Status level="archived" since="25 April 2026">The minio/minio repository is archived and its README says it is no longer maintained. It entered maintenance mode in December 2025, and from October 2025 the community edition was distributed as source code only. MinIO, Inc. points users to its AIStor product.[^repo]</Status>
+
+**MinIO** is an object storage server, written in Go, that implements the Amazon S3 API, so that tools written for S3 can store and read objects on hardware or clusters that the operator runs.[^readme0525] In open lakehouse setups MinIO was often the S3 endpoint for local development and self-hosted deployments of table formats such as [Apache Iceberg](/wiki/Apache_Iceberg). The project changed its license from Apache 2.0 to the GNU AGPLv3 in 2021, moved the community edition to source-only distribution in October 2025, and archived its GitHub repository in April 2026.[^repo]
+
+## Status
+
+The state of the community edition changed in steps, each recorded in the repository's README:
+
+- **October 2025, source-only distribution.** A README change stated that the MinIO community edition "is now distributed as source code only" and that MinIO would no longer provide pre-compiled binary releases for it. Users were told to install with `go install` or to build their own Docker image from the Dockerfile.[^srconly] The last release published on GitHub is `RELEASE.2025-10-15T17-29-55Z`.[^releases]
+- **December 2025, maintenance mode.** The README gained a "Maintenance Mode" section: no new features, enhancements or pull requests would be accepted, critical security fixes "may be evaluated on a case-by-case basis", and existing issues and pull requests would not be actively reviewed.[^maint]
+- **January and February 2026, AIStor editions.** README updates pointed users to two editions of MinIO's commercial product, AIStor: a free-license standalone edition and a distributed enterprise edition.[^n1][^n2]
+- **April 2026, archived.** GitHub shows the repository as archived by its owner on 25 April 2026, and the README opens with "THIS REPOSITORY IS NO LONGER MAINTAINED".[^repo]
+
+The AGPLv3 source code stays available in the archived repository, and existing binaries keep working, but the README says these legacy binaries will not receive updates.[^repo] AIStor is a separate product under MinIO's own licenses; it is not the community edition under a new name.[^repo]
+
+## License history
+
+MinIO was released under the Apache License 2.0 until 2021. The commit that replaced the `LICENSE` file with the GNU Affero General Public License v3 and updated the file headers was committed on 23 April 2021.[^agplcommit] The `LICENSE` file at the tag `RELEASE.2021-04-22T15-44-28Z` is still Apache 2.0, and at `RELEASE.2021-05-11T23-27-41Z` it is AGPLv3, so the May 2021 release was the first under the new license.[^n3] MinIO announced the change in a blog post that described the server, gateway and client as fully licensed under AGPLv3.[^n4]
+
+The AGPLv3 is an open source license approved by the Open Source Initiative.[^n5] Its network clause requires that users who interact with a modified version over a network can get its source code. The MinIO README stated that all use of MinIO in an application stack "requires validation against AGPLv3 obligations" and offered commercial licensing for proprietary use.[^srconly] MinIO did not move to the [Business Source License](/wiki/Business_Source_License) or another source-available license; the community edition stayed AGPLv3 until the repository was archived.[^repo]
+
+## Use in an open lakehouse
+
+Because MinIO speaks the S3 API, engines and table formats that write to S3 can use it by changing the endpoint and turning on path-style access. A typical Spark configuration for Iceberg's `S3FileIO` against a MinIO-style endpoint looks like this:
+
+```
+spark.sql.catalog.lake.io-impl               org.apache.iceberg.aws.s3.S3FileIO
+spark.sql.catalog.lake.s3.endpoint           http://object-store:9000
+spark.sql.catalog.lake.s3.path-style-access  true
+```
+
+Any S3-compatible server can sit behind that endpoint. In September 2026 the Apache Iceberg project replaced MinIO with RustFS, another S3-compatible server, in its AWS and Kafka Connect integration tests, and the Spark quickstart in its documentation now runs a RustFS container under the network alias `minio`.[^n6]
+
+## What MinIO is not
+
+- **Not a table format or a catalog.** MinIO stores objects (files). Table semantics come from a format such as [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) or [Apache Hudi](/wiki/Apache_Hudi), and table names come from a [data catalog](/wiki/Data_catalog).
+- **Not Amazon S3.** MinIO implements the S3 API; S3 itself is an AWS service. Compatibility covers the API, and behaviour outside the API (consistency guarantees, limits, pricing) depends on the server.
+- **Not the same as AIStor.** The community edition is the AGPLv3 code in the archived repository; AIStor is MinIO, Inc.'s commercial product.[^repo]
+
+## See also
+
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Open lakehouse](/wiki/Open_lakehouse)
+- [Business Source License](/wiki/Business_Source_License)
+- [Small files problem](/wiki/Small_files_problem)
+
+## References
+
+[^repo]: [minio/minio](https://github.com/minio/minio). *GitHub*. Retrieved 2026-11-22.
+[^readme0525]: [make some targeted updates to README.md (#21125)](https://github.com/minio/minio/commit/816666a4c6). *GitHub (minio/minio)*, 2025-05-26. Retrieved 2026-11-22.
+[^srconly]: [update README.md and other docs to point to source only releases](https://github.com/minio/minio/commit/9e49d5e7a6). *GitHub (minio/minio)*, 2025-10-15. Retrieved 2026-11-22.
+[^releases]: [Releases: minio/minio](https://github.com/minio/minio/releases). *GitHub*. Retrieved 2026-11-22.
+[^maint]: [update README.md maintenance mode](https://github.com/minio/minio/commit/27742d4694). *GitHub (minio/minio)*, 2025-12-03. Retrieved 2026-11-22.
+[^n1]: [update README.md with latest free license and enterprise option](https://github.com/minio/minio/commit/be7800c813). *GitHub (minio/minio)*, 2026-01-06. Retrieved 2026-11-22.
+[^n2]: [update README.md format and clarify state of the project](https://github.com/minio/minio/commit/7aac2a2c5b). *GitHub (minio/minio)*, 2026-02-12. Retrieved 2026-11-22.
+[^agplcommit]: [update license change for MinIO](https://github.com/minio/minio/commit/069432566f). *GitHub (minio/minio)*, 2021-04-23. Retrieved 2026-11-22.
+[^n3]: [LICENSE at RELEASE.2021-05-11T23-27-41Z](https://github.com/minio/minio/blob/RELEASE.2021-05-11T23-27-41Z/LICENSE). *GitHub (minio/minio)*. Retrieved 2026-11-22.
+[^n4]: [From Open Source to Free and Open Source, MinIO is now fully licensed under GNU AGPLv3](https://blog.min.io/from-open-source-to-free-and-open-source-minio-is-now-fully-licensed-under-gnu-agplv3). *MinIO*. Retrieved 2026-11-22.
+[^n5]: [GNU Affero General Public License version 3](https://opensource.org/license/agpl-v3). *Open Source Initiative*. Retrieved 2026-11-22.
+[^n6]: [Build: Replace MinIO with RustFS in integration tests (#18247)](https://github.com/apache/iceberg/pull/18247). *GitHub (apache/iceberg)*, 2026-09-25. Retrieved 2026-11-22.

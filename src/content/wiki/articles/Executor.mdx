@@ -1,0 +1,92 @@
+---
+title: "Executor"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark executor</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Task slots (cores), execution memory, storage memory, local disk for shuffle files</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Partition](/wiki/Partition), [Trino](/wiki/Trino), [Apache Flink](/wiki/Apache_Flink)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (docs/cluster-overview.md, docs/configuration.md, docs/tuning.md, docs/job-scheduling.md, docs/running-on-kubernetes.md), the Trino 484 concepts page and the Apache Flink 2.3 architecture page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), an **executor** is a process launched for one application on a worker node; it runs the application's tasks and keeps data in memory or on disk between them.[^cluster] The driver plans the work and the executors do it. The same word appears in other engines with a different meaning, so this page also compares the Spark executor with a [Trino](/wiki/Trino) worker, an [Apache Flink](/wiki/Apache_Flink) TaskManager and a Kubernetes pod.
+
+## What an executor runs
+
+A Spark executor runs **tasks**. A task is the unit of work that the driver sends to one executor, and each task processes one [partition](/wiki/Partition) of a dataset.[^cluster][^rddguide] Spark divides each job into stages, and every task in a stage applies the same function to a different partition.[^dag]
+
+An executor runs several tasks at the same time, each in its own thread inside the executor process.[^cluster] Besides running tasks, the executor stores cached data and writes the shuffle files that later stages read; it also serves those files to other executors unless an external shuffle service does that work.[^jobsched]
+
+## Cores and task slots
+
+The number of tasks an executor can run at once is set by its cores. `spark.executor.cores` sets the cores per executor; its default is 1 on YARN and all available cores of the worker in standalone mode. `spark.task.cpus` (default 1) sets the cores each task needs, and the number of concurrent tasks on an executor is `floor(executor cores / spark.task.cpus)`.[^config] These concurrent places for tasks are often called task slots.
+
+A stage with more partitions than free slots runs in waves: when a task finishes, the slot takes the next pending task. If a task fails, Spark retries it; `spark.task.maxFailures` (default 4) is the number of consecutive failures of one task before the job fails.[^config]
+
+## Memory
+
+Each executor is a JVM process. `spark.executor.memory` (default `1g`) sets its heap. On YARN and Kubernetes, Spark also requests non-heap overhead memory, `spark.executor.memoryOverhead`, which by default is the executor memory multiplied by `spark.executor.memoryOverheadFactor` (0.10), with a minimum of 384 MiB. The container size is the sum of executor memory, overhead, off-heap memory and PySpark memory.[^config]
+
+Inside the heap, Spark uses a unified memory region for two purposes. **Execution memory** holds data for shuffles, joins, sorts and aggregations; **storage memory** holds cached data. `spark.memory.fraction` (default 0.6) sets the size of this region as a fraction of the heap minus 300 MiB, and the rest is left for user data structures and Spark metadata. Execution can evict cached blocks, but only down to the share set by `spark.memory.storageFraction` (default 0.5).[^tuning] When execution data does not fit, Spark spills it to local disk.[^rddguide]
+
+## Lifetime and relation to the driver
+
+Each Spark application gets its own executors. Without dynamic allocation they stay up for the whole application, and tasks from different applications never share a JVM. Two applications therefore cannot share in-memory data except through external storage.[^cluster] The driver must stay reachable from the executors for its whole lifetime, and executors send heartbeats to it, by default every 10 seconds, so that it knows they are alive.[^cluster][^config]
+
+## Dynamic allocation
+
+With dynamic resource allocation, Spark adds executors when tasks are waiting and removes executors that are idle. It is off by default (`spark.dynamicAllocation.enabled`) and works on standalone, YARN and Kubernetes.[^jobsched] Spark requests executors in rounds that grow exponentially (1, 2, 4, 8 and so on), and removes an executor after it has been idle for `spark.dynamicAllocation.executorIdleTimeout` (default 60 seconds). Executors that hold cached data are kept by default, because `spark.dynamicAllocation.cachedExecutorIdleTimeout` defaults to infinity.[^jobsched][^config]
+
+Removing an executor would lose the shuffle files it wrote. Dynamic allocation therefore needs one way to keep them: an external shuffle service, shuffle tracking (`spark.dynamicAllocation.shuffleTracking.enabled`, default true), shuffle block migration during decommissioning, or a shuffle storage plugin. Spark on Kubernetes does not support the external shuffle service.[^jobsched][^config]
+
+## Spark executor compared with similar terms
+
+|  | Spark executor | Trino worker | Flink TaskManager | Kubernetes pod running an executor |
+| --- | --- | --- | --- | --- |
+| What it is | A process started for one Spark application[^cluster] | A server in a Trino cluster that runs tasks and processes data[^trino] | A JVM process that runs the subtasks of a dataflow and buffers and exchanges data streams[^flink] | A Kubernetes pod that contains one executor container[^k8s] |
+| Coordinated by | The application's driver | The coordinator, which parses and plans queries[^trino] | The JobManager[^flink] | The Spark driver, through the Kubernetes API[^k8s] |
+| Unit of concurrency | Task slots (executor cores divided by task CPUs) | Tasks, which run drivers over splits[^trino] | Task slots; each slot is a fixed share of managed memory, with no CPU isolation[^flink] | Same as the executor inside it; the pod CPU request does not change task concurrency[^k8s] |
+| Shared between applications or queries? | No; only the jobs of one application use it | Yes; workers are servers of the cluster, and each query may use up to `query.max-memory-per-node` of user memory on a worker[^trino][^n1] | In a session cluster, jobs share the cluster; in an application cluster, only one application's jobs run[^flink] | No; the pod ends when the executor ends |
+| Lifetime | The application, or shorter with dynamic allocation | The Trino cluster | The Flink cluster (session) or the application (application cluster)[^flink] | The executor; pods are cleaned up when the application completes[^k8s] |
+
+A Flink task slot and a Spark task slot are close but not the same. A Flink slot reserves a fixed share of a TaskManager's managed memory, and by default subtasks of the same job can share a slot.[^flink] A Spark slot is a share of an executor's cores; all tasks on an executor draw on one unified memory pool.[^tuning]
+
+On Kubernetes, the pod and the executor are two layers. The pod's memory request and limit are the sum of `spark.executor.memory` and `spark.executor.memoryOverhead`, and `spark.kubernetes.executor.request.cores` can set the pod's CPU request apart from `spark.executor.cores`.[^k8s] Shuffle and spill files go to `emptyDir` volumes by default, which do not outlive the pod.[^k8s]
+
+## Example
+
+A configuration for executors with four task slots each, scaled by dynamic allocation:
+
+```
+spark.executor.cores                             4
+spark.executor.memory                            8g
+spark.dynamicAllocation.enabled                  true
+spark.dynamicAllocation.shuffleTracking.enabled  true
+spark.dynamicAllocation.minExecutors             1
+spark.dynamicAllocation.maxExecutors             20
+```
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Shuffle](/wiki/Shuffle)
+- [Partition](/wiki/Partition)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Trino](/wiki/Trino)
+
+## References
+
+[^cluster]: [Cluster Mode Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/cluster-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^rddguide]: [RDD Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^dag]: [DAGScheduler.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^tuning]: [Tuning Spark (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/tuning.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^trino]: [Trino concepts (Trino 484)](https://trino.io/docs/current/overview/concepts.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^flink]: [Flink Architecture (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/flink-architecture/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Resource management properties (Trino 484)](https://trino.io/docs/current/admin/properties-resource-management.html). *Trino Software Foundation*. Retrieved 2026-11-22.

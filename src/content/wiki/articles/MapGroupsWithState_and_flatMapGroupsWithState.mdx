@@ -1,0 +1,116 @@
+---
+title: "MapGroupsWithState and flatMapGroupsWithState"
+displayTitle: "mapGroupsWithState and flatMapGroupsWithState"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept" name="mapGroupsWithState and flatMapGroupsWithState">
+  <Field name="also_known_as">Arbitrary stateful operations (version 1); `[flat]MapGroupsWithState`; `applyInPandasWithState` in Python</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Grouping key, user function, `GroupState` object, `GroupStateTimeout`, output mode, optional initial state</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark) 2.2 and later (Scala, Java); `applyInPandasWithState` in Python from 3.4</Field>
+  <Field name="related">[transformWithState](/wiki/TransformWithState), [Watermark](/wiki/Watermark), [State store](/wiki/State_store)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v2.2.0, v3.2.0, v3.5.0 and v4.0.0 to v4.3.0 tags of apache/spark (KeyValueGroupedDataset.scala, GroupState.scala, python/pyspark/sql/pandas/group_ops.py, python/pyspark/sql/connect/group.py, docs/streaming/apis-on-dataframes-and-datasets.md), the Spark 2.2.0, 3.4.0 and 4.0.0 to 4.3.0 release notes, a JIRA search for deprecation tickets, and SPARK-19067, SPARK-35897, SPARK-40434, SPARK-43084, SPARK-43511 and SPARK-50770</Verified>
+
+<Status level="active">Not deprecated in any Spark release up to 4.3.0: the methods carry no deprecation annotation and no release note or migration guide deprecates them. Since Spark 4.0 the documentation calls them legacy and encourages [transformWithState](/wiki/TransformWithState) for new stateful applications.[^ssguide]</Status>
+
+In [Structured Streaming](/wiki/Structured_Streaming), **mapGroupsWithState** and **flatMapGroupsWithState** are the original operators for arbitrary stateful processing: they call a user function for each grouping key with that key's new values and a `GroupState` object that holds the key's state between micro-batches.[^gs] They were added to [Apache Spark](/wiki/Apache_Spark) in version 2.2.0 for the Scala and Java Dataset API, and Spark 3.4.0 added the Python counterpart `applyInPandasWithState`.[^r220][^r340] Spark 4.0 introduced [transformWithState](/wiki/TransformWithState) as their successor, but as of Spark 4.3.0 none of these operators is deprecated.[^ssguide]
+
+## Status
+
+Whether these operators are "deprecated" is a common question, and the primary sources answer it the same way: they are not.
+- **Code (4.0.0 to 4.3.0):** The `mapGroupsWithState` and `flatMapGroupsWithState` methods of `KeyValueGroupedDataset`, in the shared API, the classic implementation and the [Spark Connect](/wiki/Spark_Connect) client, have no `@deprecated` annotation, and the PySpark `applyInPandasWithState` docstring has no deprecation notice.[^kvgd][^groupops]
+- **Release notes:** The Spark 4.0.0, 4.1.0, 4.2.0 and 4.3.0 release notes do not deprecate them.[^r400][^r410][^r420][^r430] The Structured Streaming migration guide lists no deprecation of them either.[^n1]
+- **Documentation:** The Spark 4.3.0 programming guide describes them as the "legacy" operators and says that since Spark 4.0 users are encouraged to use `transformWithState`.[^ssguide] The transformWithState guide calls that operator their "next generation replacement".[^twsguide]
+- **Stability:** From Spark 2.2.0 to 3.5, the `GroupState` interface was annotated `@Experimental` and `@Evolving`. Spark 4.0.0 removed `@Experimental` (SPARK-50770), so in Spark 4.x it carries only `@Evolving`.[^gs220][^jira50770][^gs]
+
+In short: the operators are supported and maintained in Spark 4.3.0 and existing queries keep working. New stateful applications are pointed to [transformWithState](/wiki/TransformWithState).
+
+## How it works
+
+A query groups a Dataset with `groupByKey` and passes a function to one of the two operators. For each key that has new data in a trigger, Spark calls the function with the key, an iterator over the new values and the key's `GroupState`. The function reads the state with `get`, `getOption` or `exists`, changes it with `update`, and deletes it with `remove`. For a batch Dataset, the function is called once per group with empty state, which makes the operators the same as `mapGroups` and `flatMapGroups`.[^gs]
+
+The two operators differ in their output:[^gs]
+- **mapGroupsWithState** returns exactly one record per call, and the query must use the Update output mode. Aggregations are not allowed in the same query.[^ssguide]
+- **flatMapGroupsWithState** returns any number of records, including none, and takes an output mode parameter, Append or Update. In Append mode, aggregations are allowed after the operator.[^ssguide]
+
+The guide also says that neither operator can be used before or after a stream-stream join.[^ssguide]
+
+### Timeouts
+
+A query sets one timeout type for all groups with `GroupStateTimeout`: `NoTimeout`, `ProcessingTimeTimeout` or `EventTimeTimeout`. Each group then sets its own timeout with `setTimeoutDuration` (processing time) or `setTimeoutTimestamp` (event time, which needs a [watermark](/wiki/Watermark)). When the timeout passes, Spark calls the function for that group with no values and `hasTimedOut` set to true. A timeout never fires early, but there is no upper bound on how late it fires, because it is checked only when a trigger runs. The timeout is cleared on every call, so the function must set it again each time.[^gs]
+
+### Initial state
+
+Spark 3.2.0 added overloads that take an initial state as a `KeyValueGroupedDataset`, to start a query with state loaded from elsewhere (SPARK-35897).[^kvgd][^n2]
+
+## Language and Spark Connect support
+
+| API | Language | Added in | Spark Connect support |
+| --- | --- | --- | --- |
+| `KeyValueGroupedDataset.mapGroupsWithState`, `flatMapGroupsWithState` | Scala, Java | 2.2.0[^r220] | 3.5.0 (SPARK-43511)[^n3] |
+| `GroupedData.applyInPandasWithState` | Python (pandas) | 3.4.0 (SPARK-40434)[^r340][^groupops] | 3.5.0 (SPARK-43084)[^n4] |
+
+## Comparison with transformWithState
+
+<Hatnote>Main article: [transformWithState](/wiki/TransformWithState)</Hatnote>
+
+|  | mapGroupsWithState / flatMapGroupsWithState | transformWithState |
+| --- | --- | --- |
+| Added in | Spark 2.2.0[^r220] | Spark 4.0.0[^r400] |
+| User code | One function of key, values and `GroupState`[^gs] | A stateful processor class with separate methods for input, timers, initial state and cleanup[^twsguide] |
+| State per key | One object[^gs] | Any number of named value, list and map variables[^twsguide] |
+| Timers | One timeout per key, reset on every call[^gs] | Many timers per key that persist until they fire or are deleted[^twsguide] |
+| Automatic expiry (TTL) | No | Yes, per state variable, processing time only[^twsguide] |
+| State store providers | HDFS-backed (default) or RocksDB | RocksDB only[^n5] |
+| Real-time Mode (4.3.0) | `flatMapGroupsWithState` not yet supported[^rtm] | Scala and Java API supported[^rtm] |
+| Deprecated? | No | No |
+
+## Example
+
+A running count per word in Scala. `words` is a streaming `Dataset[String]` and `spark.implicits._` is imported; the query must be written in Update output mode.
+
+```scala
+import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
+
+val counts = words
+  .groupByKey(identity)
+  .mapGroupsWithState[Long, (String, Long)](GroupStateTimeout.NoTimeout) {
+    (word: String, values: Iterator[String], state: GroupState[Long]) =>
+      val updated = state.getOption.getOrElse(0L) + values.size
+      state.update(updated)
+      (word, updated)
+  }
+```
+
+## See also
+
+- [transformWithState](/wiki/TransformWithState)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Watermark](/wiki/Watermark)
+- [Spark Streaming (DStreams)](/wiki/Spark_Streaming_(DStreams))
+- [Spark Connect](/wiki/Spark_Connect)
+
+## References
+
+[^ssguide]: [Structured Streaming Programming Guide: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^gs]: [GroupState.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/streaming/GroupState.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r220]: [Spark Release 2.2.0](https://spark.apache.org/releases/spark-release-2-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r340]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^kvgd]: [KeyValueGroupedDataset.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/KeyValueGroupedDataset.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^groupops]: [group_ops.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/group_ops.py). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Structured Streaming Migration Guide (docs/streaming/ss-migration-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/streaming/ss-migration-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^twsguide]: [Structured Streaming Programming Guide: transformWithState (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-transform-with-state.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^gs220]: [GroupState.scala (v2.2.0)](https://github.com/apache/spark/blob/v2.2.0/sql/core/src/main/scala/org/apache/spark/sql/streaming/GroupState.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira50770]: [SPARK-50770: Removing package scope for transformWithState operator APIs](https://issues.apache.org/jira/browse/SPARK-50770). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n2]: [SPARK-35897: Support user defined initial state with flatMapGroupsWithState in Structured Streaming](https://issues.apache.org/jira/browse/SPARK-35897). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n3]: [SPARK-43511: Implemented State APIs for Spark Connect Scala](https://issues.apache.org/jira/browse/SPARK-43511). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n4]: [SPARK-43084: Add Python state API (applyInPandasWithState) and verify UDFs](https://issues.apache.org/jira/browse/SPARK-43084). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n5]: [TransformWithStateExecBase.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/operators/stateful/transformwithstate/TransformWithStateExecBase.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-22.

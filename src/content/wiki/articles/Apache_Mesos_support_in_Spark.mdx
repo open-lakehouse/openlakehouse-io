@@ -1,0 +1,74 @@
+---
+title: "Apache Mesos support in Spark"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark on Mesos, Mesos cluster manager</Field>
+  <Field name="field">Cluster resource management</Field>
+  <Field name="introduced">Before Spark 1.0; Spark was first built on Mesos</Field>
+  <Field name="key_parts">`mesos://` master URLs, coarse-grained and fine-grained modes, `MesosClusterDispatcher`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) 3.5 and earlier</Field>
+  <Field name="related">[Executor](/wiki/Executor), [Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [Spark on YARN](/wiki/Spark_on_YARN), [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v3.1.1, v3.2.0, v3.5.0 and v4.0.0 tags of apache/spark (docs/running-on-mesos.md, docs/core-migration-guide.md, resource-managers/), SPARK-35050, SPARK-44442, the Spark 4.0.0 release notes, the Apache Attic page for Mesos and the ASF board minutes</Verified>
+
+<Status level="removed" since="Apache Spark 3.2.0">Removed in Apache Spark 4.0.0. Use [Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [Spark on YARN](/wiki/Spark_on_YARN) or the standalone cluster manager instead. Deprecated by SPARK-35050 and removed by SPARK-44442.[^jira44442]</Status>
+
+**Apache Mesos support in Spark** was the integration that let [Apache Spark](/wiki/Apache_Spark) use Apache Mesos as its cluster manager: a Spark application pointed at a `mesos://` master URL received resources from Mesos and ran its [executors](/wiki/Executor) as Mesos tasks.[^mesos35] Spark itself was first written as a Mesos framework. Spark deprecated Mesos support in 3.2.0 and removed it in 4.0.0, so Spark 3.5 is the last release line that can run on Mesos.[^mig400][^jira44442]
+
+## Status
+
+Mesos support was deprecated in one minor release and removed in the next major release.
+
+- **Deprecated in Spark 3.2.0.** SPARK-35050, "Deprecate Apache Mesos as resource manager", has fix version 3.2.0. Its description gives the reason: a thread on the Mesos dev list said that Mesos was moving to the Apache Attic and ceasing development.[^jira35050] From 3.2.0 the Mesos page of the Spark documentation opens with the note that Mesos support "is deprecated as of Apache Spark 3.2.0" and "will be removed in a future version", and the core migration guide says the same.[^mesos35][^mig400]
+- **Removed in Spark 4.0.0.** SPARK-44442, "Drop mesos support", has fix version 4.0.0. The `resource-managers/mesos` module is present at the v3.5.0 tag and absent at the v4.0.0 tag. The Spark 4.0.0 core migration guide states: "In Spark 4.0, support for Apache Mesos as a resource manager was removed."[^jira44442][^mig400] The 4.0.0 release notes list SPARK-44442 and show the `mesos` library dependency (1.4.3) as removed.[^r400]
+- **Fine-grained mode** was deprecated earlier, in Spark 2.0.0, as the Mesos documentation noted until support ended.[^mesos311]
+
+The Mesos project itself is also gone. The ASF board approved a resolution to terminate the Apache Mesos project on 20 August 2025, and the Apache Attic records that Mesos retired in August 2025 and that its move to the Attic was completed in October 2025.[^board][^attic]
+
+## History
+
+Spark began at UC Berkeley as an application of Mesos. The 2010 HotCloud paper that introduced Spark says that "Spark is built on top of Mesos", a "cluster operating system" that lets several parallel applications share a cluster, and that building on Mesos reduced the programming effort Spark needed.[^paper] Spark later supported other cluster managers as well (its own standalone manager, Hadoop YARN and Kubernetes), and Mesos became one option among several.
+
+When the Mesos community discussed moving the project to the Attic, Spark deprecated its integration (SPARK-35050, April 2021).[^jira35050] The Mesos board reports record attic discussions again in 2023 and a request in February 2024 to hold off, before the board terminated the project in 2025.[^board] By then Spark had already removed the integration from its main branch in September 2023, in the work that became Spark 4.0.0.[^jira44442]
+
+## How it worked
+
+A Spark application used Mesos by setting its master URL to `mesos://host:5050`, or to `mesos://zk://host1:2181,host2:2181/mesos` for a Mesos cluster with several masters coordinated through ZooKeeper.[^mesos35] The Spark 3.5 documentation describes two scheduling modes, chosen with `spark.mesos.coarse`:[^mesos35]
+
+- **Coarse-grained mode** (default, `spark.mesos.coarse=true`): Spark acquired one long-lived Mesos task per machine and ran an executor in it, much like executors on other cluster managers.
+- **Fine-grained mode** (`spark.mesos.coarse=false`, deprecated since 2.0.0): Spark created one Mesos task for each Spark task, so cores moved between applications as tasks finished, at the cost of higher task launch overhead.
+
+For cluster deploy mode, operators ran the `MesosClusterDispatcher` (started with `sbin/start-mesos-dispatcher.sh`) and submitted applications to its URL. The documentation warned that the dispatcher had no authentication.[^mesos35]
+
+```bash
+# Spark 3.5 and earlier only; in Spark 4.0 spark-submit accepts only yarn, spark://, k8s:// and local masters
+./bin/spark-shell --master mesos://host:5050
+```
+
+## Migrating off Mesos
+
+Applications that ran on Mesos need another cluster manager to move to Spark 4. Spark 4.0 documents three: the standalone cluster manager, Hadoop YARN and Kubernetes.[^n1] Kubernetes is the closest match for a shared, multi-tenant cluster: each executor runs in its own pod, as each coarse-grained executor ran in its own Mesos task. All `spark.mesos.*` settings stop having any effect and should be removed from configuration files. See [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration) for the other changes in the same release.
+
+## See also
+
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [Spark on YARN](/wiki/Spark_on_YARN)
+- [Executor](/wiki/Executor)
+- [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^jira44442]: [SPARK-44442: Drop mesos support](https://issues.apache.org/jira/browse/SPARK-44442). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^mesos35]: [Running Spark on Mesos (docs/running-on-mesos.md at v3.5.0)](https://github.com/apache/spark/blob/v3.5.0/docs/running-on-mesos.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^mig400]: [Migration Guide: Spark Core (docs/core-migration-guide.md at v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/docs/core-migration-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira35050]: [SPARK-35050: Deprecate Apache Mesos as resource manager](https://issues.apache.org/jira/browse/SPARK-35050). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^mesos311]: [Running Spark on Mesos (docs/running-on-mesos.md at v3.1.1)](https://github.com/apache/spark/blob/v3.1.1/docs/running-on-mesos.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^board]: [Board minutes: Mesos](https://www.apache.org/foundation/board/minutes/Mesos.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^attic]: [Apache Mesos (Apache Attic)](https://attic.apache.org/projects/mesos.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^paper]: [Spark: Cluster Computing with Working Sets](https://www.usenix.org/legacy/event/hotcloud10/tech/full_papers/Zaharia.pdf). *USENIX HotCloud 2010*. Retrieved 2026-11-22.
+[^n1]: [Cluster Mode Overview (docs/cluster-overview.md at v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/docs/cluster-overview.md). *Apache Software Foundation*. Retrieved 2026-11-22.

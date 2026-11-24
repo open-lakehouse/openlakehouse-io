@@ -1,0 +1,83 @@
+---
+title: "Style guide"
+---
+
+This is the style guide for every article on the Open Lakehouse Wiki. Each page is an MDX file (Markdown plus a few components) in [the site's repository](https://github.com/open-lakehouse/openlakehouse-io/tree/main/src/content/wiki). The rules exist so that the wiki is trusted by readers, ranked by search engines, and quoted correctly by AI assistants.
+
+## Voice
+
+- Neutral and encyclopedic, like Wikipedia. Third person. No marketing ("powerful", "seamless", "cutting-edge", "revolutionary"), no "we", no "you should".
+- Vendor neutral. Name companies when they matter to the history or the license (Netflix created Iceberg; Databricks created Delta Lake), but never rank products or recommend one.
+- Short, plain sentences. Spell out an abbreviation the first time a page uses it.
+- No em dashes (U+2014). Use a semicolon, a comma, parentheses or a new sentence.
+- No filler numbers. A number is there because it is a fact the reader needs (a version, a date, a default value, a measured result), never for flavor.
+
+## Shape of an article
+
+```mdx
+---
+title: "Apache Iceberg"
+categories: ["Table formats", "Concepts"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation)</Field>
+  <Field name="latest_release">1.12.0</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Iceberg releases page and the v1.12.0 tag</Verified>
+
+**Apache Iceberg** is an open table format for ...[^spec]
+
+## How it works
+
+...
+
+## See also
+
+- [Open table format](/wiki/Open_table_format)
+
+[^spec]: [Iceberg Table Spec](https://iceberg.apache.org/spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+```
+
+1. **Frontmatter**: the `title` and the `categories`. Add `displayTitle` only when the title must start with a lower-case letter (`displayTitle: "transformWithState"`).
+1. **Infobox**: `<Infobox type="software">` for a project or `<Infobox type="concept">` for an idea or pattern, with one `<Field>` per row. Software fields: `developer`, `initial_release`, `latest_release`, `latest_release_date`, `written_in`, `type`, `license`, `website`, `repo`, `related`. Concept fields: `also_known_as`, `field`, `introduced`, `key_parts`, `implementations`, `related`. Every field is optional. The box takes the page title unless you give it a `name`.
+1. **Verified**: `<Verified date="YYYY-MM-DD">what was checked</Verified>`.
+1. **Status**, for anything that is not plainly active: `<Status level="deprecated" since="Apache Spark 4.0">Use [Structured Streaming](/wiki/Structured_Streaming) instead.[^ref]</Status>`. Levels: `active`, `experimental`, `maintenance`, `proposed` (deprecation agreed or proposed but not yet in a release), `deprecated`, `removed`, `archived`. Anything but `active` needs a reference. The page joins the matching category (Deprecated, Removed, ...) automatically.
+1. **Lead paragraph.** The first sentence defines the subject: "**Apache Iceberg** is an open table format for ..." Bold the title once. The lead answers what it is, what problem it solves and where it fits, in 2 to 4 sentences, and must make sense if quoted alone. The glossary and the page's search description use its first sentence.
+1. Sections with `##` headings that a reader would search for. Prefer questions or plain nouns: "How it works", "Architecture", "History", "Comparison with Delta Lake", "Use in an open lakehouse", "Limitations".
+1. One self-contained idea per paragraph, so any paragraph can be quoted alone. Repeat the subject's name instead of "it" at the start of a section.
+1. Comparison tables (Markdown tables) where two or more things are compared.
+1. `## See also`, a short list of related wiki articles.
+1. References are footnotes; the page lists them at the end under "References". The navigation box and the category links are added by the site.
+
+Under a heading, `<Hatnote>Main article: [Apache Iceberg](/wiki/Apache_Iceberg)</Hatnote>` points to the full article on that section's topic. `<Note>` and `<Warning>` highlight a note, or a data loss risk, known bug or breaking change.
+
+Length: say what the reader needs, then stop. A good first version is 400 to 1,200 words. Depth over breadth; a short accurate page beats a long vague one.
+
+## Facts and sources
+
+- **Every fact that could be wrong needs a reference**: versions, dates, defaults, behaviour, who created what, license. Write it as a footnote, `[^label]` in the text and one definition at the end of the page in this form: `[^label]: Author. [Title](url). *Publisher*, date. Retrieved YYYY-MM-DD.` (author and date only when the source has them). Reuse the same label to cite a source again.
+- **Primary sources first**: the project's own docs, release notes, JIRA or GitHub issues, source code, the ASF board reports, the original paper. Secondary sources (blogs, news) only for history or when nothing primary exists.
+- **Versions and release dates must be checked** against the project's release page or tags on the day you write, and the date goes in `<Verified>`. Never write a version from memory.
+- If a fact cannot be confirmed, leave it out. Do not guess, round, or "approximately" a fact you have not seen.
+- Do not copy text from other sites (license and duplicate-content reasons). Rewrite in your own words and cite.
+- Code examples must be correct for the version named. Use fenced code blocks and mark the language (```` ```python ````).
+
+## Links
+
+- Link the first mention of every concept that has (or should have) its own article: `[Apache Iceberg](/wiki/Apache_Iceberg)`. The path is the title with spaces turned into underscores. A link to an article that does not exist yet shows as plain text until someone writes it, so it is fine to link articles that should exist.
+- Link to openlakehouse.io guides where they go deeper (for example the agentic lakehouse guide), and to the official project docs.
+- Do not link the same article more than once per section.
+
+## Titles and categories
+
+- Title = the subject's common name, sentence case: "Open table format", "Apache Iceberg", "Spark Declarative Pipelines".
+- Each article goes in one or more of these `categories`: Concepts, Table formats, Catalogs, Query engines, Pipelines and orchestration, AI agents, Object storage, plus a project category where it exists (Apache Spark). Concepts and Glossary terms put the article in the [glossary](/wiki/Open_Lakehouse_Wiki:Glossary).
+- Add new articles to the navigation box in `src/content/wiki-navbox.ts`.
+
+## Files and workflow
+
+- One file per page: `src/content/wiki/articles/Title_With_Underscores.mdx`. Category pages are in `categories/`, pages about the wiki itself in `project/`.
+- To change a page, use its "Edit on GitHub" link and open a pull request. The page goes live when the pull request is merged.
+- Run `bun run dev` and open `/wiki/Title` to preview locally. Every page is also served as Markdown at its URL plus `.md`.

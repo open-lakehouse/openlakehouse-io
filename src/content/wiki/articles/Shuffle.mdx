@@ -1,0 +1,88 @@
+---
+title: "Shuffle"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Exchange (Trino; the `Exchange` operator in Spark plans)</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Map side (shuffle write), shuffle files, reduce side (shuffle fetch), stage boundary</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino), [Apache Flink](/wiki/Apache_Flink)</Field>
+  <Field name="related">[Executor](/wiki/Executor), [Partition](/wiki/Partition), [Small files problem](/wiki/Small_files_problem)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (docs/rdd-programming-guide.md, docs/sql-performance-tuning.md, docs/configuration.md, docs/job-scheduling.md, core DAGScheduler.scala), an EXPLAIN run on a Spark 4.3.1-SNAPSHOT build, the Trino 484 docs and the Apache Flink 2.3 docs</Verified>
+
+A **shuffle** is the step in a distributed query engine that redistributes data across the cluster so that it is grouped differently across [partitions](/wiki/Partition), for example so that all rows with the same key end up in the same task.[^rddguide] The term is most used in [Apache Spark](/wiki/Apache_Spark), where a shuffle copies data between [executors](/wiki/Executor) and machines and is one of the most costly operations in a job. Other engines do the same work under other names: [Trino](/wiki/Trino) calls it an exchange, and [Apache Flink](/wiki/Apache_Flink) distinguishes pipelined shuffles for streaming jobs from blocking shuffles for batch jobs.
+
+## Why a shuffle happens
+
+A Spark task works on one partition at a time. Operations such as `groupBy`, `reduceByKey` or a join need all the values for a key in one place, but those values are usually spread over many partitions and machines. Spark must read from all partitions and bring the values for each key together; this all-to-all step is the shuffle.[^rddguide]
+
+Operations whose output partition depends on many input partitions are often called **wide** transformations, and they cause a shuffle. Operations such as `map` and `filter` have **narrow** dependencies: each output partition depends on one input partition, so Spark can run them together in the same task.[^dag] The Spark documentation lists repartition operations, most `ByKey` operations and joins as operations that can cause a shuffle.[^rddguide] A broadcast join avoids a shuffle by sending the small side to every executor; Spark plans one automatically when a table is smaller than `spark.sql.autoBroadcastJoinThreshold` (default 10 MB).[^perf]
+
+## Stages and shuffle files
+
+Spark builds stages by cutting the job's graph at shuffle boundaries. One stage writes a set of map output files; the next stage reads those files after all of them are written.[^dag] The writing side is called the map side and the reading side the reduce side, names taken from MapReduce rather than from Spark's own `map` and `reduce` functions.[^rddguide]
+
+On the map side, each task keeps its output in memory until it no longer fits, then sorts it by target partition and writes it to a single file. Reduce tasks then read the sorted blocks that belong to them.[^rddguide] The files go to the directories in `spark.local.dir` (default `/tmp`) and are compressed by default (`spark.shuffle.compress`).[^config] Spark keeps shuffle files until the data that uses them is garbage collected, so that lost work can be recomputed without writing them again; long-running applications can therefore use a lot of disk.[^rddguide]
+
+In a DataFrame or SQL plan, a shuffle shows up as an `Exchange` operator. The plan below, from `EXPLAIN` on a `GROUP BY` with adaptive query execution turned off, aggregates each partition first (`partial_sum`), shuffles by the grouping key into 200 partitions, and then finishes the aggregation:
+
+```
+*(2) HashAggregate(keys=[code#14], functions=[sum(amount#13)])
++- Exchange hashpartitioning(code#14, 200), ENSURE_REQUIREMENTS, [plan_id=35]
+   +- *(1) HashAggregate(keys=[code#14], functions=[partial_sum(amount#13)])
+      +- *(1) Project [amount#13, code#14]
+         +- *(1) ColumnarToRow
+            +- FileScan parquet [amount#13,code#14,order_date#15] ...
+```
+
+The 200 comes from `spark.sql.shuffle.partitions`, whose default is 200.[^perf]
+
+## Spill
+
+Shuffle operations build in-memory structures to organize records before or after the transfer. When these do not fit in the [executor](/wiki/Executor)'s execution memory, Spark spills them to disk, which adds disk I/O and garbage collection.[^rddguide] Spilled data is compressed by default (`spark.shuffle.spill.compress`).[^config] Spill is a different thing from shuffle files: shuffle files are the normal output of the map side, while spill files are temporary overflow inside one task.
+
+## Adaptive query execution
+
+Adaptive query execution (AQE) re-plans a query while it runs, using statistics from completed shuffle stages. It is on by default since Spark 3.2.0.[^perf]
+
+- **Coalescing partitions.** After a shuffle, AQE merges small contiguous shuffle partitions so that a query does not run many tiny tasks. The target size is `spark.sql.adaptive.advisoryPartitionSizeInBytes` (default 64 MB), but by default (`spark.sql.adaptive.coalescePartitions.parallelismFirst` is true) Spark favors parallelism and only enforces a minimum partition size of 1 MB.[^perf]
+- **Skew join handling.** A shuffle partition is treated as skewed when it is larger than 5 times the median partition size and larger than 256 MB (`spark.sql.adaptive.skewJoin.skewedPartitionFactor` and `spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes`). AQE splits such partitions in sort-merge joins into smaller tasks, replicating the other side where needed.[^perf]
+- **Join conversion.** When runtime statistics show that one side of a sort-merge join is small, AQE can switch to a broadcast hash join and read the shuffle files locally.[^perf]
+
+A storage partition join avoids the shuffle altogether when both sides of a join come from a V2 data source, such as [Apache Iceberg](/wiki/Apache_Iceberg), that reports a compatible partitioning; the plan then has no `Exchange` before the join.[^perf]
+
+## External shuffle service and push-based shuffle
+
+By default, an executor serves its own shuffle files to other executors. The **external shuffle service** is a long-running process on each node that serves shuffle files instead, so they stay available after the executor that wrote them is removed. It is enabled with `spark.shuffle.service.enabled` (default false) and matters most for dynamic allocation.[^jobsched][^config] Spark on Kubernetes does not support it; there, shuffle tracking or decommissioning keeps shuffle data available instead.[^jobsched]
+
+**Push-based shuffle**, added in Spark 3.2.0, has map tasks push their blocks to external shuffle services, which merge them per shuffle partition. Reduce tasks then read a mix of merged partitions and original blocks, which turns many small random disk reads into large sequential reads. It is off by default (`spark.shuffle.push.enabled`) and is supported only on YARN with the external shuffle service.[^config]
+
+## Comparison: how engines exchange data between stages
+
+|  | Apache Spark | Trino | Apache Flink |
+| --- | --- | --- | --- |
+| Name | Shuffle (`Exchange` in plans) | Exchange[^trino] | Shuffle (pipelined or blocking network exchange)[^flinkshuffle] |
+| How data moves | Map tasks write sorted files to local disk; the next stage fetches them after the map stage is done[^dag] | Tasks write into output buffers; tasks of the next stage read them through an exchange client[^trino] | Streaming: pipelined exchange between running tasks. Batch: blocking shuffle (data is persisted and read after it is fully produced) or experimental hybrid shuffle[^flinkshuffle] |
+| Failure handling | Lost shuffle output makes Spark rerun the stages that produced it[^dag] | By default a node failure fails the query; with `retry-policy=TASK`, intermediate data is spooled through an exchange manager to storage such as S3 or HDFS[^trinofte] | Batch blocking shuffle keeps persisted results that consumers read later; hybrid shuffle can store data on remote storage[^flinkshuffle] |
+
+## See also
+
+- [Executor](/wiki/Executor)
+- [Partition](/wiki/Partition)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Small files problem](/wiki/Small_files_problem)
+- [Trino](/wiki/Trino)
+
+## References
+
+[^rddguide]: [RDD Programming Guide: Shuffle operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#shuffle-operations). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^dag]: [DAGScheduler.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^trino]: [Trino concepts (Trino 484)](https://trino.io/docs/current/overview/concepts.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^flinkshuffle]: [Batch Shuffle (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/batch/batch_shuffle/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^trinofte]: [Fault-tolerant execution (Trino 484)](https://trino.io/docs/current/admin/fault-tolerant-execution.html). *Trino Software Foundation*. Retrieved 2026-11-22.

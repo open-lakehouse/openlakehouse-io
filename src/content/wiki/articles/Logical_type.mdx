@@ -1,0 +1,93 @@
+---
+title: "Logical type"
+categories: ["Concepts", "Glossary terms"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Type annotation; LogicalType (Parquet); primitive type (Iceberg)</Field>
+  <Field name="field">Data storage formats</Field>
+  <Field name="key_parts">Physical type, logical type annotation, ConvertedType (deprecated)</Field>
+  <Field name="implementations">[Apache Parquet](/wiki/Apache_Parquet), [Apache Arrow](/wiki/Apache_Arrow), [Apache Iceberg](/wiki/Apache_Iceberg), [Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Open table format](/wiki/Open_table_format), [Variant type](/wiki/Variant_type), [Apache ORC](/wiki/Apache_ORC)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">parquet-format 2.14.0 (LogicalTypes.md, README.md, parquet.thrift), the Apache Iceberg table spec at tag apache-iceberg-1.12.0, Apache Arrow 26.0.1 (Schema.fbs and the C++ Parquet documentation), and Apache Spark 4.3.0 (SQLConf.scala, ParquetSchemaConverter.scala and the 4.3.0 documentation)</Verified>
+
+A **logical type** is an annotation that tells a reader how to interpret a stored value, layered on top of a small set of physical (storage) types. In [Apache Parquet](/wiki/Apache_Parquet), for example, a string is stored with the physical type `BYTE_ARRAY` and the logical type `STRING`, and a date is an `INT32` with the logical type `DATE`.[^pqlt] Logical types keep the set of storage types small while letting files carry richer types such as decimals, timestamps and UUIDs. Because each engine and table format has its own type system, the mapping between logical types is where data written by one tool can be read differently by another.
+
+## Physical types and logical types
+
+The Apache Parquet format defines a deliberately minimal set of physical types: `BOOLEAN`, `INT32`, `INT64`, `INT96`, `FLOAT`, `DOUBLE`, `BYTE_ARRAY` and `FIXED_LEN_BYTE_ARRAY`. The README explains that 16-bit integers, for example, are not stored separately because 32-bit integers with an efficient encoding cover them.[^pqreadme]
+
+A Parquet logical type is stored in the file metadata as a `LogicalType` field on the column. Some logical types take parameters. `DECIMAL` has a precision and a scale and can annotate `INT32` (precision up to 9), `INT64` (precision up to 18), `FIXED_LEN_BYTE_ARRAY` or `BYTE_ARRAY`. `UUID` annotates a 16-byte fixed-length array in big-endian order. `DATE` annotates an `INT32` that counts days from 1 January 1970.[^pqlt]
+
+If a reader finds a logical type it does not recognize, the specification tells it to ignore the annotation and the column order and read the column using only its physical type.[^pqlt] A newer annotation therefore degrades to raw integers or bytes in an older reader instead of failing.
+
+### Timestamps
+
+The Parquet `TIMESTAMP` logical type annotates an `INT64` and has two parameters. `unit` is `MILLIS`, `MICROS` or `NANOS`. `isAdjustedToUTC` selects the semantics: when true, the value is an instant normalized to UTC; when false, the value is a local date and time that does not refer to one point on the time-line.[^pqlt] With the `NANOS` unit, the range of an `INT64` limits values to the years 1677 to 2262.[^pqlt]
+
+### ConvertedType
+
+`ConvertedType` is the older representation of the same annotations. It is a Thrift enum, so it cannot carry parameters such as the timestamp unit and UTC flag; `LogicalType`, a union of structs, replaced it. The specification marks `ConvertedType` as deprecated, but writers must still write the matching `ConvertedType` next to the `LogicalType` so that old readers work, and readers should fall back to it when no `LogicalType` is present.[^pqlt] For example, `STRING` corresponds to the `UTF8` converted type, and a microsecond UTC timestamp corresponds to `TIMESTAMP_MICROS`. Writers must also annotate local (non-UTC) timestamps with the legacy `TIMESTAMP_MILLIS` or `TIMESTAMP_MICROS` annotations, because some older libraries used those for local timestamps.[^pqlt]
+
+### INT96 timestamps
+
+`INT96` is a physical type with no logical type. The Parquet Thrift definition marks it as deprecated and says new writers should not write data in it.[^pqthrift] The same file notes that, at the time of writing, it was still used for legacy timestamps, and parquet-format 2.14.0 added a chronological sort order for INT96 statistics.[^pqthrift][^n1] [Apache Spark](/wiki/Apache_Spark) reads INT96 as a timestamp by default (`spark.sql.parquet.int96AsTimestamp=true`), for compatibility with systems such as Impala that store timestamps this way.[^sparkconf]
+
+## How other systems map onto Parquet
+
+Engines and table formats define their own types and choose a Parquet representation for each.
+
+- **[Apache Iceberg](/wiki/Apache_Iceberg)** calls its types primitive types and defines them in the table spec, for example `timestamp` (microseconds, without time zone), `timestamptz` (microseconds, stored as UTC), and from format version 3 `timestamp_ns` and `timestamptz_ns`. Appendix A of the spec fixes the Parquet physical type and logical type for each one.[^icespec]
+- **[Apache Arrow](/wiki/Apache_Arrow)** has a `Timestamp` type with a unit (seconds to nanoseconds) and an optional time zone string. A timestamp with a non-empty time zone is a point in time relative to the UTC epoch; one with no time zone is a wall-clock value in an unknown zone, and the Arrow format states that an empty time zone must not be read as UTC.[^arrowfbs] The Arrow C++ Parquet library documents which Arrow type each Parquet logical type maps to, and recognizes and writes deprecated converted types for compatibility.[^arrowpq]
+- **Spark SQL** has `TimestampType` (timestamp with local time zone, `TIMESTAMP_LTZ`) and `TimestampNTZType` (without time zone). The SQL keyword `TIMESTAMP` is an alias for one of them, set by `spark.sql.timestampType`, whose default is `TIMESTAMP_LTZ`.[^sparkdt]
+
+## Mapping of common types
+
+The table shows how each system represents common types in Parquet, or (for Arrow) which Arrow type a Parquet logical type is read as.
+
+| Meaning | Parquet physical type and logical type | [Apache Arrow](/wiki/Apache_Arrow) type | [Apache Iceberg](/wiki/Apache_Iceberg) type | Spark SQL type written to Parquet |
+| --- | --- | --- | --- | --- |
+| UTF-8 string | `BYTE_ARRAY` + `STRING` (converted type `UTF8`)[^pqlt] | String, LargeString or StringView[^arrowpq] | `string`, stored as `binary` + `UTF8`[^icespec] | `StringType`, stored as `BINARY` + string annotation[^sparkconv] |
+| Decimal | `DECIMAL(P,S)` on `INT32`, `INT64`, `FIXED_LEN_BYTE_ARRAY` or `BYTE_ARRAY`[^pqlt] | Decimal32, Decimal64, Decimal128 or Decimal256[^arrowpq] | `decimal(P,S)`, P at most 38; `int32` if P is at most 9, `int64` if at most 18, else `fixed`[^icespec] | `DecimalType`: `INT32`, `INT64` or fixed-length array by precision, unless `spark.sql.parquet.writeLegacyFormat` (default false) is set[^sparkconv][^sparkconf] |
+| Date | `INT32` + `DATE`[^pqlt] | Date32[^arrowpq] | `date`[^icespec] | `DateType`, `INT32` + `DATE`[^sparkconv] |
+| Instant (UTC-normalized timestamp) | `INT64` + `TIMESTAMP(isAdjustedToUTC=true, unit)`[^pqlt] | Timestamp with a non-empty time zone[^arrowfbs] | `timestamptz`, microseconds, `adjustToUtc=true`[^icespec] | `TimestampType`: `INT96` by default; `TIMESTAMP_MICROS` or `TIMESTAMP_MILLIS` if `spark.sql.parquet.outputTimestampType` is set[^sparkpq][^sparkconv] |
+| Local date-time (no time zone) | `INT64` + `TIMESTAMP(isAdjustedToUTC=false, unit)`[^pqlt] | Timestamp with no time zone[^arrowfbs] | `timestamp`, microseconds, `adjustToUtc=false`[^icespec] | `TimestampNTZType`, `INT64` + `TIMESTAMP(false, MICROS)`[^sparkconv] |
+| Nanosecond timestamp | `TIMESTAMP` with unit `NANOS`[^pqlt] | Timestamp with nanosecond unit[^arrowpq] | `timestamp_ns` and `timestamptz_ns`, format version 3 only[^icespec] | Preview types `TIMESTAMP_NTZ(p)` and `TIMESTAMP_LTZ(p)`, enabled by `spark.sql.timestampNanosTypes.enabled` (default false)[^sparkdt][^sparkconf] |
+| UUID | `FIXED_LEN_BYTE_ARRAY(16)` + `UUID`[^pqlt] | Extension type `arrow.uuid`, when Arrow extensions are enabled in the reader[^arrowpq] | `uuid`, `fixed_len_byte_array[16]` + `UUID`[^icespec] | Not among the Spark SQL data types[^sparkdt] |
+
+## Interoperability pitfalls
+
+The same word, "timestamp", means different things in different systems. Iceberg `timestamp` and Spark `TimestampNTZType` are local date-times, while Spark `TimestampType` and Iceberg `timestamptz` are instants.[^icespec][^sparkdt] A tool that maps one to the other without checking `isAdjustedToUTC` can shift values by the session time zone.
+
+Spark 4.3.0 still writes `TimestampType` as INT96 by default. Its source code calls `TIMESTAMP_MICROS` the recommended setting and keeps INT96 as the default to preserve earlier behaviour.[^sparkconv] INT96 is deprecated in Parquet and carries no logical type annotation, so a reader has to know the legacy convention to treat it as a timestamp; the Iceberg spec's Parquet mapping does not use INT96 for any type.[^pqthrift][^icespec] Setting the output type to a standard logical type avoids this:
+
+```sql
+-- Spark SQL: write TimestampType columns as INT64 + TIMESTAMP(isAdjustedToUTC=true, MICROS)
+SET spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS;
+```
+
+Parquet itself does not store a time zone. The Arrow C++ writer can store the serialized Arrow schema in the file metadata (`store_schema`) so that an Arrow reader can restore the original time zone string.[^arrowpq] Spark, in the same way, writes its own schema into the Parquet footer and uses it on read, so `spark.sql.parquet.inferTimestampNTZ.enabled` only affects files not written by Spark.[^sparkconf]
+
+## See also
+
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Variant type](/wiki/Variant_type)
+- [Open table format](/wiki/Open_table_format)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+
+## References
+
+[^pqlt]: [Parquet Logical Type Definitions (LogicalTypes.md, parquet-format 2.14.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.14.0/LogicalTypes.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^pqreadme]: [parquet-format README (2.14.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.14.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^pqthrift]: [parquet.thrift (parquet-format 2.14.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.14.0/src/main/thrift/parquet.thrift). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [2.14.0](https://parquet.apache.org/blog/2026/09/11/2.14.0/). *Apache Software Foundation*, 2026-09-11. Retrieved 2026-11-22.
+[^sparkconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec (format/spec.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^arrowfbs]: [Schema.fbs (Apache Arrow 26.0.1)](https://github.com/apache/arrow/blob/apache-arrow-26.0.1/format/Schema.fbs). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^arrowpq]: [Reading and writing Parquet files (Apache Arrow C++ documentation, v26.0.1)](https://arrow.apache.org/docs/cpp/parquet.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkdt]: [Data Types (Spark 4.3.0 documentation)](https://spark.apache.org/docs/4.3.0/sql-ref-datatypes.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkconv]: [ParquetSchemaConverter.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/parquet/ParquetSchemaConverter.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkpq]: [Parquet Files (Spark 4.3.0 documentation)](https://spark.apache.org/docs/4.3.0/sql-data-sources-parquet.html). *Apache Software Foundation*. Retrieved 2026-11-22.

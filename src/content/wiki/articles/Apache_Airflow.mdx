@@ -1,0 +1,117 @@
+---
+title: "Apache Airflow"
+categories: ["Pipelines and orchestration"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation)</Field>
+  <Field name="initial_release">2015 (open sourced by Airbnb)</Field>
+  <Field name="latest_release">3.4.0</Field>
+  <Field name="latest_release_date">2026-11-06</Field>
+  <Field name="written_in">Python</Field>
+  <Field name="type">Workflow orchestration platform</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[airflow.apache.org](https://airflow.apache.org)</Field>
+  <Field name="repo">[github.com/apache/airflow](https://github.com/apache/airflow)</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Airflow 3.4.0 release notes and documentation, PyPI (apache-airflow 3.4.0, apache-airflow-providers-apache-spark 6.3.4) and the provider source at tag providers-apache-spark/6.3.4</Verified>
+
+**Apache Airflow** is an open source platform for developing, scheduling and monitoring workflows, such as batch data pipelines and machine learning jobs, in which each workflow is defined as Python code.[^index] Airflow does not process data itself; it decides when tasks run, in what order, and what happens when they fail. In an [open lakehouse](/wiki/Open_lakehouse), Airflow commonly starts the [Apache Spark](/wiki/Apache_Spark) jobs and other steps that load and transform tables.
+
+## Concepts
+
+An Airflow workflow is a **Dag** (directed acyclic graph): a model that holds everything needed to run a workflow, including its schedule, its tasks and the dependencies between them, and callbacks for when it completes.[^index] Because Dags are Python code, they can be generated dynamically and parameterized.[^index]
+
+Each step in a Dag is a **task**, usually created from an **operator**, a reusable template for one kind of work such as running a shell command or submitting a Spark job. Operators for external systems are shipped in separately versioned **provider** packages.[^spark-ops]
+
+## Architecture
+
+In Airflow 3.4, a minimal installation has the following required components:[^arch]
+
+- a **scheduler**, which triggers scheduled workflows and submits tasks to the **executor** (a configuration of the scheduler that runs inside the scheduler process, not a separate component);
+- a **Dag processor**, which parses Dag files from a **Dag bundle** and stores them in serialized form in the metadata database;
+- an **API server**, which serves the REST API and the user interface, and through which tasks report their state back to Airflow without direct database access;
+- a **metadata database**, usually PostgreSQL or MySQL, which stores the state of tasks, Dags and variables.
+
+Optional components include **workers** (for example long-running processes with the CeleryExecutor, or pods with the KubernetesExecutor), a **triggerer** that runs deferred tasks in an asyncio event loop, and a plugins folder.[^arch]
+
+## History
+
+Maxime Beauchemin started Airflow at Airbnb in October 2014. It was open sourced on Airbnb's GitHub and announced in June 2015. The project entered the Apache Incubator in March 2016, and the ASF announced Apache Airflow as a top-level project in January 2019.[^n1]
+
+Airflow 2.0.0 was published on 17 December 2020 and Airflow 3.0.0 on 22 April 2025.[^pypi] Airflow 3 introduced the Task Execution Interface (AIP-72), which moves Airflow toward a client-server architecture with an API server and a Python Task SDK, along with Dag versioning, a new React-based user interface and event-driven scheduling on data assets.[^n2] The latest release on 22 November 2026 is Airflow 3.4.0, released on 6 November 2026.[^n3]
+
+## Orchestrating Apache Spark
+
+Airflow runs Spark through the `apache-airflow-providers-apache-spark` provider package. Its latest version on 22 November 2026 is 6.3.4, published on 24 October 2026; it requires Airflow 2.11.0 or later and Python 3.11 or later.[^n4][^pyproject] Version 6.3.4 contains these operators:[^spark-ops][^src]
+
+| Operator | Module | What it does |
+| --- | --- | --- |
+| `SparkSubmitOperator` | `operators.spark_submit` | Wraps the `spark-submit` binary to launch an application; the default connection is `spark_default`. |
+| `SparkSqlOperator` | `operators.spark_sql` | Runs a Spark SQL query through the `spark-sql` binary. |
+| `SparkJDBCOperator` | `operators.spark_jdbc` | Extends `SparkSubmitOperator` to move data between Spark and JDBC databases. |
+| `PySparkOperator` | `operators.spark_pyspark` | Runs a Python function that receives a Spark session, locally or against a [Spark Connect](/wiki/Spark_Connect) server; also available as the `@task.pyspark` decorator. |
+| `SparkPipelinesOperator` | `operators.spark_pipelines` | Wraps the `spark-pipelines` CLI to run or dry-run a [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines) project. |
+
+`PySparkOperator` became available as an operator in provider 5.5.0, and `SparkPipelinesOperator` was added in 5.6.0.[^changelog] `SparkPipelinesOperator` takes a `pipeline_spec` path and a `pipeline_command` of `run` (the default) or `dry-run`.[^n5]
+
+The following Dag, for Airflow 3.4 with provider 6.3.4, checks a declarative pipeline with a dry run, runs it, and then submits a Spark application:
+
+```python
+from datetime import datetime
+
+from airflow.sdk import DAG
+from airflow.providers.apache.spark.operators.spark_pipelines import SparkPipelinesOperator
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+
+with DAG(
+    dag_id="lakehouse_daily",
+    schedule="@daily",
+    start_date=datetime(2026, 11, 1),
+    catchup=False,
+):
+    check = SparkPipelinesOperator(
+        task_id="pipeline_dry_run",
+        pipeline_spec="/opt/pipelines/sales/spark-pipeline.yml",
+        pipeline_command="dry-run",
+    )
+    run = SparkPipelinesOperator(
+        task_id="pipeline_run",
+        pipeline_spec="/opt/pipelines/sales/spark-pipeline.yml",
+    )
+    report = SparkSubmitOperator(
+        task_id="build_report",
+        application="/opt/jobs/build_report.py",
+    )
+
+    check >> run >> report
+```
+
+## Use in an open lakehouse
+
+Airflow sits above the engines in an [open lakehouse](/wiki/Open_lakehouse). It can order ingestion, transformation and maintenance jobs that run on Spark, [Trino](/wiki/Trino) or other engines against tables in [Apache Iceberg](/wiki/Apache_Iceberg) or [Delta Lake](/wiki/Delta_Lake) format. With [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines), the division of work is that SDP orders the datasets inside one pipeline, while Airflow schedules the pipeline as a whole and connects it to work outside Spark.
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Medallion architecture](/wiki/Medallion_architecture)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^index]: [What is Airflow? (Airflow 3.4.0 documentation)](https://airflow.apache.org/docs/apache-airflow/3.4.0/index.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^spark-ops]: [Apache Spark Operators (apache-airflow-providers-apache-spark 6.3.4)](https://airflow.apache.org/docs/apache-airflow-providers-apache-spark/6.3.4/operators.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^arch]: [Architecture Overview (Airflow 3.4.0)](https://airflow.apache.org/docs/apache-airflow/3.4.0/core-concepts/overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Project (Airflow 3.4.0)](https://airflow.apache.org/docs/apache-airflow/3.4.0/project.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^pypi]: [apache-airflow release history](https://pypi.org/project/apache-airflow/#history). *Python Package Index*. Retrieved 2026-11-22.
+[^n2]: [Apache Airflow 3 is Generally Available!](https://airflow.apache.org/blog/airflow-three-point-oh-is-here/). *Apache Airflow blog*. Retrieved 2026-11-22.
+[^n3]: [Release Notes (Airflow 3.4.0)](https://airflow.apache.org/docs/apache-airflow/3.4.0/release_notes.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [apache-airflow-providers-apache-spark](https://pypi.org/project/apache-airflow-providers-apache-spark/). *Python Package Index*. Retrieved 2026-11-22.
+[^pyproject]: [providers/apache/spark/pyproject.toml (tag providers-apache-spark/6.3.4)](https://github.com/apache/airflow/blob/providers-apache-spark/6.3.4/providers/apache/spark/pyproject.toml). *Apache Airflow on GitHub*. Retrieved 2026-11-22.
+[^src]: [Spark provider operators (tag providers-apache-spark/6.3.4)](https://github.com/apache/airflow/tree/providers-apache-spark/6.3.4/providers/apache/spark/src/airflow/providers/apache/spark/operators). *Apache Airflow on GitHub*. Retrieved 2026-11-22.
+[^changelog]: [Spark provider changelog (tag providers-apache-spark/6.3.4)](https://github.com/apache/airflow/blob/providers-apache-spark/6.3.4/providers/apache/spark/docs/changelog.rst). *Apache Airflow on GitHub*. Retrieved 2026-11-22.
+[^n5]: [spark_pipelines.py (tag providers-apache-spark/6.3.4)](https://github.com/apache/airflow/blob/providers-apache-spark/6.3.4/providers/apache/spark/src/airflow/providers/apache/spark/operators/spark_pipelines.py). *Apache Airflow on GitHub*. Retrieved 2026-11-22.

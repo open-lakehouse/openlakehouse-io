@@ -1,0 +1,87 @@
+---
+title: "Iceberg position delete"
+categories: ["Concepts", "Glossary terms", "Table formats"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Position delete file; positional delete</Field>
+  <Field name="field">Table formats</Field>
+  <Field name="introduced">[Apache Iceberg](/wiki/Apache_Iceberg) format version 2</Field>
+  <Field name="key_parts">Data file path, row position, optional deleted row values</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg)</Field>
+  <Field name="related">[Deletion vector](/wiki/Deletion_vector), [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read), [Small files problem](/wiki/Small_files_problem)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Iceberg table spec at tags apache-iceberg-1.8.0, apache-iceberg-1.11.0 and apache-iceberg-1.12.0, the Iceberg 1.8.0, 1.9.0, 1.11.0 and 1.12.0 release notes, TableMetadata.java and the configuration, Spark queries and Spark procedures documentation at apache-iceberg-1.12.0</Verified>
+
+<Status level="deprecated" since="Iceberg format version 3">Use [deletion vectors](/wiki/Deletion_vector) instead. Writers must not add position delete files to v3 tables; existing ones in tables upgraded from v2 stay valid. Position delete files remain the normal merge-on-read output for v2 tables, and v2 is still the default format version in Iceberg 1.12.0.[^spec]</Status>
+
+In [Apache Iceberg](/wiki/Apache_Iceberg), a **position delete** marks one row as deleted by naming the data file that holds it and the row's position in that file, counting from zero. In format version 2, position deletes are stored in **position delete files**, which are separate data files of (file path, position) pairs that readers apply when they scan the table.[^spec] Format version 3 deprecates position delete files and stores position deletes as [deletion vectors](/wiki/Deletion_vector) instead, one bitmap per data file.[^spec] Position delete files are one of the ways Iceberg implements [merge-on-read](/wiki/Copy-on-write_and_merge-on-read).
+
+## Status
+
+The Iceberg table spec marks position delete files as deprecated in format version 3. Its section on position delete files says that existing position deletes must be written to deletion vectors when the deletes for a data file are next updated, and the row-level delete section says that position delete files must not be added to v3 tables, but existing position delete files are valid.[^spec] The same rules are in the spec at the apache-iceberg-1.8.0 tag, the first release that could write deletion vectors.[^spec180][^releases]
+
+The deprecation applies to the format version, not to the Iceberg library. Iceberg 1.12.0 still creates new tables with format version 2 unless `format-version` is set, and in a v2 table a merge-on-read `DELETE`, `UPDATE` or `MERGE` still writes position delete files.[^tablemeta][^config] Position delete files are deprecated only for tables that have moved to format version 3 or later.
+
+One part of the v2 design has been deprecated and removed in the Java library. The v2 spec allows a position delete file to also store the deleted row's values, but the spec notes that no implementation writes them; the Java implementation deprecated reading and writing that column in 1.11.0, and the 1.12.0 release notes list the removal of position delete files with row data.[^spec][^releases]
+
+## How it works
+
+A position delete file stores rows of a struct called `file_position_delete`. Each row has a `file_path`, the full URI of the target data file, and a `pos`, the ordinal position of the deleted row in that file. A third, optional column, `row`, can hold the deleted row's values.[^spec] The rows must be sorted by `file_path` and then `pos`, so that a columnar reader can skip entries for other files and can apply deletes while it streams through a data file instead of holding them in memory.[^spec]
+
+At read time, a position delete file applies to a data file in the same partition whose data sequence number is less than or equal to the delete file's, unless a deletion vector already covers that data file. Because the comparison includes equal sequence numbers, a delete can remove rows added in the same commit.[^spec] One position delete file can hold deletes for many data files. When all its deletes are for one data file, the manifest entry can record that file in `referenced_data_file`, which lets planners skip the delete file for every other data file.[^spec]
+
+Each delete operation adds new delete files, so a table that takes many small row-level changes collects many small position delete files. Iceberg provides the `rewrite_position_delete_files` Spark procedure to compact them and to drop entries that point to data files that are no longer live.[^procs] This is one form of the [small files problem](/wiki/Small_files_problem).
+
+## Position delete file compared with related mechanisms
+
+|  | Position delete file | Deletion vector | Equality delete file |
+| --- | --- | --- | --- |
+| Format versions | v2; deprecated in v3, not allowed for new writes[^spec] | v3 and later[^spec] | v2 and later[^spec] |
+| Identifies rows by | Data file path and row position | Row position, as a bitmap tied to one data file | Values of one or more columns, such as `id = 5` |
+| Files per data file | Many; any number of delete files can cover a data file | At most one per data file in a snapshot | Many |
+| Stored as | A Parquet, Avro or ORC file; the spec recommends the table's default file format | A blob in a Puffin file | A Parquet, Avro or ORC file |
+
+[^spec]
+
+Equality deletes are not affected by the v3 change. They delete rows by value rather than by position, and v3 tables can still add them.[^spec]
+
+## Upgrading to format version 3
+
+When a v2 table is upgraded to v3, its existing position delete files stay in table metadata and still apply. The first time a writer adds a deletion vector for a data file, it must merge that file's existing position deletes into the vector, and from then on readers can ignore position delete files that match a data file with a vector.[^spec] A position delete file that covers several data files has to stay in metadata until every data file it covers has a deletion vector.[^spec] Iceberg 1.9.0 added a Spark action to rewrite v2 position deletes as v3 deletion vectors.[^releases]
+
+## Example
+
+In Spark with an Iceberg catalog, a merge-on-read `DELETE` on a v2 table writes a position delete file, which the `position_deletes` metadata table shows:[^queries][^config]
+
+```sql
+CREATE TABLE demo.db.orders (id BIGINT, status STRING)
+USING iceberg
+TBLPROPERTIES ('format-version' = '2', 'write.delete.mode' = 'merge-on-read');
+
+INSERT INTO demo.db.orders VALUES (1, 'open'), (2, 'open'), (3, 'closed');
+DELETE FROM demo.db.orders WHERE id = 2;
+
+SELECT file_path, pos, delete_file_path FROM demo.db.orders.position_deletes;
+```
+
+With `'format-version' = '3'`, the same `DELETE` writes a deletion vector instead; Iceberg 1.8.0 added support for showing deletion vectors in the `position_deletes` table.[^releases]
+
+## See also
+
+- [Deletion vector](/wiki/Deletion_vector)
+- [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Small files problem](/wiki/Small_files_problem)
+- [Open table format](/wiki/Open_table_format)
+
+## References
+
+[^spec]: [Iceberg Table Spec (format/spec.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^spec180]: [Iceberg Table Spec (format/spec.md at apache-iceberg-1.8.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.8.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^releases]: [Apache Iceberg Releases](https://iceberg.apache.org/releases/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^tablemeta]: [TableMetadata.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/core/src/main/java/org/apache/iceberg/TableMetadata.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^config]: [Configuration (docs/docs/configuration.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/docs/docs/configuration.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^procs]: [Spark Procedures (docs/docs/spark-procedures.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/docs/docs/spark-procedures.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^queries]: [Spark Queries (docs/docs/spark-queries.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/docs/docs/spark-queries.md). *Apache Software Foundation*. Retrieved 2026-11-22.

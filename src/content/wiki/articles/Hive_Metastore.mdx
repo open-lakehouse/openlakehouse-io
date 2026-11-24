@@ -1,0 +1,87 @@
+---
+title: "Hive Metastore"
+categories: ["Catalogs", "Concepts", "Glossary terms"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">HMS, Hive metastore service</Field>
+  <Field name="field">Data management, table catalogs</Field>
+  <Field name="key_parts">Thrift API service, relational database for metadata, warehouse directory, optional Iceberg REST catalog endpoint</Field>
+  <Field name="implementations">[Apache Hive](/wiki/Apache_Hive) (standalone metastore); clients in [Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino) and [Apache Iceberg](/wiki/Apache_Iceberg)</Field>
+  <Field name="related">[Data catalog](/wiki/Data_catalog), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog), [Apache Polaris](/wiki/Apache_Polaris), [Unity Catalog](/wiki/Unity_Catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Hive downloads page (releases to 4.2.1), MetastoreConf.java and HiveConf.java at rel/release-4.2.1, the standalone-metastore module at that tag, HIVE-28059 and HIVE-29062, HiveUtils.scala and docs/sql-data-sources-hive-tables.md at the v4.3.0 tag of apache/spark, CatalogUtil.java at apache-iceberg-1.12.0 and the Trino 484 metastore documentation</Verified>
+
+<Status level="active">No Hive release deprecates the metastore. Hive 4.1.0 ships it as a standalone component and adds an Iceberg REST catalog endpoint to it; the older Hive 1.x, 2.x and 3.x release lines are end of life.[^downloads]</Status>
+
+The **Hive Metastore** (HMS) is the metadata service of [Apache Hive](/wiki/Apache_Hive): it stores the names, schemas, partitions and storage locations of tables in a relational database and serves them to engines through a Thrift API.[^hivehome] Engines other than Hive, such as [Apache Spark](/wiki/Apache_Spark), Impala and [Trino](/wiki/Trino), use the same service, which made it the shared table catalog of the Hadoop-era data lake. In an [open lakehouse](/wiki/Open_lakehouse) the Hive Metastore is one of several [data catalog](/wiki/Data_catalog) options, next to catalogs that implement the [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) API.
+
+## What the Hive Metastore stores
+
+The Hive Metastore keeps metadata, not data. For each table it records the database (namespace), columns and types, partition values, the storage location of each partition and the file format and SerDe used to read it. The Hive project describes it as the central store of metadata for tables and partitions, reached through the metastore service API by clients that include Hive, Impala and Spark.[^hivehome]
+
+The metadata lives in a relational database accessed through JDO. In Hive 4.2.1 the default connection URL is an embedded Apache Derby database (`jdbc:derby:;databaseName=metastore_db;create=true`), which suits tests; production deployments point it at a server database. The default warehouse directory for managed tables is `/user/hive/warehouse`, and the Thrift service listens on port 9083 by default.[^mconf]
+
+## How engines use it
+
+Each engine connects to the Hive Metastore with its own client and its own idea of what a table is.
+
+- **[Apache Spark](/wiki/Apache_Spark)** uses the Hive Metastore as its persistent catalog when Hive support is enabled. Spark 4.3.0 bundles a Hive 2.3.10 client and can talk to metastores of versions 2.0.0 to 2.3.10, 3.0.0 to 3.1.3 and 4.0.0 to 4.1.0, set with `spark.sql.hive.metastore.version` and `spark.sql.hive.metastore.jars`.[^sparkhive][^n1]
+- **[Trino](/wiki/Trino)** uses a Thrift metastore (`hive.metastore=thrift`, the default) for its Hive, Delta Lake and Hudi connectors, configured with `hive.metastore.uri`, and offers `hive_metastore` as one Iceberg catalog type.[^trino]
+- **[Apache Iceberg](/wiki/Apache_Iceberg)** ships a `HiveCatalog` (catalog type `hive`). It stores a pointer to the table's current metadata file in the metastore and uses the metastore to make commits atomic.[^icebergcat]
+
+## Hive Metastore and the Iceberg REST catalog
+
+The Hive Metastore and REST catalogs are often presented as old and new, but since Hive 4.1.0 the metastore can be both. HIVE-28059 added an Iceberg REST catalog to the metastore in 4.1.0, and HIVE-28658 added a REST catalog client in 4.2.0.[^hive28059][^n2] In Hive 4.2.1 the endpoint is a servlet that is off by default (`metastore.catalog.servlet.port` is -1), serves the path `iceberg`, and uses JWT authentication unless `metastore.catalog.servlet.auth` selects none, simple or OAuth 2.[^mconf]
+
+|  | Hive Metastore (Thrift API) | Iceberg REST catalog |
+| --- | --- | --- |
+| Protocol | Thrift RPC, port 9083 by default[^mconf] | HTTP and JSON, defined by an OpenAPI specification[^restspec] |
+| Table formats | Hive tables in any supported file format; Iceberg tables through a metadata pointer | Iceberg tables and views |
+| Commit model | Coordinated by each client; Iceberg's `HiveCatalog`, for example, takes a metastore lock around each commit[^n3] | The client sends updates with requirements; the server checks the requirements and applies the commit, or rejects it with a conflict[^restspec] |
+| Client coupling | Clients must match a supported metastore version (for example Spark's version list)[^sparkhive] | Any client that speaks the REST specification |
+| Example implementations | Hive standalone metastore | [Apache Polaris](/wiki/Apache_Polaris), [Unity Catalog](/wiki/Unity_Catalog), [Project Nessie](/wiki/Project_Nessie), the Hive Metastore REST endpoint[^hive28059] |
+
+## Standalone metastore
+
+The metastore code was moved into its own `standalone-metastore` module during Hive 3.0 work, so that it can run without the rest of Hive.[^n4] At the rel/release-4.2.1 tag that module contains separate client, common, server, tools and REST catalog submodules.[^n5] Hive 4.1.0 was the first release to provide the metastore as a standalone component in binary and Docker image form (HIVE-29062).[^downloads][^n6]
+
+## Status
+
+The Hive Metastore is not deprecated in any Hive release, and Hive 4.2.1, released on 24 August 2026, fixed security issues in it.[^downloads] What has ended is support for old release lines: the Hive community declared the 1.x line end of life in April 2024, the 2.x line in May 2024 and the 3.x line in October 2024.[^downloads]
+
+This matters for Spark users. The Hive client bundled with Spark 4.3.0 is version 2.3.10, from a line that is end of life; a Spark application that connects to a Hive 4 metastore must load matching client jars through `spark.sql.hive.metastore.jars`.[^sparkhive]
+
+## Limitations
+
+- **Hive-shaped model.** The metastore models tables as directories of files with partitions. Table formats such as Iceberg keep their real metadata in their own files and use the metastore only for a pointer.[^icebergcat]
+- **Version coupling.** Thrift clients must be compatible with the server version, which is why Spark lists the metastore versions it supports.[^sparkhive]
+- **Governance.** The metastore records metadata; authorization is left to other projects. The Hive project names Apache Ranger for authorization and Apache Atlas for lineage.[^hivehome]
+
+## See also
+
+- [Apache Hive](/wiki/Apache_Hive)
+- [Hive on Spark](/wiki/Hive_on_Spark)
+- [Data catalog](/wiki/Data_catalog)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Apache Polaris](/wiki/Apache_Polaris)
+- [Unity Catalog](/wiki/Unity_Catalog)
+- [Project Nessie](/wiki/Project_Nessie)
+
+## References
+
+[^downloads]: [Downloads (Apache Hive news and releases)](https://hive.apache.org/general/downloads/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^hivehome]: [Apache Hive](https://hive.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^mconf]: [MetastoreConf.java (rel/release-4.2.1)](https://github.com/apache/hive/blob/rel/release-4.2.1/standalone-metastore/metastore-common/src/main/java/org/apache/hadoop/hive/metastore/conf/MetastoreConf.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkhive]: [Hive Tables (docs/sql-data-sources-hive-tables.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/sql-data-sources-hive-tables.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [HiveUtils.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/hive/src/main/scala/org/apache/spark/sql/hive/HiveUtils.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^trino]: [Metastores (Trino 484)](https://trino.io/docs/current/object-storage/metastores.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^icebergcat]: [CatalogUtil.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/core/src/main/java/org/apache/iceberg/CatalogUtil.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^hive28059]: [HIVE-28059: Iceberg REST Catalog](https://issues.apache.org/jira/browse/HIVE-28059). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n2]: [HIVE-28658: Iceberg REST Catalog client](https://issues.apache.org/jira/browse/HIVE-28658). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^restspec]: [Iceberg REST Catalog API (rest-catalog-open-api.yaml at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/open-api/rest-catalog-open-api.yaml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [HiveTableOperations.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/hive-metastore/src/main/java/org/apache/iceberg/hive/HiveTableOperations.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [HIVE-17733: Move RawStore to standalone metastore](https://issues.apache.org/jira/browse/HIVE-17733). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n5]: [standalone-metastore at rel/release-4.2.1](https://github.com/apache/hive/tree/rel/release-4.2.1/standalone-metastore). *GitHub*. Retrieved 2026-11-22.
+[^n6]: [HIVE-29062: Add standalone module for packaging the Metastore](https://issues.apache.org/jira/browse/HIVE-29062). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.

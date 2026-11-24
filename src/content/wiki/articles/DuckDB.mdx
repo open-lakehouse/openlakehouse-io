@@ -1,0 +1,103 @@
+---
+title: "DuckDB"
+categories: ["Query engines"]
+---
+
+<Infobox type="software">
+  <Field name="developer">DuckDB Foundation and contributors; originally Centrum Wiskunde & Informatica (CWI)</Field>
+  <Field name="initial_release">2019-06-27 (v0.1.0)</Field>
+  <Field name="latest_release">2.0.1 (LTS)</Field>
+  <Field name="latest_release_date">2026-11-20</Field>
+  <Field name="written_in">C++</Field>
+  <Field name="type">In-process analytical SQL database</Field>
+  <Field name="license">MIT License</Field>
+  <Field name="website">[duckdb.org](https://duckdb.org)</Field>
+  <Field name="repo">[github.com/duckdb/duckdb](https://github.com/duckdb/duckdb)</Field>
+  <Field name="related">[Apache Parquet](/wiki/Apache_Parquet), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Unity Catalog](/wiki/Unity_Catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the DuckDB release calendar, the v2.0.1 GitHub release and the DuckDB 2.0 documentation</Verified>
+
+**DuckDB** is an open source, in-process SQL database management system designed for analytical query workloads. It runs embedded inside a host application instead of as a separate server process, and it uses a columnar, vectorized query engine.[^why] Through extensions, DuckDB reads [Apache Parquet](/wiki/Apache_Parquet) files and [open table formats](/wiki/Open_table_format) such as [Apache Iceberg](/wiki/Apache_Iceberg) and [Delta Lake](/wiki/Delta_Lake), which makes it a single-node engine for an [open lakehouse](/wiki/Open_lakehouse).[^ext]
+
+## History
+
+DuckDB was created by Mark Raasveldt and Hannes Mühleisen at the Centrum Wiskunde & Informatica (CWI) in Amsterdam, the Netherlands.[^faq]
+
+The first tagged release, v0.1.0, was published on GitHub on 27 June 2019.[^n1] Version 1.0.0 was released on 3 June 2024.[^n2] Version 2.0.0 was released on 21 October 2026 as a long-term support (LTS) release, followed by 2.0.1 on 20 November 2026.[^calendar]
+
+The DuckDB Foundation is a non-profit organization that holds the intellectual property of the project, and its statutes keep DuckDB open source under the MIT License. DuckLabs, a company based in Amsterdam co-founded by Raasveldt and Mühleisen, provides commercial support and employs the core contributors.[^faq]
+
+DuckLabs joined Amazon Web Services (AWS) in September 2026. According to the project FAQ, the intellectual property of DuckDB remained with the DuckDB Foundation and the project continues as open source.[^faq]
+
+## Design
+
+DuckDB runs embedded in the process of the application that uses it, by default without a separate database server. It has no external dependencies at build time or at run time; building it needs only a C++17 compiler.[^why]
+
+DuckDB targets online analytical processing (OLAP): long-running queries that read large parts of a dataset, such as aggregations and joins across several tables. Its execution engine is columnar and vectorized, so it processes batches of values instead of one row at a time, which lowers the overhead per value.[^why]
+
+DuckDB compiles for Linux, macOS and Windows on x86 and ARM processors, and it can run in a web browser through DuckDB-Wasm.[^why]
+
+## Releases and support
+
+Starting with version 1.4.0, every other DuckDB release is an LTS release, which receives community support for about one year. Version 2.0.0 is an LTS release with an end-of-life date of 22 October 2027. The release calendar lists version 2.1.0 as planned for the first half of 2027, with tentative dates.[^calendar]
+
+## Extensions
+
+DuckDB adds features through extensions. The core extensions maintained by the DuckDB team include:[^ext]
+- `parquet`, to read and write Parquet files.
+- `httpfs`, to read and write files over HTTP(S) and Amazon S3.
+- `iceberg`, for the Apache Iceberg table format.
+- `delta`, for the Delta Lake format.
+- `ducklake`, for the DuckLake format.
+- `unity_catalog`, for [Unity Catalog](/wiki/Unity_Catalog) connectivity.
+- `glue`, for AWS Glue Data Catalog connectivity (marked experimental).
+
+The DuckDB documentation classifies the `parquet` and `httpfs` extensions as primary, with community support, and the lakehouse format extensions as secondary, supported on a best-effort basis.[^ext]
+
+## Use with Apache Iceberg
+
+The DuckDB `iceberg` extension reads Iceberg tables in two ways. It can read a single table directly from storage by pointing at the table metadata, which needs no catalog and is read-only. It can also attach an [Iceberg REST catalog](/wiki/Iceberg_REST_catalog), which unlocks the full feature set, including writes.[^iceberg]
+
+A REST catalog is attached with a secret that holds the OAuth client credentials and an `ATTACH` statement:[^iceberg]
+
+```sql
+CREATE SECRET iceberg_secret (
+    TYPE iceberg,
+    CLIENT_ID 'admin',
+    CLIENT_SECRET 'password',
+    OAUTH2_SERVER_URI 'https://catalog.example.com/v1/oauth/tokens'
+);
+
+ATTACH 'warehouse' AS my_catalog (
+    TYPE iceberg,
+    SECRET iceberg_secret,
+    URI 'https://catalog.example.com'
+);
+```
+
+The DuckDB documentation gives setup instructions for several catalogs, including Amazon S3 Tables, AWS Glue, Cloudflare R2 Data Catalog, [Apache Polaris](/wiki/Apache_Polaris), Lakekeeper, SeaweedFS and Google Cloud BigLake. The Polaris example sets `ACCESS_DELEGATION_MODE 'vended_credentials'`.[^n3]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), DuckDB is an engine that reads the same tables as distributed engines such as [Apache Spark](/wiki/Apache_Spark) and [Trino](/wiki/Trino), through a shared catalog. The Unity Catalog documentation, for example, shows DuckDB attaching a Unity Catalog catalog with the `unity_catalog` and `delta` extensions, querying and appending to its Delta tables, and creating catalog-managed tables.[^n4]
+
+## See also
+
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Trino](/wiki/Trino)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^why]: [Why DuckDB](https://duckdb.org/why_duckdb). *DuckDB Foundation*. Retrieved 2026-11-22.
+[^ext]: [Core Extensions](https://duckdb.org/docs/2.0/core_extensions/overview.html). *DuckDB Foundation*. Retrieved 2026-11-22.
+[^faq]: [Frequently Asked Questions](https://duckdb.org/faq). *DuckDB Foundation*. Retrieved 2026-11-22.
+[^n1]: [Release v0.1.0](https://github.com/duckdb/duckdb/releases/tag/v0.1.0). *GitHub*. Retrieved 2026-11-22.
+[^n2]: [Release v1.0.0](https://github.com/duckdb/duckdb/releases/tag/v1.0.0). *GitHub*. Retrieved 2026-11-22.
+[^calendar]: [Release Calendar](https://duckdb.org/release_calendar). *DuckDB Foundation*. Retrieved 2026-11-22.
+[^iceberg]: [Iceberg Extension](https://duckdb.org/docs/2.0/core_extensions/iceberg/overview.html). *DuckDB Foundation*. Retrieved 2026-11-22.
+[^n3]: [Catalogs](https://duckdb.org/docs/2.0/core_extensions/iceberg/catalogs.html). *DuckDB Foundation*. Retrieved 2026-11-22.
+[^n4]: [Using DuckDB with Unity Catalog](https://unitycatalog.io/docs/how-to/duckdb/). *Unity Catalog project*. Retrieved 2026-11-22.

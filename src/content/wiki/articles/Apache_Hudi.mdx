@@ -1,0 +1,99 @@
+---
+title: "Apache Hudi"
+categories: ["Table formats"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) (originally Uber)</Field>
+  <Field name="latest_release">1.2.1</Field>
+  <Field name="latest_release_date">2026-09-24</Field>
+  <Field name="written_in">Java (main project); Rust (hudi-rs)</Field>
+  <Field name="type">[Open table format](/wiki/Open_table_format)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[hudi.apache.org](https://hudi.apache.org)</Field>
+  <Field name="repo">[github.com/apache/hudi](https://github.com/apache/hudi)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Parquet](/wiki/Apache_Parquet)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Hudi download page and GitHub release release-1.2.1, the Hudi docs and the ASF incubator record</Verified>
+
+**Apache Hudi** (pronounced "hoodie") is an [open table format](/wiki/Open_table_format) and data lake platform that adds tables, transactions, record-level upserts and deletes, indexes and table services to data stored in open file formats on a data lake.[^overview] Hudi is designed for incremental pipelines that apply streams of changes to tables, as well as for batch workloads. It is one of the table formats used in an [open lakehouse](/wiki/Open_lakehouse), and engines such as [Apache Spark](/wiki/Apache_Spark), Apache Flink and [Trino](/wiki/Trino) can query Hudi tables.[^overview]
+
+## How it works
+
+### Timeline
+
+Every change to an Apache Hudi table, including writes, table services and schema changes, is recorded as an action on the Hudi timeline. The timeline is a log of actions at points in time (instants) and is the source of truth for the state of the table. Each action has a requested instant, which acts as the transaction ID, a completed instant, a state (requested, inflight or completed) and a type.[^timeline]
+
+Action types on the Hudi timeline include commit, delta commit (for merge-on-read tables), replace commit, clean, compaction, log compaction, clustering, indexing and rollback.[^timeline]
+
+### File groups and file slices
+
+Apache Hudi organises data into file groups. An update to an existing file group produces a new file slice tied to the commit that wrote it, and an insert can start a new file group. A query checks the timeline for completed writes and reads only the latest committed file slices, so it does not see files from writes still in flight.[^tabletypes]
+
+## Features
+
+### Table types
+
+Apache Hudi has two table types, which define how writes are stored.[^tabletypes]
+
+| Table type | How updates and deletes are written | Trade-off stated in the Hudi docs |
+| --- | --- | --- |
+| Copy on write (CoW) | A new base file is written in the file group; no log files are used. | Queries read only base files; writes can be slower because base files are rewritten. |
+| Merge on read (MoR) | Changes go to log files, which are merged with base files at query time and folded in by periodic compaction. | Lower write latency; query performance depends on whether log files have been compacted. |
+
+### Query types
+
+Hudi supports snapshot queries, incremental queries and read-optimized queries.[^overview] Incremental queries return only data written since a given instant on the timeline, with the latest value for each record key. A change data capture (CDC) form of incremental query returns inserted, updated and deleted records with before and after images and the operation that caused each change.[^tabletypes]
+
+### Indexes
+
+Apache Hudi maintains indexes that map each record key, optionally with its partition path, to the file group that holds it. For copy-on-write tables the index avoids joining incoming records against the whole table to decide which files to rewrite. For merge-on-read tables it bounds the change records each base file must be merged with. Secondary indexes build on the same mapping.[^indexes]
+
+### Table services
+
+Hudi runs table services that are recorded on the timeline like any other action. Cleaning removes file slices that are no longer needed, compaction merges log files into base files, and clustering rewrites file groups with a new sort order or layout.[^timeline]
+
+## History
+
+Hudi was originally developed at Uber, under the name "Hoodie", to support upsert and incremental consumption in Uber's ingestion, ETL and machine learning pipelines.[^proposal] The project entered the Apache Incubator on 17 January 2019 and graduated to a top-level Apache project on 20 May 2020.[^incubator]
+
+The Apache Hudi download page lists release 1.2.1 as the newest version.[^download] Its GitHub release was published on 24 September 2026.[^release] The project also publishes patch releases on older lines; for example, 1.1.2 was published on GitHub after 1.2.1.[^n1]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Apache Hudi tables hold data in open file formats on cloud or object storage, with the timeline and metadata stored alongside.[^overview] Hudi's record-level upserts, indexes and incremental queries are aimed at pipelines that apply streams of changes and pass only changed records to downstream tables, for example between layers of a [Medallion architecture](/wiki/Medallion_architecture).[^tabletypes] [Delta Lake](/wiki/Delta_Lake)'s UniForm feature can also expose Delta tables to Hudi readers (in preview).[^n2]
+
+## Engine support
+
+The Hudi documentation names [Apache Spark](/wiki/Apache_Spark), Apache Flink, Presto, [Trino](/wiki/Trino) and Apache Hive as query engines for Hudi tables, with quick start guides for Spark and Flink.[^overview] Trino's Hudi connector requires Hudi 0.12.3 or later.[^n3] Hudi-rs is a native Rust implementation with Python bindings, for use outside the Java virtual machine.[^overview][^n4]
+
+## Limitations
+
+Each Apache Hudi table type has a cost. Copy-on-write writes can be slow because a whole base file is rewritten even when only a few of its records change. Merge-on-read query performance varies with how far compaction has caught up with the log files.[^tabletypes] Both table types rely on table services such as cleaning, compaction and clustering being scheduled and run.[^timeline]
+
+Engine support for Hudi features varies, and some connectors set a minimum Hudi version.[^n5]
+
+## See also
+
+- [Open table format](/wiki/Open_table_format)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Structured Streaming](/wiki/Structured_Streaming)
+
+## References
+
+[^overview]: [Overview](https://hudi.apache.org/docs/overview). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^timeline]: [Timeline](https://hudi.apache.org/docs/timeline). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^tabletypes]: [Table & Query Types](https://hudi.apache.org/docs/table_types). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^indexes]: [Indexes](https://hudi.apache.org/docs/indexes). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^proposal]: [HudiProposal](https://cwiki.apache.org/confluence/display/INCUBATOR/HudiProposal). *Apache Incubator wiki*. Retrieved 2026-11-22.
+[^incubator]: [Hudi Project Incubation Status](https://incubator.apache.org/projects/hudi.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^download]: [Download](https://hudi.apache.org/releases/download). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^release]: [Release 1.2.1](https://github.com/apache/hudi/releases/tag/release-1.2.1). *GitHub*. Retrieved 2026-11-22.
+[^n1]: [Release 1.1.2](https://github.com/apache/hudi/releases/tag/release-1.1.2). *GitHub*. Retrieved 2026-11-22.
+[^n2]: [Universal Format (UniForm)](https://docs.delta.io/latest/delta-uniform.html). *Delta Lake project*. Retrieved 2026-11-22.
+[^n3]: [Hudi connector](https://trino.io/docs/current/connector/hudi.html). *Trino*. Retrieved 2026-11-22.
+[^n4]: [apache/hudi-rs](https://github.com/apache/hudi-rs). *GitHub*. Retrieved 2026-11-22.
+[^n5]: [Hudi connector](https://trino.io/docs/current/connector/hudi.html). *Trino*. Retrieved 2026-11-22.

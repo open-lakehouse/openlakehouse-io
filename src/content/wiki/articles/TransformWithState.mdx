@@ -1,0 +1,142 @@
+---
+title: "TransformWithState"
+displayTitle: "transformWithState"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept" name="transformWithState">
+  <Field name="also_known_as">Arbitrary State API v2, TWS</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Stateful processor, state variables (value, list, map), timers, TTL, time mode, output mode, optional initial state</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark) 4.0 and later (Scala, Java, Python)</Field>
+  <Field name="related">[mapGroupsWithState and flatMapGroupsWithState](/wiki/MapGroupsWithState_and_flatMapGroupsWithState), [Watermark](/wiki/Watermark), [State store](/wiki/State_store)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.0.0, v4.1.0 and v4.3.0 tags of apache/spark (KeyValueGroupedDataset.scala, StatefulProcessor.scala, TransformWithStateExecBase.scala, python/pyspark/sql/pandas/group_ops.py, python/pyspark/sql/connect/group.py, docs/streaming/structured-streaming-transform-with-state.md), the Spark 4.0.0, 4.1.0, 4.2.0 and 4.3.0 release notes, and SPARK-46815, SPARK-50770, SPARK-50855, SPARK-50856, SPARK-51814 and SPARK-51827</Verified>
+
+<Status level="active" since="Apache Spark 4.0.0">The current operator for arbitrary stateful processing in Structured Streaming. Its public interfaces (`StatefulProcessor`, `TimeMode`) carry the `@Evolving` annotation at v4.3.0, not `@Experimental`.[^jira46815]</Status>
+
+In [Structured Streaming](/wiki/Structured_Streaming), **transformWithState** is the operator for arbitrary stateful processing: user code, written as a stateful processor class, receives the rows for each grouping key, keeps any number of typed state variables for that key across micro-batches, registers timers and emits zero or more output rows.[^guide] It was added in [Apache Spark](/wiki/Apache_Spark) 4.0.0 as the "Arbitrary State API v2".[^r400] The Spark documentation calls it the next-generation replacement for [mapGroupsWithState and flatMapGroupsWithState](/wiki/MapGroupsWithState_and_flatMapGroupsWithState) in Scala and Java and for `applyInPandasWithState` in Python; those older operators are still supported and are not deprecated.[^guide]
+
+## What transformWithState is for
+
+Built-in stateful operators such as streaming aggregation, deduplication and stream-stream joins cover common patterns, and Spark manages their state. Some logic does not fit them: sessionization with custom rules, downtime detection, fraud scoring over a user's history, or emitting an alert when nothing has arrived for a key. For these, Structured Streaming offers arbitrary stateful operators, where user code decides what to store, when to emit and when to forget.[^ssguide] transformWithState is the second generation of that API. The guide says that since Spark 4.0 users are encouraged to build complex stateful applications on it rather than on the older operators.[^ssguide]
+
+## How it works
+
+A query groups a streaming Dataset or DataFrame by key and passes a **stateful processor** to `transformWithState`. The processor is a class that extends `StatefulProcessor` and implements these methods:[^guide][^sp]
+- `init`, called once to declare state variables through the processor's handle.
+- `handleInputRows`, called with the key and an iterator of that key's new rows; it returns output rows.
+- `handleExpiredTimer`, called once for each timer that has fired; by default it returns nothing.
+- `handleInitialState`, available on `StatefulProcessorWithInitialState`, called once per key of an optional initial-state DataFrame before any input is processed.
+- `close`, for cleanup.
+
+### State variables
+
+State is declared as named variables, not as a single object per key. There are three types: **ValueState** (one value), **ListState** (appends are cheap) and **MapState** (point lookups by a user key are cheap). A processor can declare several of each, and each has its own encoder.[^guide] Variables can be added between runs of the same query, and removed with `deleteIfExists` in `init`. With the Avro state encoding (`spark.sql.streaming.stateStore.encodingFormat` set to `avro`), the schema of a variable's value can evolve by adding, removing, reordering or widening fields.[^guide]
+
+### Timers and TTL
+
+The time mode is chosen per query: `TimeMode.None()`, `TimeMode.ProcessingTime()` or `TimeMode.EventTime()`.[^timemode] In processing-time or event-time mode, the processor can register, list and delete any number of timers per key; timers are checkpointed and can fire after a restart.[^guide] In event-time mode, timers fire as the [watermark](/wiki/Watermark) passes them.
+
+Each state variable can have a time-to-live (TTL) through `TTLConfig`. Values are not returned after the TTL has passed and are eventually removed; every update resets the TTL. TTL works only with `TimeMode.ProcessingTime`.[^guide][^n1]
+
+### State store requirement
+
+transformWithState runs only on the RocksDB [state store](/wiki/State_store). In a streaming query, the operator checks `spark.sql.streaming.stateStore.providerClass` and fails with the error `STORE_BACKEND_NOT_SUPPORTED_FOR_TWS` unless it is `RocksDBStateStoreProvider`.[^base] The default provider in Spark 4.3.0 is still the HDFS-backed state store, so the setting must be changed before the query first starts; the provider cannot be changed between restarts of a query.[^n2] The operator stores its several variables as column families in one RocksDB instance.[^r400]
+
+### Debugging and testing
+
+The state data source can read a transformWithState query's state one variable at a time (option `stateVarName`) and list registered timers (option `readRegisteredTimers`). `TwsTester`, in Scala and Python, runs a stateful processor without a streaming query for unit tests; it does not model TTL or automatic watermark advancement.[^guide]
+
+## Language and Spark Connect support
+
+| API | Language | Data passed to the processor | Added in | Spark Connect support |
+| --- | --- | --- | --- | --- |
+| `KeyValueGroupedDataset.transformWithState` | Scala, Java | Typed objects (encoders) | 4.0.0[^r400][^jira50770] | 4.1.0[^jira50855] |
+| `GroupedData.transformWithStateInPandas` | Python | pandas DataFrames | 4.0.0[^groupops] | 4.1.0[^jira50856] |
+| `GroupedData.transformWithState` | Python | `Row` objects | 4.1.0[^jira51814] | 4.1.0[^jira51827] |
+
+In Spark 4.0.0 the [Spark Connect](/wiki/Spark_Connect) Scala client declared `transformWithState` but threw `UnsupportedOperationException`, and the Python Connect client had no `transformWithStateInPandas`; both work over Connect from 4.1.0.[^n3][^r410] The guide suggests the pandas variant for most Python users and the Row variant for high key cardinality, where conversion to pandas costs more.[^guide]
+
+From Spark 4.3.0 the Scala and Java API can run with the real-time trigger (SPARK-57228); the two Python APIs are not supported in Real-time Mode.[^guide][^n4] transformWithState also runs in batch queries (SPARK-46865 for Scala, SPARK-50428 for Python).[^r400]
+
+## Comparison with mapGroupsWithState
+
+<Hatnote>Main article: [mapGroupsWithState and flatMapGroupsWithState](/wiki/MapGroupsWithState_and_flatMapGroupsWithState)</Hatnote>
+
+|  | transformWithState | mapGroupsWithState / flatMapGroupsWithState |
+| --- | --- | --- |
+| Added in | Spark 4.0.0[^r400] | Spark 2.2.0[^r220] |
+| User code | A class with `init`, `handleInputRows`, `handleExpiredTimer` and other methods[^sp] | One function of key, values and a `GroupState`[^gs] |
+| State per key | Any number of named value, list and map variables[^guide] | One state object[^gs] |
+| Timers | Many timers per key, listed and deleted by the processor[^guide] | One timeout per key[^gs] |
+| Automatic expiry | TTL per state variable (processing time)[^guide] | None; the function removes state itself, usually on timeout |
+| State schema evolution | Supported for values with Avro encoding[^guide] | Not offered |
+| State store | RocksDB only[^base] | HDFS-backed (default) or RocksDB |
+| Python API | `transformWithStateInPandas` (4.0.0), `transformWithState` (4.1.0)[^groupops] | `applyInPandasWithState` (3.4.0)[^groupops] |
+| Deprecated? | No | No; see [mapGroupsWithState and flatMapGroupsWithState](/wiki/MapGroupsWithState_and_flatMapGroupsWithState) |
+
+## Example
+
+A running count per word in Scala, for Spark 4.0 or later. `words` is a streaming `Dataset[String]` and `spark.implicits._` is imported.
+
+```scala
+import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.streaming._
+
+class RunningCount extends StatefulProcessor[String, String, (String, Long)] {
+  @transient private var count: ValueState[Long] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    count = getHandle.getValueState[Long]("count", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      rows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, Long)] = {
+    val updated = (if (count.exists()) count.get() else 0L) + rows.size
+    count.update(updated)
+    Iterator((key, updated))
+  }
+}
+
+spark.conf.set("spark.sql.streaming.stateStore.providerClass",
+  "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+
+val counts = words
+  .groupByKey(identity)
+  .transformWithState(new RunningCount, TimeMode.None(), OutputMode.Update())
+```
+
+## See also
+
+- [mapGroupsWithState and flatMapGroupsWithState](/wiki/MapGroupsWithState_and_flatMapGroupsWithState)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Watermark](/wiki/Watermark)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Spark Connect](/wiki/Spark_Connect)
+
+## References
+
+[^jira46815]: [SPARK-46815: Structured Streaming - Arbitrary State API v2](https://issues.apache.org/jira/browse/SPARK-46815). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^guide]: [Structured Streaming Programming Guide: transformWithState (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-transform-with-state.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ssguide]: [Structured Streaming Programming Guide: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sp]: [StatefulProcessor.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/streaming/StatefulProcessor.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^timemode]: [TimeMode.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/java/org/apache/spark/sql/streaming/TimeMode.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [TTLConfig.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/streaming/TTLConfig.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^base]: [TransformWithStateExecBase.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/operators/stateful/transformwithstate/TransformWithStateExecBase.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [SQLConf.scala (v4.3.0), spark.sql.streaming.stateStore.providerClass](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira50770]: [SPARK-50770: Removing package scope for transformWithState operator APIs](https://issues.apache.org/jira/browse/SPARK-50770). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^jira50855]: [SPARK-50855: Spark Connect Support for TransformWithState In Scala](https://issues.apache.org/jira/browse/SPARK-50855). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^groupops]: [group_ops.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/group_ops.py). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira50856]: [SPARK-50856: Spark Connect Support for TransformWithStateInPandas In Python](https://issues.apache.org/jira/browse/SPARK-50856). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^jira51814]: [SPARK-51814: Introduce a new API transformWithState in PySpark](https://issues.apache.org/jira/browse/SPARK-51814). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^jira51827]: [SPARK-51827: Support Spark Connect in new API transformWithState in PySpark](https://issues.apache.org/jira/browse/SPARK-51827). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n3]: [connect/KeyValueGroupedDataset.scala (v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/KeyValueGroupedDataset.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r220]: [Spark Release 2.2.0](https://spark.apache.org/releases/spark-release-2-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^gs]: [GroupState.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/streaming/GroupState.scala). *Apache Software Foundation*. Retrieved 2026-11-22.

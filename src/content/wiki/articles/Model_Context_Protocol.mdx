@@ -1,0 +1,118 @@
+---
+title: "Model Context Protocol"
+categories: ["AI agents"]
+---
+
+<Infobox type="software">
+  <Field name="developer">Agentic AI Foundation ([Linux Foundation](/wiki/Linux_Foundation)); created by [Anthropic](/wiki/Anthropic)</Field>
+  <Field name="initial_release">2024</Field>
+  <Field name="latest_release">Specification 2026-07-28</Field>
+  <Field name="latest_release_date">2026-07-28</Field>
+  <Field name="type">Protocol for connecting AI applications to data and tools</Field>
+  <Field name="license">Apache License 2.0 for new contributions (transitioning from MIT)</Field>
+  <Field name="website">[modelcontextprotocol.io](https://modelcontextprotocol.io)</Field>
+  <Field name="repo">[github.com/modelcontextprotocol/modelcontextprotocol](https://github.com/modelcontextprotocol/modelcontextprotocol)</Field>
+  <Field name="related">[Agentic lakehouse](/wiki/Agentic_lakehouse), [Data catalog](/wiki/Data_catalog), [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Model Context Protocol specification revision 2026-07-28 on modelcontextprotocol.io and its GitHub release</Verified>
+
+The **Model Context Protocol** (**MCP**) is an open protocol that connects applications built on large language models (LLMs) to external data sources and tools. MCP defines a standard way for an application to share context with a model, expose tools that the model can call, and build workflows from several integrations.[^spec] In an [agentic lakehouse](/wiki/Agentic_lakehouse), MCP is one way for an AI agent to look up tables in a [data catalog](/wiki/Data_catalog), run queries and check pipelines through tools that a server exposes.
+
+## Architecture
+
+MCP uses a client-host-server architecture. The **host** is the LLM application; it creates and manages clients, enforces security policy and consent, and coordinates the model. Each **client** lives inside the host and talks to exactly one server. A **server** provides context and capabilities, and can run as a local process or as a remote service.[^arch]
+
+The MCP design keeps servers isolated. A server receives only the context it needs, the full conversation stays with the host, and a server cannot see into other servers; the host controls any interaction between them.[^arch]
+
+### Base protocol
+
+MCP messages use JSON-RPC 2.0.[^spec] In revision 2026-07-28, MCP is stateless: every request carries its own protocol version and client capabilities in its `_meta` field, and servers advertise their capabilities in response to a `server/discover` request.[^arch] Revisions up to 2025-11-25 instead opened a session with an `initialize` handshake. A server or client may support both styles, and the specification gives rules for detecting which style the other side uses.[^versioning]
+
+### Server features
+
+Servers offer three primitives, each controlled by a different party.[^server]
+
+| Primitive | Controlled by | Purpose |
+| --- | --- | --- |
+| Tools | The model | Functions the model can call to take actions or retrieve information |
+| Resources | The application | Structured data or content attached as context |
+| Prompts | The user | Templates or instructions the user invokes, such as slash commands |
+
+A client lists a server's tools with `tools/list` and calls one with `tools/call`. Each tool has a name, a description and an input schema written in JSON Schema, and may declare an output schema for structured results.[^tools]
+
+### Client features
+
+Clients may offer elicitation, through which a server asks the user for more information.[^spec] In revision 2026-07-28, such requests arrive inside a server's reply as an `InputRequiredResult`. Sampling and roots are deprecated as of that revision.[^arch]
+
+### Transports
+
+The specification defines two standard transports. With **stdio**, the client launches the server as a subprocess and exchanges newline-delimited JSON-RPC messages over standard input and output. With **Streamable HTTP**, each message is an HTTP POST to one MCP endpoint, and replies come back as a JSON object or a server-sent events stream for that request. Custom transports are allowed if they keep the JSON-RPC format and message patterns.[^transports]
+
+### Extensions
+
+Optional extensions add functionality beyond the core protocol and must be supported by both sides. Examples named in the specification include Tasks, for long-running asynchronous operations, and MCP Apps, for interactive interface elements.[^spec]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), an MCP server can stand between an agent and lakehouse systems, so that the agent acts through a defined set of tools whose inputs the server validates and whose access the server controls.[^tools] Examples of such tools include the following.
+
+- **Catalog lookups.** A server can expose tools or resources that list catalogs, schemas and tables in a [data catalog](/wiki/Data_catalog) such as [Unity Catalog](/wiki/Unity_Catalog) or [Apache Polaris](/wiki/Apache_Polaris), or return a table's schema, before the agent writes a query.
+- **Running a query.** A tool can take SQL as an argument, run it on an engine such as [Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino) or [DuckDB](/wiki/DuckDB), and return rows as structured content that matches the tool's output schema.[^tools]
+- **Dry-running a pipeline.** A tool can wrap `spark-pipelines dry-run` from [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines), which checks a pipeline for syntax, analysis and graph errors without reading or writing data.[^n1] The agent can then fix errors before a real run spends compute.
+
+The following request calls a hypothetical `run_query` tool. As in the specification's own examples, the required `_meta` fields are left out for brevity.[^tools]
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "run_query",
+    "arguments": {
+      "sql": "SELECT region, count(*) FROM sales.orders GROUP BY region"
+    }
+  }
+}
+```
+
+The openlakehouse.io [agentic lakehouse guide](https://openlakehouse.io/agentic-lakehouse) covers how agents, catalogs and pipelines fit together in more depth.
+
+## History
+
+[Anthropic](/wiki/Anthropic) announced and open sourced the Model Context Protocol on 25 November 2024. The announcement included the specification and software development kits (SDKs), local MCP server support in the Claude Desktop apps, and a repository of open source servers.[^announce]
+
+On 9 December 2025, Anthropic donated MCP to the newly formed Agentic AI Foundation, a directed fund under the Linux Foundation, where MCP became a founding project.[^aaif]
+
+Specification revisions are named by date. Published revisions include 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25 and 2026-07-28.[^releases] The project is moving its license from MIT to the Apache License 2.0; new code and specification contributions are licensed under Apache 2.0.[^license]
+
+## Limitations
+
+MCP does not enforce security at the protocol level. The specification states that tools represent arbitrary code execution, that hosts must obtain user consent before invoking a tool, and that implementors should build their own consent, authorization and access controls.[^spec] It recommends a human in the loop who can deny tool calls, and clients must treat tool annotations as untrusted unless they come from a trusted server.[^tools]
+
+Revision 2026-07-28 changed how sessions work. Clients that only use the older `initialize` handshake cannot talk to servers that only implement the newer revision.[^versioning] Tool names are unique only within one server, so a host that combines several servers should handle name collisions, for example by adding a server prefix.[^tools]
+
+Because MCP has no protocol-level session in revision 2026-07-28, a server that keeps state across calls, such as an open database transaction, must return an explicit handle and receive it on later calls.[^tools]
+
+## See also
+
+- [Agentic lakehouse](/wiki/Agentic_lakehouse)
+- [Data catalog](/wiki/Data_catalog)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Unity Catalog](/wiki/Unity_Catalog)
+
+## References
+
+[^spec]: [Specification](https://modelcontextprotocol.io/specification/latest). *Model Context Protocol*. Retrieved 2026-11-22.
+[^arch]: [Architecture](https://modelcontextprotocol.io/specification/2026-07-28/architecture). *Model Context Protocol*. Retrieved 2026-11-22.
+[^versioning]: [Versioning and Compatibility](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning). *Model Context Protocol*. Retrieved 2026-11-22.
+[^server]: [Server Features: Overview](https://modelcontextprotocol.io/specification/2026-07-28/server). *Model Context Protocol*. Retrieved 2026-11-22.
+[^tools]: [Tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools). *Model Context Protocol*. Retrieved 2026-11-22.
+[^transports]: [Transports: Overview](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports). *Model Context Protocol*. Retrieved 2026-11-22.
+[^n1]: [Spark Declarative Pipelines Programming Guide](https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^announce]: [Introducing the Model Context Protocol](https://www.anthropic.com/news/model-context-protocol). *Anthropic*, 2024-11-25. Retrieved 2026-11-22.
+[^aaif]: [MCP joins the Agentic AI Foundation](https://blog.modelcontextprotocol.io/posts/2025-12-09-mcp-joins-agentic-ai-foundation/). *Model Context Protocol blog*, 2025-12-09. Retrieved 2026-11-22.
+[^releases]: [Releases](https://github.com/modelcontextprotocol/modelcontextprotocol/releases). *GitHub*. Retrieved 2026-11-22.
+[^license]: [LICENSE](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/LICENSE). *GitHub*. Retrieved 2026-11-22.

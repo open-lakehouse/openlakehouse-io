@@ -1,0 +1,116 @@
+---
+title: "Structured Streaming"
+categories: ["Pipelines and orchestration", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 2.0.0 (2016-07-26, experimental)</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala, Java, Python</Field>
+  <Field name="type">Stream processing engine</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[Programming guide](https://spark.apache.org/docs/latest/streaming/index.html)</Field>
+  <Field name="repo">[github.com/apache/spark](https://github.com/apache/spark)</Field>
+  <Field name="related">[Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines), [Apache Spark](/wiki/Apache_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Spark 4.3.0 Structured Streaming guides (overview, APIs, Real-time Mode, transformWithState) and the Spark 2.0.0, 2.2.0, 4.0.0, 4.1.0 and 4.3.0 release notes</Verified>
+
+**Structured Streaming** is the stream processing engine of [Apache Spark](/wiki/Apache_Spark), built on the Spark SQL engine, in which a streaming computation is written with the same DataFrame and Dataset operations as a batch computation on static data.[^overview] Spark runs the query incrementally as new data arrives and keeps the result up to date. Through checkpointing and write-ahead logs, Structured Streaming provides end-to-end exactly-once guarantees with sources and sinks that support them.[^overview]
+
+## Programming model
+
+Structured Streaming treats a live data stream as a table that grows as new rows arrive. A streaming query is a query on that input table, and its output is a result table that Spark updates each time it processes new data.[^start]
+
+The **output mode** says what part of the result table is written to the sink after each update:[^start]
+
+- **Append**: only rows added since the last trigger. It applies to queries whose existing result rows never change.
+- **Complete**: the entire result table.
+- **Update**: only rows that changed since the last trigger (available since Spark 2.1.1). Without aggregations it behaves like append mode.
+
+Streaming queries can aggregate over event-time windows, including tumbling, sliding and session windows. A **watermark** tells Spark how late data may arrive, so that it can finalize old windows and drop their state. Structured Streaming also supports stream-static joins, stream-stream joins and deduplication.[^apis]
+
+The following PySpark example counts rows from the built-in `rate` test source in 30-second event-time windows and prints finished windows to the console. It runs on Spark 4.3.
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import window
+
+spark = SparkSession.builder.appName("rate-counts").getOrCreate()
+
+events = spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+
+counts = (
+    events.withWatermark("timestamp", "1 minute")
+    .groupBy(window("timestamp", "30 seconds"))
+    .count()
+)
+
+query = (
+    counts.writeStream.outputMode("append")
+    .format("console")
+    .option("checkpointLocation", "/tmp/rate-counts-checkpoint")
+    .start()
+)
+query.awaitTermination()
+```
+
+## Sources, sinks and state
+
+Built-in sources include files, Apache Kafka, a socket source for testing and rate sources that generate test data.[^apis] Built-in sinks include files, Kafka, `foreach`, `foreachBatch`, and console and memory sinks for debugging.[^apis] Connectors for [open table formats](/wiki/Open_table_format) such as [Apache Iceberg](/wiki/Apache_Iceberg) and [Delta Lake](/wiki/Delta_Lake) let their tables serve as streaming sources and sinks.[^n1][^n2]
+
+Stateful operators such as aggregations, joins and deduplication keep state between batches in a **state store**. Since Spark 3.2, Spark includes a RocksDB-based state store provider that keeps state in native memory and on local disk instead of the JVM heap.[^apis]
+
+`transformWithState`, available since Spark 4.0, is the operator for arbitrary stateful processing. It replaces the older `mapGroupsWithState` and `flatMapGroupsWithState` APIs in Scala and `applyInPandasWithState` in Python, and adds features such as timers and time-to-live (TTL) eviction of state. It is available in Scala, Java and Python.[^tws]
+
+## Execution modes and triggers
+
+By default, Structured Streaming runs a query as a series of small batch jobs (**micro-batches**), with end-to-end latencies as low as about 100 milliseconds.[^overview] The **trigger** controls timing:[^apis]
+
+| Trigger | Behaviour |
+| --- | --- |
+| Unspecified (default) | Starts the next micro-batch as soon as the previous one finishes. |
+| Fixed interval (`processingTime`) | Starts micro-batches at a set interval; skips a batch when there is no new data. |
+| Available-now (`availableNow`) | Processes all data available at start, possibly in several micro-batches, then stops. |
+| One-time | Processes available data in one micro-batch, then stops. Deprecated in favour of available-now. |
+| Continuous | Experimental low-latency mode, added in Spark 2.3, with at-least-once guarantees.[^overview] |
+| Real-time | Real-time Mode, added in Spark 4.1.0 (see below). |
+
+**Real-time Mode** runs long-lived tasks, one per input partition, that process records as they arrive instead of waiting for a batch boundary. The Spark documentation states that this lowers end-to-end latency from the micro-batch floor to roughly the time needed to process and send one record. The trigger's duration (default 5 minutes) then mainly sets how often the query checkpoints.[^rtm] Spark 4.1.0 supported stateless queries in this mode.[^r410] Spark 4.3.0 added streaming aggregation, `dropDuplicates` and the Scala and Java `transformWithState` operator, using a pipelined shuffle; stream-stream joins and `flatMapGroupsWithState` are not yet supported in this mode.[^rtm][^r430] In PySpark, the mode is enabled with `.trigger(realTime="5 minutes")`.[^rtm]
+
+## History
+
+Spark 2.0.0 shipped the first, experimental release of Structured Streaming as a higher-level streaming API on Spark SQL and the Catalyst optimizer.[^n3] Spark 2.2.0 removed the experimental label and declared the APIs generally available (SPARK-20844).[^n4] Spark 4.0.0 added the Arbitrary State API v2 (`transformWithState`) and a State Data Source for reading state when debugging.[^n5] Real-time Mode followed in 4.1.0 (SPARK-53736) and gained stateful queries in 4.3.0.[^r410][^r430]
+
+The older Spark Streaming API, based on discretized streams (DStreams), is described in the Spark 4.3 documentation as the previous generation of Spark's streaming engine; it receives no further updates, and the documentation directs new work to Structured Streaming.[^n6]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Structured Streaming typically ingests events from a message bus into bronze tables and keeps downstream tables current. [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines) builds on it: SDP streaming tables are filled by Structured Streaming flows, and SDP can read from any source that `spark.readStream` supports.[^n7]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Medallion architecture](/wiki/Medallion_architecture)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+
+## References
+
+[^overview]: [Structured Streaming Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/index.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^start]: [Structured Streaming: Getting Started (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/getting-started.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^apis]: [Structured Streaming: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Spark Structured Streaming](https://iceberg.apache.org/docs/latest/spark-structured-streaming/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^n2]: [Table streaming reads and writes](https://docs.delta.io/delta-streaming/). *Delta Lake*. Retrieved 2026-11-22.
+[^tws]: [Structured Streaming: transformWithState (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-transform-with-state.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [Spark Release 2.2.0](https://spark.apache.org/releases/spark-release-2-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n5]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n6]: [Spark Streaming Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n7]: [Spark Declarative Pipelines Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/declarative-pipelines-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.

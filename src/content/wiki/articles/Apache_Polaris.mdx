@@ -1,0 +1,80 @@
+---
+title: "Apache Polaris"
+categories: ["Catalogs"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation)</Field>
+  <Field name="initial_release">2025 (0.9.0-incubating)</Field>
+  <Field name="latest_release">1.9.0</Field>
+  <Field name="latest_release_date">2026-11-14</Field>
+  <Field name="written_in">Java</Field>
+  <Field name="type">[Data catalog](/wiki/Data_catalog), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) server</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[polaris.apache.org](https://polaris.apache.org)</Field>
+  <Field name="repo">[github.com/apache/polaris](https://github.com/apache/polaris)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog), [Unity Catalog](/wiki/Unity_Catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Polaris download page, the 1.9.0 documentation and the Apache Incubator status page</Verified>
+
+**Apache Polaris** is an open source catalog for [Apache Iceberg](/wiki/Apache_Iceberg) tables that implements the [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) API, so that several query engines can read and write the same tables through one catalog.[^incubator][^docs] Polaris adds role-based access control and credential vending on top of the REST protocol.[^docs] It is a top-level project of the Apache Software Foundation (ASF).[^grad]
+
+## History
+
+The Polaris incubation proposal states that the project was first developed from ideas of many employees within Snowflake, that most core developers came from Snowflake and Dremio, and that the code was licensed under the Apache License 2.0.[^proposal]
+
+Polaris entered the Apache Incubator on 9 August 2024.[^incubator] The first release listed on the project's download page is 0.9.0, dated 11 March 2025, and version 1.0.0 followed on 9 July 2025.[^downloads]
+
+Polaris graduated from the Incubator to become an ASF top-level project in February 2026. The project announced the graduation on 19 February 2026, and the ASF announced it publicly on 5 March 2026.[^grad][^n1]
+
+## How it works
+
+Polaris exposes the Iceberg REST API, so any engine with an Iceberg REST client can connect to it. The project site lists engines such as [Apache Spark](/wiki/Apache_Spark), Apache Flink, Apache Doris, Dremio OSS, StarRocks and [Trino](/wiki/Trino).[^home]
+
+A Polaris server holds one or more catalogs. An internal catalog is managed by Polaris and supports reads and writes. An external catalog is managed by another provider, is synced into Polaris, and is read-only. Each catalog has a storage configuration for Amazon S3, Azure or Google Cloud Storage. Inside a catalog, namespaces group tables and can be nested.[^docs]
+
+## Access control
+
+Polaris uses role-based access control (RBAC) in three layers. Privileges are granted to catalog roles, catalog roles are granted to principal roles, and principal roles are assigned to principals. A catalog role belongs to one catalog, and the relationship between principals and principal roles is many-to-many.[^rbac]
+
+Privileges in Polaris are grouped by securable object: catalog, namespace, table, view, policy and semantic model. Examples are `TABLE_READ_DATA` and `NAMESPACE_LIST`.[^rbac]
+
+## Credential vending
+
+Polaris vends temporary storage credentials to query engines during query execution, so the engines do not need their own long-lived access to cloud storage.[^docs] The [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) specification defines this mechanism, under the name vended credentials, as a way for a catalog to return storage credentials together with a loaded table.[^n2]
+
+## Other features
+
+**Generic tables** let Polaris register tables that are not Iceberg tables, defined by a name, a format (for example `delta` or `csv`) and an optional base location. They share namespaces with Iceberg tables. The documentation marks generic tables as beta.[^n3]
+
+**Catalog federation** connects Polaris to existing metadata services. The namespaces, tables and views of a federated catalog stay in the remote system. The 1.9.0 documentation has integration guides for Iceberg REST, Hive Metastore, Hadoop catalog and BigQuery Metastore, and federation is disabled by default.[^n4]
+
+**Policies** are catalog entities that define rules for actions on catalogs, namespaces, tables or views. The predefined types cover data compaction, metadata compaction, orphan file removal and snapshot expiry. Polaris stores and resolves policies but does not run the maintenance work itself; external engines do that.[^n5]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Apache Polaris serves as the shared catalog for Iceberg tables. Because Polaris speaks the standard Iceberg REST protocol, engines connect with their existing Iceberg REST clients instead of a Polaris-specific connector, and access rules defined once in Polaris apply to every engine that uses it.[^home][^rbac]
+
+## See also
+
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Unity Catalog](/wiki/Unity_Catalog)
+- [Data catalog](/wiki/Data_catalog)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^incubator]: [Polaris Incubation Status](https://incubator.apache.org/projects/polaris.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^docs]: [Apache Polaris 1.9.0 Documentation](https://polaris.apache.org/releases/1.9.0/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^grad]: [Apache Polaris Graduates to Top Level Project!](https://polaris.apache.org/blog/2026/02/19/apache-polaris-graduates-to-top-level-project/). *Apache Polaris*, 2026-02-19. Retrieved 2026-11-22.
+[^proposal]: [Polaris Proposal](https://cwiki.apache.org/confluence/display/INCUBATOR/PolarisProposal). *Apache Incubator*. Retrieved 2026-11-22.
+[^downloads]: [Apache Polaris Releases](https://polaris.apache.org/downloads/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [The Apache Software Foundation Graduates Two Open Source Projects from Incubator](https://news.apache.org/foundation/entry/the-apache-software-foundation-graduates-two-open-source-projects-from-incubator). *Apache Software Foundation*, 2026-03-05. Retrieved 2026-11-22.
+[^home]: [Apache Polaris](https://polaris.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^rbac]: [Role-Based Access Control](https://polaris.apache.org/releases/1.9.0/managing-security/access-control/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Apache Iceberg REST Catalog API (rest-catalog-open-api.yaml, tag apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/open-api/rest-catalog-open-api.yaml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [Generic Table](https://polaris.apache.org/releases/1.9.0/generic-table/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [Federation](https://polaris.apache.org/releases/1.9.0/federation/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n5]: [Policy](https://polaris.apache.org/releases/1.9.0/policy/). *Apache Software Foundation*. Retrieved 2026-11-22.

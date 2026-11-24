@@ -1,0 +1,91 @@
+---
+title: "SparkR"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 1.4.0</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">R, Scala</Field>
+  <Field name="type">R language frontend for Apache Spark</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[SparkR (R on Spark)](https://spark.apache.org/docs/4.3.0/sparkr.html)</Field>
+  <Field name="repo">[github.com/apache/spark (R/)](https://github.com/apache/spark/tree/v4.3.0/R)</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Spark Connect](/wiki/Spark_Connect), [MLlib](/wiki/MLlib)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.0.0 to v4.3.0 tags of apache/spark (docs/sparkr.md, docs/sparkr-migration-guide.md, R/pkg/DESCRIPTION, R/pkg/R/zzz.R), the Spark 1.4.0, 4.0.0, 4.1.0, 4.2.0 and 4.3.0 release notes, SPARK-49347 and the August 2024 dev-list discussion and vote</Verified>
+
+<Status level="deprecated" since="Apache Spark 4.0.0">Use the separately maintained sparklyr package instead. SparkR is still included in Spark 4.3.0 and has not been removed.[^jira49347]</Status>
+
+**SparkR** is the R package that ships with [Apache Spark](/wiki/Apache_Spark) and lets R programs use Spark: it provides a distributed data frame, the `SparkDataFrame`, with selection, filtering and aggregation, and access to Spark's machine learning library.[^guide] SparkR is deprecated as of Spark 4.0.0 and will be removed in a future version, but it is still part of every release up to Spark 4.3.0.[^guide][^jira49347] The Spark project points R users to sparklyr, a separate R package for Spark.[^zzz]
+
+## Status
+
+SparkR was deprecated in Spark 4.0.0 under SPARK-49347, after a vote on the Spark dev mailing list.[^jira49347][^r400] The deprecation shows up in three places in Spark 4.x:
+
+- **Programming guide.** The SparkR guide opens with the sentence that SparkR is deprecated from Spark 4.0.0 and will be removed in a future version.[^guide]
+- **Migration guide.** The SparkR migration guide says, under "Upgrading from SparkR 3.5 to 4.0", that SparkR is deprecated and will be removed in a future version.[^n1]
+- **Startup message.** When the package is attached, SparkR prints a warning that it is deprecated and recommends sparklyr. Setting the environment variable `SPARKR_SUPPRESS_DEPRECATION_WARNING` to any non-empty value hides the message.[^zzz]
+
+SparkR has not been removed. The `R/pkg` directory is present at the v4.1.0, v4.2.0 and v4.3.0 tags, with the package version matching each Spark release.[^desc] The Spark 4.1.0 release notes do not mention SparkR. The 4.2.0 release notes list maintenance work on it, such as Java 25 support and dropping support for R 3.x, and none of the 4.x release notes announce a removal.[^n2][^r420][^n3]
+
+## Why it was deprecated
+
+The proposal came from Shivaram Venkataraman, who created the original SparkR package as research at UC Berkeley. In an August 2024 thread on the Spark dev mailing list he argued that sparklyr is more idiomatic R than SparkR's Scala-like API, that contributions to SparkR had slowed, that sparklyr's newer Spark Connect based architecture removed the need to align its version with Spark's, and that sparklyr is maintained on CRAN while SparkR could not stay there under Spark's release process.[^discuss] The vote to deprecate SparkR followed on 21 August 2024, and the deprecation was merged for Spark 4.0.0.[^n4][^jira49347]
+
+## History
+
+Spark 1.4.0 was the first release to package SparkR, described in the release notes as an R binding built on Spark's then-new DataFrame API.[^n5] The SparkR package in Spark 4.3.0 requires R 4.0 or later and Java 17 or later.[^desc]
+
+## How it works
+
+SparkR starts or connects to a Spark application through `sparkR.session()`, which creates a `SparkSession`. From RStudio or another R environment, SparkR uses `SPARK_HOME` to find a Spark installation and can download one if none is found.[^guide] R code talks to the Spark driver JVM through a backend in Spark core (`org.apache.spark.api.r.RBackend`).[^n6] The guide also documents running R functions on the data with `dapply` and `gapply`, Apache Arrow for faster transfer between the JVM and R, and MLlib model training.[^guide]
+
+The following R example runs with the Spark 4.3 distribution. It starts a session, converts the built-in `faithful` data frame to a `SparkDataFrame` and filters it.
+
+```r
+library(SparkR)
+sparkR.session(appName = "faithful-example")
+
+df <- createDataFrame(faithful)
+head(filter(df, df$waiting < 50))
+
+sparkR.session.stop()
+```
+
+## Comparison with sparklyr
+
+|  | SparkR | sparklyr |
+| --- | --- | --- |
+| Maintained by | The Apache Spark project, inside the Spark repository[^desc] | A separate open source project (github.com/sparklyr/sparklyr)[^sparklyr] |
+| Status | Deprecated since Spark 4.0.0[^jira49347] | Recommended by the SparkR startup message[^zzz] |
+| Installation | Ships with the Spark distribution; not maintained on CRAN[^discuss] | `install.packages("sparklyr")` from CRAN[^sparklyr] |
+| API style | Its own functions over `SparkDataFrame` (`filter`, `select`, `agg`)[^guide] | Described in the deprecation proposal as more idiomatic R[^discuss] |
+| Spark Connect | Not a Spark Connect client; connects through the R backend in the driver | `spark_connect(method = "spark_connect")`[^sparklyr] |
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Connect](/wiki/Spark_Connect)
+- [MLlib](/wiki/MLlib)
+- [GraphX](/wiki/GraphX)
+
+## References
+
+[^jira49347]: [SPARK-49347: Deprecate SparkR](https://issues.apache.org/jira/browse/SPARK-49347). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^guide]: [SparkR (R on Spark) (docs/sparkr.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/sparkr.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^zzz]: [R/pkg/R/zzz.R (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/R/pkg/R/zzz.R). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Migration Guide: SparkR (R on Spark) (docs/sparkr-migration-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/sparkr-migration-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^desc]: [R/pkg/DESCRIPTION (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/R/pkg/DESCRIPTION). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^discuss]: [\[DISCUSS\] Deprecating SparkR](https://lists.apache.org/thread/qjgsgxklvpvyvbzsx1qr8o533j4zjlm5). *dev@spark.apache.org*, 2024-08-12. Retrieved 2026-11-22.
+[^n4]: [\[VOTE\] Deprecate SparkR](https://lists.apache.org/thread/3c8qxks26kqflsjh0gtjo3nldk686vtq). *dev@spark.apache.org*, 2024-08-21. Retrieved 2026-11-22.
+[^n5]: [Spark Release 1.4.0](https://spark.apache.org/releases/spark-release-1-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n6]: [core/src/main/scala/org/apache/spark/api/r at v4.3.0](https://github.com/apache/spark/tree/v4.3.0/core/src/main/scala/org/apache/spark/api/r). *GitHub*. Retrieved 2026-11-22.
+[^sparklyr]: [Get Started (sparklyr)](https://spark.posit.co/get-started/). *Posit*. Retrieved 2026-11-22.

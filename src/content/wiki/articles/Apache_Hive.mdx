@@ -1,0 +1,92 @@
+---
+title: "Apache Hive"
+categories: ["Query engines"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation); created at Facebook</Field>
+  <Field name="initial_release">Apache top-level project since September 2010</Field>
+  <Field name="latest_release">4.2.1</Field>
+  <Field name="latest_release_date">2026-08-24</Field>
+  <Field name="written_in">Java</Field>
+  <Field name="type">SQL data warehouse system and metastore</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[hive.apache.org](https://hive.apache.org/)</Field>
+  <Field name="repo">[github.com/apache/hive](https://github.com/apache/hive)</Field>
+  <Field name="related">[Hive Metastore](/wiki/Hive_Metastore), [Hive on Spark](/wiki/Hive_on_Spark), [Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino), [Apache Iceberg](/wiki/Apache_Iceberg)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Hive home and downloads pages (releases and end-of-life notices to 4.2.1), HiveConf.java and the top-level modules at the rel/release-3.1.3, rel/release-4.0.0-alpha-1, rel/release-4.0.0-alpha-2, rel/release-4.0.0, rel/release-4.0.1, rel/release-4.1.0 and rel/release-4.2.1 tags, HIVE-12300, HIVE-26134, HIVE-27972, the ASF committee information and the 2009 VLDB paper on Hive</Verified>
+
+<Status level="active">The Hive 1.x, 2.x and 3.x release lines are end of life (declared in 2024); the 4.x line is maintained. Hive 4 removed the Spark execution engine, and the MapReduce engine has been deprecated since Hive 2.[^downloads]</Status>
+
+**Apache Hive** is a distributed SQL data warehouse system that runs queries over files in distributed storage, together with the [Hive Metastore](/wiki/Hive_Metastore), a service that stores table metadata for Hive and for other engines.[^home] Hive was built at Facebook to give Hadoop users a SQL-like language instead of hand-written MapReduce programs.[^paper] Today the two halves of the project have different roles in an [open lakehouse](/wiki/Open_lakehouse): the metastore is still a widely used [data catalog](/wiki/Data_catalog), while the query engine competes with engines such as [Apache Spark](/wiki/Apache_Spark) and [Trino](/wiki/Trino).
+
+## Query engine and metastore
+
+The name "Hive" covers two things that are often confused.
+
+|  | Hive query engine (HiveServer2) | Hive Metastore (HMS) |
+| --- | --- | --- |
+| What it does | Compiles HiveQL into jobs and runs them; HiveServer2 serves JDBC and ODBC clients[^home] | Stores databases, tables, partitions and their locations, and serves them over a Thrift API[^home] |
+| Who uses it | Hive users and BI tools that connect to HiveServer2 | Hive, Impala, Spark and other engines[^home] |
+| Runs on | Apache Tez (default in Hive 4.1 and later) or the deprecated MapReduce engine[^conf421] | A standalone service backed by a relational database |
+| Lakehouse role | One SQL engine among several | A shared catalog, and since 4.1.0 also an Iceberg REST catalog endpoint[^downloads] |
+
+A system that "uses Hive" may use only the metastore. [Apache Spark](/wiki/Apache_Spark) and [Trino](/wiki/Trino) read and write tables registered in the Hive Metastore without running any Hive queries; see [Hive Metastore](/wiki/Hive_Metastore) for how each engine connects.
+
+## Execution engines
+
+Hive compiles queries for one of several execution engines, selected with `hive.execution.engine`. The available engines and the default have changed across releases, as the configuration source at each release tag shows:
+
+| Release | Engines | Default |
+| --- | --- | --- |
+| 3.1.3 | `mr`, `tez`, `spark` | `mr`[^n1] |
+| 4.0.0-alpha-1 | `mr`, `tez`, `spark` | `mr` |
+| 4.0.0-alpha-2 to 4.0.1 | `mr`, `tez` | `mr`[^conf400] |
+| 4.1.0 to 4.2.1 | `tez`, `mr` | `tez`[^conf421] |
+
+- **MapReduce** was deprecated in Hive 2.0.0 (HIVE-12300).[^n2] It is still selectable in Hive 4.2.1, where the configuration describes it as a historical engine that "may be removed without further warning".[^conf421]
+- **Spark** (Hive on Spark) was removed from the main branch by HIVE-26134 in 2022; the `spark-client` module is present at the 4.0.0-alpha-1 tag and absent from 4.0.0-alpha-2 onward.[^n3] See [Hive on Spark](/wiki/Hive_on_Spark).
+- **Tez** became the default in Hive 4.1.0 (HIVE-27972).[^n4] LLAP (Low Latency Analytical Processing) adds persistent daemons and caching on top of Tez for interactive queries.[^home]
+
+## Features
+
+The Hive project lists, among its main features, full ACID transactions for ORC tables and insert-only transactions for other formats, built-in compaction, a cost-based optimizer based on Apache Calcite, replication, and Kerberos authentication with Apache Ranger for authorization.[^home] Hive reads and writes [Apache Iceberg](/wiki/Apache_Iceberg) tables through a storage handler; the `iceberg` module is part of the source tree from the 4.0.0-alpha-1 tag onward.[^home][^n5]
+
+## Releases and end of life
+
+The Hive 4 line is the only maintained line. The project's news page records these milestones:[^downloads]
+
+- 4.0.0, the first final Hive 4 release, on 29 March 2024.
+- End of life of the 1.x line (April 2024), the 2.x line (May 2024) and the 3.x line (October 2024). The 3.x notice says no further updates or releases are planned.
+- 4.1.0 on 31 July 2025, which added JDK 17 support, the standalone metastore packages and a REST catalog server.
+- 4.2.0 on 23 November 2025, which made JDK 21 the minimum Java version.
+- 4.2.1 on 24 August 2026, a bug-fix release with security fixes in the metastore, HiveServer2 and the Avro SerDe.
+
+## History
+
+A Facebook team described Hive in a 2009 VLDB paper as an open source data warehouse on Hadoop whose SQL-like language, HiveQL, was compiled into MapReduce jobs.[^paper] Hive became a top-level Apache project in September 2010.[^n6] HCatalog, a table and storage management layer for Hadoop, merged into Hive in March 2013.[^downloads]
+
+## See also
+
+- [Hive Metastore](/wiki/Hive_Metastore)
+- [Hive on Spark](/wiki/Hive_on_Spark)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Trino](/wiki/Trino)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Data catalog](/wiki/Data_catalog)
+
+## References
+
+[^downloads]: [Downloads (Apache Hive news and releases)](https://hive.apache.org/general/downloads/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^home]: [Apache Hive](https://hive.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^paper]: [Hive: A Warehousing Solution Over a Map-Reduce Framework](https://www.vldb.org/pvldb/vol2/vldb09-938.pdf). *Proceedings of the VLDB Endowment, vol. 2*, 2009. Retrieved 2026-11-22.
+[^conf421]: [HiveConf.java (rel/release-4.2.1)](https://github.com/apache/hive/blob/rel/release-4.2.1/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [HiveConf.java (rel/release-3.1.3)](https://github.com/apache/hive/blob/rel/release-3.1.3/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^conf400]: [HiveConf.java (rel/release-4.0.0)](https://github.com/apache/hive/blob/rel/release-4.0.0/common/src/java/org/apache/hadoop/hive/conf/HiveConf.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [HIVE-12300: deprecate MR in Hive 2.0](https://issues.apache.org/jira/browse/HIVE-12300). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n3]: [HIVE-26134: Remove Hive on Spark from the main branch](https://issues.apache.org/jira/browse/HIVE-26134). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n4]: [HIVE-27972: Set 'tez' as default value in hive.execution.engine](https://issues.apache.org/jira/browse/HIVE-27972). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n5]: [apache/hive at rel/release-4.0.0](https://github.com/apache/hive/tree/rel/release-4.0.0). *GitHub*. Retrieved 2026-11-22.
+[^n6]: [ASF committee information (public)](https://whimsy.apache.org/public/committee-info.json). *Apache Software Foundation*. Retrieved 2026-11-22.

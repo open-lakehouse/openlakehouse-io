@@ -24,7 +24,8 @@ import IndustryPage from "./pages/refarch/IndustryPage";
 import AgenticLakehouse from "./pages/guides/AgenticLakehouse";
 import AgenticDataEngineering from "./pages/guides/AgenticDataEngineering";
 import SparkMasterclass from "./pages/projects/SparkMasterclass";
-import { SparkMatrix } from "./lazyPages";
+import { SparkMatrix, Wiki } from "./lazyPages";
+import wikiRoutes from "virtual:wiki-routes";
 import NotFound from "./pages/NotFound";
 
 import PodcastIndex from "./pages/podcast/PodcastIndex";
@@ -61,6 +62,7 @@ export const AppRoutes = () => (
       <Route path="/authors/:slug" element={<AuthorPage />} />
       <Route path="/podcast" element={<PodcastIndex />} />
       <Route path="/podcast/:slug" element={<EpisodePage />} />
+      <Route path="/wiki/*" element={<Wiki />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
 );
@@ -94,6 +96,7 @@ export const prerenderRoutes = (): string[] => {
     ...learnPosts.map((p) => postPath(p, "learn")),
     ...Object.keys(authors).map((a) => `/authors/${a}`),
     ...episodes.map(episodePath),
+    ...wikiRoutes,
   ];
   return [...new Set(urls)];
 };

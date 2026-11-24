@@ -1,0 +1,113 @@
+---
+title: "GraphFrames"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">GraphFrames community (originally UC Berkeley, MIT and Databricks)</Field>
+  <Field name="initial_release">2016</Field>
+  <Field name="latest_release">0.12.3</Field>
+  <Field name="latest_release_date">2026-10-05</Field>
+  <Field name="written_in">Scala, Python</Field>
+  <Field name="type">Graph processing library for Apache Spark (DataFrame-based)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[graphframes.io](https://graphframes.io)</Field>
+  <Field name="repo">[github.com/graphframes/graphframes](https://github.com/graphframes/graphframes)</Field>
+  <Field name="related">[GraphX](/wiki/GraphX), [Apache Spark](/wiki/Apache_Spark), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the graphframes/graphframes repository at tag v0.12.3, the GitHub releases API (latest release v0.12.3) and graphframes.io</Verified>
+
+<Status level="active">Latest release 0.12.3, published 5 October 2026.[^rel]</Status>
+
+**GraphFrames** is an open source graph processing package for [Apache Spark](/wiki/Apache_Spark) that represents a graph as a pair of Spark DataFrames, one of vertices and one of edges, and provides graph algorithms, the Pregel and AggregateMessages APIs, and a motif-finding query language on top of them.[^readme] It has APIs in Scala, Java and Python, and it is developed outside the Apache Spark project. When the Spark community voted in 2024 to deprecate Spark's RDD-based [GraphX](/wiki/GraphX) library, the vote result named GraphFrames as a migration target.[^vote]
+
+## Data model
+
+A GraphFrame is built from two DataFrames. The vertex DataFrame must have a column named `id` with a unique ID for each vertex. The edge DataFrame must have columns named `src` and `dst` with the source and destination vertex IDs. Both can have any other columns, which act as vertex and edge attributes. A GraphFrame can also be built from an edge DataFrame alone, in which case the vertices are inferred from the edges.[^create]
+
+Because a GraphFrame is made of DataFrames, graph queries are planned by Spark's Catalyst optimizer and Adaptive Query Execution, and graph results can be joined, filtered and written like any other DataFrame.[^about]
+
+## Relation to GraphX
+
+<Hatnote>Main article: [GraphX](/wiki/GraphX)</Hatnote>
+
+The GraphFrames documentation describes the project as aiming to provide the functionality of GraphX plus features that take advantage of DataFrames, such as motif finding and DataFrame-based serialization.[^about] The two libraries differ in representation and optimization:[^about]
+
+|  | GraphX | GraphFrames |
+| --- | --- | --- |
+| Graph representation | `VertexRDD` and `EdgeRDD` | `vertices` and `edges` DataFrames |
+| Optimization | Its own partitioning strategy and partition index | Catalyst optimizer and Adaptive Query Execution |
+| Languages | Scala (Spark guide) | Scala, Java, Python |
+| Part of Apache Spark | Yes | No (separate project) |
+
+GraphFrames provides most algorithms either as a native DataFrame implementation or as a wrapper over GraphX. Its own benchmarks show GraphX can still be the better choice for small and medium graphs, so the library keeps conversion methods between the two.[^about] Since release 0.10.0, GraphFrames ships its own internal fork of GraphX (package `org.apache.spark.graphframes.graphx`, Maven artifact `graphframes-graphx`) instead of using the GraphX in Spark. The project treats the fork as internal API.[^about][^install][^quick]
+
+The GraphFrames documentation states that GraphX is deprecated upstream and no longer maintained. Apache Spark itself had not marked GraphX deprecated as of Spark 4.3.0; see [GraphX#Status](/wiki/GraphX#status).[^about]
+
+## Motif finding
+
+Motif finding searches a graph for structural patterns. GraphFrames expresses patterns in a small domain-specific language passed to `find`: `(a)-[e]->(b)` is an edge `e` from vertex `a` to vertex `b`, and patterns are joined with semicolons. The result is a DataFrame with one struct column per named vertex or edge.[^motif]
+
+The language supports anonymous elements (`(a)-[]->(b)`), negated edges (`!(b)-[]->(a)`), undirected patterns (`(a)-[e]-(b)`), fixed-length paths (`(a)-[e*2]->(c)`) and bounded variable-length paths (`(a)-[e*1..3]->(c)`). Unbounded paths are not supported. Conditions on vertex or edge attributes are applied as DataFrame filters on the result. Motif finding is translated into a series of joins, and the documentation suggests enabling Spark's cost-based optimizer and join reordering to improve it.[^motif]
+
+## Algorithms
+
+The user guide covers centrality metrics, traversals and connectivity, community detection, subgraphs, message passing, Pregel, labeled property graphs and graph machine learning.[^readme] Algorithms listed in the documentation include:[^quick][^readme]
+- Traversal and connectivity: breadth-first search, shortest paths, all simple paths, connected components and strongly connected components.
+- Ranking and structure: PageRank, parallel personalized PageRank, triangle count, K-Core, cycle detection (Rocha-Thatte) and maximal independent set.
+- Community detection: label propagation and power iteration clustering.
+- Embeddings: random-walk embeddings with Word2Vec or Hash2Vec.
+
+The quick start marks which algorithms have a native GraphFrames implementation. PageRank, parallel personalized PageRank, strongly connected components and SVD++ run through GraphX in that table.[^quick]
+
+## Example
+
+The following PySpark example builds a small graph, prints in-degrees and uses motif finding to find pairs where one vertex calls the other a friend and is called an enemy back. It follows the project README and runs on Spark 4.x after `pip install graphframes-py==0.12.3` and starting PySpark with `--packages io.graphframes:graphframes-spark4_2.13:0.12.3`.[^readme][^install]
+
+```python
+from graphframes import GraphFrame
+
+v = spark.createDataFrame([(1, "Alice"), (2, "Bob"), (3, "Charlie")], ["id", "name"])
+e = spark.createDataFrame(
+    [(1, 2, "friend"), (2, 1, "friend"), (2, 3, "friend"), (3, 2, "enemy")],
+    ["src", "dst", "relationship"],
+)
+g = GraphFrame(v, e)
+
+g.inDegrees.show()
+
+(g.find("(a)-[e]->(b); (b)-[e2]->(a)")
+  .filter("e.relationship = 'friend' AND e2.relationship = 'enemy'")
+  .show())
+```
+
+## Spark Connect
+
+GraphFrames supports [Spark Connect](/wiki/Spark_Connect) through a server plugin. The Spark Connect server is started with the `graphframes-connect` package and the setting `spark.connect.extensions.relation.classes=org.apache.spark.sql.graphframes.GraphFramesConnect`. The only client bundled with the package is the PySpark client, which detects a Spark Connect session and uses the plugin automatically. The documentation warns that the plugin is not compatible with Databricks' managed Spark Connect without a vendor-specific build.[^install] Spark Connect and Spark 4.x support were first released in GraphFrames 0.9.0.[^n1]
+
+## Releases and governance
+
+GraphFrames is published to Maven Central under the `io.graphframes` namespace, with separate artifacts per Spark major version and Scala version (for example `graphframes-spark4_2.13`), and to PyPI as `graphframes-py`. The installation page lists support for Spark 3.x and 4.x.[^install] The latest release, v0.12.3 of 5 October 2026, fixes connected-components correctness issues.[^rel]
+
+The project was created as a collaboration among UC Berkeley, MIT, Databricks and the open source community, and is now maintained by a group of individual contributors. It is licensed under the Apache License 2.0 and is not an Apache Software Foundation project.[^readme] The project's blog post for release 0.9.2 describes a revival in 2025, after a long gap in development, prompted by the GraphX deprecation discussion in Spark; the same post announced the new Maven group ID, the new PyPI name and the graphframes.io site.[^n2] The design is described in the 2016 paper "GraphFrames: An Integrated API for Mixing Graph and Relational Queries" by Dave et al.[^n3]
+
+## See also
+
+- [GraphX](/wiki/GraphX)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Connect](/wiki/Spark_Connect)
+
+## References
+
+[^rel]: [Release v0.12.3](https://github.com/graphframes/graphframes/releases/tag/v0.12.3). *GitHub*, 2026-10-05. Retrieved 2026-11-22.
+[^readme]: [GraphFrames README (v0.12.3)](https://github.com/graphframes/graphframes/blob/v0.12.3/README.md). *GitHub*. Retrieved 2026-11-22.
+[^vote]: [Re: \[VOTE\] Officialy Deprecate GraphX in Spark 4](https://lists.apache.org/thread/2nd08qpr8nwbtog5bgnpfgkn1r42cd5m). *dev@spark.apache.org*, 2024-10-07. Retrieved 2026-11-22.
+[^create]: [Creating GraphFrames](https://graphframes.io/04-user-guide/01-creating-graphframes.html). *GraphFrames*. Retrieved 2026-11-22.
+[^about]: [About GraphFrames](https://graphframes.io/01-about/01-index.html). *GraphFrames*. Retrieved 2026-11-22.
+[^install]: [Installation](https://graphframes.io/02-quick-start/01-installation.html). *GraphFrames*. Retrieved 2026-11-22.
+[^quick]: [Quick-Start](https://graphframes.io/02-quick-start/02-quick-start.html). *GraphFrames*. Retrieved 2026-11-22.
+[^motif]: [Motif finding](https://graphframes.io/04-user-guide/04-motif-finding.html). *GraphFrames*. Retrieved 2026-11-22.
+[^n1]: [Release v0.9.0](https://github.com/graphframes/graphframes/releases/tag/v0.9.0). *GitHub*, 2025-07-17. Retrieved 2026-11-22.
+[^n2]: [GraphFrames is back!](https://graphframes.io/05-blog/1000-graphframes-is-back.html). *GraphFrames*, 2025-08-01. Retrieved 2026-11-22.
+[^n3]: Dave, A. et al.. [GraphFrames: An Integrated API for Mixing Graph and Relational Queries](https://people.eecs.berkeley.edu/~matei/papers/2016/grades_graphframes.pdf). *GRADES 2016*. Retrieved 2026-11-22.

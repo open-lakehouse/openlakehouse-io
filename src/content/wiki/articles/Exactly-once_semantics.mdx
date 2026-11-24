@@ -1,0 +1,122 @@
+---
+title: "Exactly-once semantics"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Exactly-once processing, exactly-once delivery, effectively-once</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing), distributed systems</Field>
+  <Field name="key_parts">Replayable source, checkpointed progress and state, idempotent or transactional sink</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming), [Apache Flink](/wiki/Apache_Flink), Kafka transactions and Kafka Streams ([Apache Kafka](/wiki/Apache_Kafka)), [Delta Lake](/wiki/Delta_Lake), [Apache Iceberg](/wiki/Apache_Iceberg), [Apache Hudi](/wiki/Apache_Hudi)</Field>
+  <Field name="related">[Stream processing](/wiki/Stream_processing), [Watermark](/wiki/Watermark), [Streaming lakehouse](/wiki/Streaming_lakehouse)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Spark 4.3.0 Structured Streaming guides, the Apache Flink 2.3 documentation, the Apache Kafka 4.4 design and Streams documentation, the Delta Lake streaming documentation and the Apache Iceberg 1.12.0 Flink documentation</Verified>
+
+In [stream processing](/wiki/Stream_processing), **exactly-once semantics** is the guarantee that each input record affects the result exactly once, with nothing lost and nothing duplicated, even when parts of the system fail and work is retried. Engines usually achieve it by replaying input after a failure and making sure the replay does not change the result twice, not by literally processing each record once. For this reason the guarantee is sometimes called **effectively-once**.
+
+## Delivery guarantees
+
+The Apache Kafka documentation defines three levels of guarantee:[^kafka-design]
+
+| Guarantee | Definition | Typical cause |
+| --- | --- | --- |
+| At-most-once | Messages may be lost but are never redelivered | No retry after a failure |
+| At-least-once | Messages are never lost but may be redelivered | Retry or replay without deduplication |
+| Exactly-once | Each message is processed once and only once | Replay combined with idempotent or transactional output |
+
+Apache Flink describes the same three outcomes for recovery: no effort to recover (at most once), nothing lost but possible duplicates (at least once), and nothing lost or duplicated (exactly once).[^flink-ft]
+
+## What it means and what it does not
+
+Two guarantees are often confused, and the Spark Real-time Mode documentation separates them explicitly:[^ss-rtm]
+
+- **Exactly-once processing** (or exactly-once state): each input record's effect on the state the engine manages, such as an aggregation count, is applied effectively once across failures and restarts. Flink states its guarantee in the same terms: every event affects the state managed by Flink exactly once.[^flink-ft]
+- **End-to-end exactly-once** (or exactly-once delivery): each record affects the external system, such as a table or topic, exactly once. This is a property of the sink as well as the engine.[^ss-rtm]
+
+Exactly-once does not mean that user code runs once per record. After a failure, an engine re-runs the work since the last checkpoint, so functions, API calls and log lines in that work can run again. Only effects that pass through a sink with the right guarantees are deduplicated.
+
+## The end-to-end requirement
+
+Engine documentation converges on three conditions:
+
+1. **A replayable source.** After a failure the engine must be able to read the same data again from a recorded position, such as a Kafka offset. Spark assumes every source has offsets for this purpose; Flink requires that the source can rewind to the position stored in the checkpoint.[^ss-start][^flink-conn]
+1. **Recorded progress and deterministic processing.** The engine records what it has read, and its state, in a checkpoint, so a replay starts from a consistent point. If processing is not deterministic, a replay can produce different output from the first attempt.
+1. **An idempotent or transactional sink.** Writing the same output twice must have the same effect as writing it once (idempotent), or output must become visible atomically together with the recorded progress (transactional). Flink states that the sink must commit transactionally or write idempotently.[^flink-conn][^flink-ft]
+
+## Implementations
+
+### Spark Structured Streaming
+
+<Hatnote>Main article: [Structured Streaming](/wiki/Structured_Streaming)</Hatnote>
+
+Structured Streaming uses checkpointing and write-ahead logs to record the offset range processed in each trigger, and its built-in sinks are designed to be idempotent so that reprocessing is safe. The Spark documentation states that replayable sources and idempotent sinks together give end-to-end exactly-once semantics under any failure.[^ss-start]
+
+The guarantee depends on the sink. In the Spark 4.3 documentation the file sink is exactly-once, while the Kafka sink and `foreach` sink are at-least-once, and for `foreachBatch` it "depends on the implementation".[^ss-apis] Real-time Mode keeps exactly-once processing, but because it commits offsets at the end of each batch, after records have reached the sink, a failure can re-write records; it does not yet ship an exactly-once sink.[^ss-rtm]
+
+`foreachBatch` gives only at-least-once writes by default. The Spark guide recommends using the `batchId` passed to the function to deduplicate output and get exactly-once.[^ss-apis] [Delta Lake](/wiki/Delta_Lake) supports this directly: with the `txnAppId` and `txnVersion` writer options, Delta identifies a repeated write of the same batch and ignores it.[^delta-stream]
+
+```python
+APP_ID = "orders-to-silver"   # unique per streaming query
+
+def write_batch(batch_df, batch_id):
+    (batch_df.write.format("delta")
+        .option("txnAppId", APP_ID)
+        .option("txnVersion", batch_id)   # a replayed batch is skipped
+        .mode("append")
+        .save("/data/silver/orders"))
+
+(orders.writeStream
+    .foreachBatch(write_batch)
+    .option("checkpointLocation", "/data/_checkpoints/orders-to-silver")
+    .start())
+```
+
+If the checkpoint is deleted and the query restarts with a new one, batch IDs start again from 0, so the application ID must change; otherwise Delta ignores the new writes as duplicates.[^delta-stream]
+
+### Kafka transactions and Kafka Streams
+
+Since Kafka 0.11.0.0, the producer supports an idempotent mode that prevents duplicate log entries when a send is retried, and transactions that write to several topic partitions atomically. Consumers with the `read_committed` isolation level only see messages from committed transactions.[^kafka-design] Kafka Streams uses these features: with `processing.guarantee` set to `exactly_once_v2` (the default is `at_least_once`), it commits input offsets, state store updates and output records atomically. Exactly-once v2 requires brokers at version 2.5.0 or newer.[^kstreams]
+
+The Kafka documentation notes that exactly-once delivery to other destination systems generally requires the cooperation of those systems; one approach is to store the consumer's offset in the same place as its output.[^kafka-design]
+
+### Flink two-phase commit sinks
+
+Flink takes consistent snapshots of operator state with checkpoint barriers, a variant of the Chandy-Lamport algorithm.[^flink-ft] For external sinks, Flink 1.4.0 introduced `TwoPhaseCommitSinkFunction`: a sink pre-commits an external transaction when a checkpoint starts and commits it only after the checkpoint completes.[^flink-blog] Current sinks expose a `DeliveryGuarantee` of `NONE`, `AT_LEAST_ONCE` or `EXACTLY_ONCE`.[^flink-conn] With `EXACTLY_ONCE`, the Kafka sink writes records in a Kafka transaction committed on each checkpoint, so output becomes visible only after a checkpoint, and the Kafka transaction timeout must exceed the checkpoint and restart time to avoid data loss.[^flink-kafka]
+
+## Why table formats make good sinks
+
+[Open table formats](/wiki/Open_table_format) commit each write as a single atomic change to table metadata, which is the transactional sink the end-to-end requirement asks for. A streaming engine can tie each commit to its own checkpoint, so a replayed batch either is detected as already committed or replaces an uncommitted attempt. Delta Lake states that its transaction log guarantees exactly-once processing even when other streams or batch jobs write to the same table concurrently.[^delta-stream] The [Apache Iceberg](/wiki/Apache_Iceberg) Flink sink guarantees exactly-once semantics, committing to the Iceberg table after each successful Flink checkpoint.[^iceberg-flink] [Apache Hudi](/wiki/Apache_Hudi) lists exactly-once ingestion of new events from Kafka as a capability of its Hudi Streamer tool.[^hudi-streamer] This is one reason the [streaming lakehouse](/wiki/Streaming_lakehouse) pattern writes streams directly into tables.
+
+## Where it breaks
+
+- **External side effects.** Calls to APIs, emails or writes to systems outside the sink run again on replay. Only the sink's effects are protected.
+- **Non-idempotent `foreachBatch` code.** A function that appends to a table or calls a service without using `batchId` produces duplicates when a batch is retried.[^ss-apis]
+- **At-least-once sinks.** The Spark Kafka sink and `foreach` sink are at-least-once, so downstream readers must tolerate or remove duplicates.[^ss-apis]
+- **Non-replayable sources.** The Spark socket source, for example, does not provide end-to-end fault-tolerance guarantees and is meant only for testing.[^ss-apis]
+- **Lost or reset checkpoints.** The checkpoint holds the recorded progress. Deleting it or reusing identifiers incorrectly breaks deduplication, as the Delta `txnAppId` rule shows.[^delta-stream]
+- **Consumers outside the transaction.** Exactly-once through Kafka transactions holds for consumers that read only committed messages (the `read_committed` isolation level); the Flink Kafka sink documentation states the same condition.[^kafka-design][^flink-kafka]
+
+## See also
+
+- [Stream processing](/wiki/Stream_processing)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Streaming lakehouse](/wiki/Streaming_lakehouse)
+- [Watermark](/wiki/Watermark)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+
+## References
+
+[^kafka-design]: [Design: Message Delivery Semantics](https://kafka.apache.org/44/design/design/). *Apache Software Foundation (Apache Kafka 4.4 documentation)*. Retrieved 2026-11-22.
+[^flink-ft]: [Fault Tolerance via State Snapshots](https://nightlies.apache.org/flink/flink-docs-stable/docs/learn-flink/fault_tolerance/). *Apache Software Foundation (Apache Flink 2.3 documentation)*. Retrieved 2026-11-22.
+[^ss-rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ss-start]: [Structured Streaming: Getting Started (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/getting-started.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^flink-conn]: [DataStream Connectors: Fault Tolerance Guarantees](https://nightlies.apache.org/flink/flink-docs-stable/docs/connectors/datastream/overview/). *Apache Software Foundation (Apache Flink 2.3 documentation)*. Retrieved 2026-11-22.
+[^ss-apis]: [Structured Streaming: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^delta-stream]: [Table streaming reads and writes](https://docs.delta.io/delta-streaming/). *Delta Lake*. Retrieved 2026-11-22.
+[^kstreams]: [Kafka Streams Core Concepts](https://kafka.apache.org/44/streams/core-concepts/). *Apache Software Foundation (Apache Kafka 4.4 documentation)*. Retrieved 2026-11-22.
+[^flink-blog]: Piotr Nowojski, Mike Winters. [An Overview of End-to-End Exactly-Once Processing in Apache Flink (with Apache Kafka, too!)](https://flink.apache.org/2018/02/28/an-overview-of-end-to-end-exactly-once-processing-in-apache-flink-with-apache-kafka-too/). *Apache Software Foundation*, 2018-02-28. Retrieved 2026-11-22.
+[^flink-kafka]: [Apache Kafka Connector](https://nightlies.apache.org/flink/flink-docs-stable/docs/connectors/datastream/kafka/). *Apache Software Foundation (Apache Flink 2.3 documentation)*. Retrieved 2026-11-22.
+[^iceberg-flink]: [Flink Writes (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/flink-writes/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^hudi-streamer]: [Streaming Ingestion (Apache Hudi 1.2.1)](https://hudi.apache.org/docs/hoodie_streaming_ingestion). *Apache Software Foundation*. Retrieved 2026-11-22.

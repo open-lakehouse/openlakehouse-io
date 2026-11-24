@@ -1,0 +1,80 @@
+---
+title: "Medallion architecture"
+categories: ["Concepts", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Multi-hop architecture; bronze, silver and gold layers</Field>
+  <Field name="field">Data engineering, data modeling</Field>
+  <Field name="key_parts">Bronze (raw), silver (cleaned and conformed), gold (aggregated for consumers)</Field>
+  <Field name="implementations">[Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines), [Structured Streaming](/wiki/Structured_Streaming), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Airflow](/wiki/Apache_Airflow)</Field>
+  <Field name="related">[Open lakehouse](/wiki/Open_lakehouse), [Open table format](/wiki/Open_table_format)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Databricks medallion architecture glossary, the Azure Databricks medallion architecture documentation, the openlakehouse.io batch and streaming medallion reference architectures and the Spark Declarative Pipelines programming guide</Verified>
+
+A **medallion architecture** is a data design pattern that organizes the tables of a lakehouse into layers of increasing quality, usually called bronze, silver and gold. Bronze tables hold raw data as it arrived from source systems, silver tables hold cleaned, validated and conformed data, and gold tables hold aggregated or modeled data shaped for a specific use such as reporting or machine learning.[^dbx-glossary] The pattern is also called a multi-hop architecture, because data passes through several hops on its way from source to consumer.[^dbx-glossary] It is a convention for organizing tables, not a technology, and it can be built on any [open table format](/wiki/Open_table_format).
+
+## Layers
+
+### Bronze
+
+The bronze layer is where data from external source systems first lands. Databricks documentation describes bronze tables as matching the structure of the source tables "as-is", often with added metadata columns such as load time or process identifier. The layer serves as a historical archive of the source, supports lineage and auditing, and allows reprocessing without reading the source system again.[^dbx-glossary]
+
+The Azure Databricks documentation recommends minimal validation in bronze and suggests storing most fields as strings, VARIANT or binary values to protect against unexpected schema changes in the source. It describes bronze data as intended for workloads that build silver tables, not for direct use by analysts.[^ms-medallion]
+
+### Silver
+
+The silver layer holds data from bronze that has been matched, merged, conformed and cleansed. Databricks documentation describes silver as an enterprise view of key business entities and transactions, such as deduplicated transactions or master customer records.[^dbx-glossary]
+
+The Azure Databricks documentation states that silver should always include at least one validated, non-aggregated representation of each record, and recommends building silver tables from bronze or other silver tables rather than writing to them directly from ingestion.[^ms-medallion]
+
+### Gold
+
+The gold layer holds data organized for consumption by a particular project, team or business domain. Gold tables are often aggregated, denormalized and optimized for reads, and are commonly modeled as dimensional (star schema) models or data marts.[^dbx-glossary] Because gold models a business domain, some organizations keep several gold layers for different needs, such as finance or human resources.[^ms-medallion]
+
+| Layer | Contents | Typical consumers |
+| --- | --- | --- |
+| Bronze | Raw records as received, plus load metadata | Pipelines that build silver tables |
+| Silver | Validated, deduplicated, conformed records | Data engineers, analysts, data scientists |
+| Gold | Aggregates and dimensional models for one domain | Business intelligence, reporting, machine learning |
+
+The table summarizes the descriptions in the Databricks glossary and the Azure Databricks documentation.[^dbx-glossary][^ms-medallion]
+
+## Status as a recommendation
+
+The medallion architecture is a convention, not a rule. The Azure Databricks documentation describes it as a recommended best practice but not a requirement.[^ms-medallion] The layer names describe data quality, not storage location; in one example in that documentation, each layer is a separate schema in the same catalog (`ops.bronze`, `ops.silver`, `ops.gold`).[^ms-medallion]
+
+## Implementation in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), each layer is a set of tables in an open table format such as [Apache Iceberg](/wiki/Apache_Iceberg) or [Delta Lake](/wiki/Delta_Lake), registered in a [data catalog](/wiki/Data_catalog). Because the tables are open, the engine that writes bronze and silver does not have to be the engine that reads gold.
+
+The openlakehouse.io batch medallion reference architecture defines each layer with [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines) as a table or materialized view, lets Spark resolve the dependency graph, stores the tables as Iceberg in Unity Catalog OSS, schedules runs and backfills with [Apache Airflow](/wiki/Apache_Airflow), and reads the gold tables from [DuckDB](/wiki/DuckDB) through the catalog's Iceberg REST endpoint.[^olio-batch]
+
+A streaming variant applies the same layout to event streams. In the openlakehouse.io streaming medallion reference architecture, a [Structured Streaming](/wiki/Structured_Streaming) query appends events from Apache Kafka to a bronze Iceberg table, and a Spark Declarative Pipeline derives silver and gold.[^olio-stream]
+
+Declarative pipeline frameworks fit the pattern because each layer is defined from the layer before it, and the framework works out the order of execution. Spark Declarative Pipelines is described in the Apache Spark documentation as a declarative framework in which users define the transformations and the framework handles pipeline execution.[^sdp]
+
+## Benefits
+
+The Databricks glossary lists the following benefits of the pattern: a simple data model, incremental ETL, and the ability to recreate downstream tables from raw data at any time.[^dbx-glossary] Keeping raw data in bronze means that a bug in a silver or gold transformation can be fixed and the affected tables rebuilt without fetching data from the source system again.[^dbx-glossary]
+
+## Criticism and limitations
+
+The layer names are informal, and the boundaries between them vary between organizations. The Azure Databricks documentation notes, for example, that aggregate tables that drive many downstream workloads may live in silver, though they usually belong in gold.[^ms-medallion]
+
+## See also
+
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Open lakehouse](/wiki/Open_lakehouse)
+- [Open table format](/wiki/Open_table_format)
+- [Apache Airflow](/wiki/Apache_Airflow)
+
+## References
+
+[^dbx-glossary]: [What is Medallion Architecture?](https://www.databricks.com/glossary/medallion-architecture). *Databricks*. Retrieved 2026-11-22.
+[^ms-medallion]: [What is the medallion lakehouse architecture?](https://learn.microsoft.com/en-us/azure/databricks/lakehouse/medallion). *Microsoft Learn*. Retrieved 2026-11-22.
+[^olio-batch]: [Batch medallion with Spark Declarative Pipelines](https://openlakehouse.io/reference-architectures/batch-medallion). *openlakehouse.io*. Retrieved 2026-11-22.
+[^olio-stream]: [Streaming medallion](https://openlakehouse.io/reference-architectures/streaming-medallion). *openlakehouse.io*. Retrieved 2026-11-22.
+[^sdp]: [Spark Declarative Pipelines Programming Guide](https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.

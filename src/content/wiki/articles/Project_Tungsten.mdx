@@ -1,0 +1,101 @@
+---
+title: "Project Tungsten"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Tungsten, Tungsten execution engine</Field>
+  <Field name="field">Query execution performance</Field>
+  <Field name="introduced">Spark 1.4.0 (first pieces); phase 1 completed in Spark 1.5.0</Field>
+  <Field name="key_parts">Explicit (on-heap or off-heap) memory management, `UnsafeRow` binary row format, cache-aware sorting and hashing, code generation including whole-stage code generation</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Catalyst optimizer](/wiki/Catalyst_optimizer), [Whole-stage code generation](/wiki/Whole-stage_code_generation), [Executor](/wiki/Executor), [Shuffle](/wiki/Shuffle), [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-22">SPARK-7075, SPARK-7081, SPARK-9697, SPARK-10708 and SPARK-12795, the Spark 1.4.0, 1.5.0 and 2.0.0 release notes, the v1.5.0, v1.6.0, v2.0.0 and v4.3.0 tags of apache/spark (SQLConf, SetCommand, SparkEnv, ShuffleManager, MemoryManager, TaskMemoryManager, UnsafeRow, WholeStageCodegenExec, docs/configuration.md) and EXPLAIN output from a Spark 4.3 build</Verified>
+
+<Status level="active">Project Tungsten is not deprecated in any Spark release. It was a performance initiative, not a feature with an on/off switch; its code is the default execution path in Spark 4.3.0. Only its old configuration flag, `spark.sql.tungsten.enabled`, was deprecated (Spark 1.6.0) and later dropped.[^mm430]</Status>
+
+**Project Tungsten** is the name of an [Apache Spark](/wiki/Apache_Spark) engineering initiative, started in 2015, to make Spark's execution more efficient in CPU and memory by managing memory explicitly, storing rows in a compact binary format, using CPU caches better and generating code at run time.[^jira7075] Tungsten is not a separate engine or a module that can be installed or turned off: its results (for example the `UnsafeRow` format, Tungsten-managed memory pages and whole-stage code generation) are part of how Spark SQL and DataFrame queries run in every current release. The name survives mostly in source code, configuration aliases and older documentation.
+
+## What the name referred to
+
+The umbrella ticket SPARK-7075, "Project Tungsten (Spark 1.5 Phase 1)", states the premise: most Spark workloads observed by its authors were bottlenecked by CPU and memory rather than by I/O or network. It names three areas of work:[^jira7075][^blog2015]
+
+- **Memory management and binary processing.** Keep data in a binary format instead of as Java objects, to reduce garbage collection overhead and memory use; account for memory in bytes; and let operators that know the data types work directly on the binary data without serialization.
+- **Cache-aware computation.** Algorithms and data structures, such as sorting and hashing, laid out to make better use of CPU caches.
+- **Code generation.** Generate code at run time for expression evaluation and serialization, to use modern compilers and CPUs better.
+
+The work arrived over several releases. The Spark 1.4.0 release notes list SPARK-7081, a faster sort-based shuffle path, as "Initial performance improvements in project Tungsten".[^r140][^n1] Phase 1 (SPARK-7075) has fix version 1.5.0, and the 1.5.0 release notes say that optimized execution with manually managed memory (Tungsten) was now on by default, together with code generation for expression evaluation.[^jira7075][^r150] A phase 2 umbrella followed (SPARK-9697).[^n2] Whole-stage code generation (SPARK-12795) shipped in Spark 2.0.0, and a 2016 Databricks post by Spark developers presented it as the core of a "second generation Tungsten engine".[^jira12795][^blog2016] The Spark 2.0.0 release notes describe whole-stage code generation without using the Tungsten name.[^n3]
+
+## What remains in Spark 4
+
+Project Tungsten has no deprecation or removal in any Spark release. Its pieces are ordinary parts of the engine:
+
+- **Tungsten memory.** Spark's memory manager still allocates "Tungsten" memory pages for sorting, hashing and shuffle, on the JVM heap by default or off-heap through `sun.misc.Unsafe` when `spark.memory.offHeap.enabled` is true (default false, available since 1.6.0).[^mm430][^tmm430][^conf430] See [Spark memory management](/wiki/Spark_memory_management).
+- **The `UnsafeRow` format.** Spark SQL's internal row format is backed by raw memory instead of Java objects: a null-tracking bit set, one 8-byte word per field, and a variable-length region for strings and other variable-length values.[^unsaferow]
+- **Whole-stage code generation.** Enabled by default through the internal setting `spark.sql.codegen.wholeStage` (default true, since 2.0.0). In `EXPLAIN` output, an operator compiled into a generated stage is prefixed with `*(n)`, where n is the code generation stage ID.[^sqlconf430][^wscg430] See [Whole-stage code generation](/wiki/Whole-stage_code_generation).
+- **The `tungsten-sort` shuffle alias.** Spark 1.5.0 mapped `spark.shuffle.manager=tungsten-sort` to a separate `UnsafeShuffleManager`. SPARK-10708 merged it into the sort shuffle manager in 1.6.0, and since then `tungsten-sort` is an alias for `SortShuffleManager`, as it still is in 4.3.0.[^env150][^n4][^sm430]
+
+### The `spark.sql.tungsten.enabled` flag
+
+The one Tungsten item that was deprecated is a configuration flag. In Spark 1.5.0, `spark.sql.tungsten.enabled` (default true) switched the Tungsten execution backend and code generation on or off.[^r150][^n5] Spark 1.6.0 removed the option to turn off the unsafe (Tungsten) and code generation paths (SPARK-11644)[^n6] and moved the flag to a list of deprecated keys: setting it logged a warning that the property "is deprecated and will be ignored. Tungsten will continue to be used."[^n7] By Spark 2.0.0 the `SET` command no longer has any special handling for it.[^n8] There has been no way to turn Tungsten off as a whole since 1.6.0.
+
+## Example
+
+This PySpark query runs a filter and an aggregation. After the query has run, `explain()` shows the final adaptive plan, where the `*(1)` prefix marks the three operators that were compiled together into one generated function.
+
+```python
+df = spark.range(1000).filter("id % 2 = 0").selectExpr("sum(id)")
+df.collect()
+df.explain()
+```
+
+Part of the output from a Spark 4.3 build:
+
+```
+   ResultQueryStage 0
+   +- *(1) HashAggregate(keys=[], functions=[sum(id#0L)])
+      +- *(1) Filter ((id#0L % 2) = 0)
+         +- *(1) Range (0, 1000, step=1, splits=1)
+```
+
+## What Tungsten is not
+
+- **Not the optimizer.** The [Catalyst optimizer](/wiki/Catalyst_optimizer) decides what plan to run; Tungsten work concerns how the chosen physical operators use memory and CPU. The MLlib guide, for example, lists "Tungsten and Catalyst optimizations" as benefits of DataFrames.[^n9]
+- **Not a native engine.** Tungsten code runs in the JVM and generates Java code. Native execution engines for Spark, such as Apache Gluten (with Velox) and Apache DataFusion Comet, replace JVM operators with native code; Photon is a proprietary Databricks engine. See [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)).
+- **Not available to RDD code.** The binary row format and generated code apply to DataFrame, Dataset and SQL operators, which know the data types. Programs that use the [RDD](/wiki/RDD) API with arbitrary JVM objects do not get these benefits.[^jira7075]
+
+## See also
+
+- [Catalyst optimizer](/wiki/Catalyst_optimizer)
+- [Whole-stage code generation](/wiki/Whole-stage_code_generation)
+- [Spark memory management](/wiki/Spark_memory_management)
+- [Shuffle](/wiki/Shuffle)
+- [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))
+
+## References
+
+[^mm430]: [MemoryManager.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/memory/MemoryManager.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira7075]: [SPARK-7075: Project Tungsten (Spark 1.5 Phase 1)](https://issues.apache.org/jira/browse/SPARK-7075). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^blog2015]: [Project Tungsten: Bringing Apache Spark Closer to Bare Metal](https://www.databricks.com/blog/2015/04/28/project-tungsten-bringing-spark-closer-to-bare-metal.html). *Databricks*, 2015-04-28. Retrieved 2026-11-22.
+[^r140]: [Spark Release 1.4.0](https://spark.apache.org/releases/spark-release-1-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [SPARK-7081: Faster sort-based shuffle path using binary processing cache-aware sort](https://issues.apache.org/jira/browse/SPARK-7081). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^r150]: [Spark Release 1.5.0](https://spark.apache.org/releases/spark-release-1-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [SPARK-9697: Project Tungsten (Phase 2)](https://issues.apache.org/jira/browse/SPARK-9697). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^jira12795]: [SPARK-12795: Whole stage codegen](https://issues.apache.org/jira/browse/SPARK-12795). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^blog2016]: [Apache Spark as a Compiler: Joining a Billion Rows per Second on a Laptop](https://www.databricks.com/blog/2016/05/23/apache-spark-as-a-compiler-joining-a-billion-rows-per-second-on-a-laptop.html). *Databricks*, 2016-05-23. Retrieved 2026-11-22.
+[^n3]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^tmm430]: [TaskMemoryManager.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/memory/TaskMemoryManager.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^conf430]: [Spark Configuration (docs/configuration.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/configuration.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^unsaferow]: [UnsafeRow.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/catalyst/expressions/UnsafeRow.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sqlconf430]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^wscg430]: [WholeStageCodegenExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/WholeStageCodegenExec.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^env150]: [SparkEnv.scala (v1.5.0)](https://github.com/apache/spark/blob/v1.5.0/core/src/main/scala/org/apache/spark/SparkEnv.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [SPARK-10708: Consolidate SortShuffleManager and UnsafeShuffleManager](https://issues.apache.org/jira/browse/SPARK-10708). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^sm430]: [ShuffleManager.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/shuffle/ShuffleManager.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n5]: [SQLConf.scala (v1.5.0)](https://github.com/apache/spark/blob/v1.5.0/sql/core/src/main/scala/org/apache/spark/sql/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n6]: [SPARK-11644: Remove the option to turn off unsafe and codegen](https://issues.apache.org/jira/browse/SPARK-11644). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n7]: [commands.scala (v1.6.0)](https://github.com/apache/spark/blob/v1.6.0/sql/core/src/main/scala/org/apache/spark/sql/execution/commands.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n8]: [SetCommand.scala (v2.0.0)](https://github.com/apache/spark/blob/v2.0.0/sql/core/src/main/scala/org/apache/spark/sql/execution/command/SetCommand.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n9]: [Machine Learning Library (MLlib) Guide (docs/ml-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/ml-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.

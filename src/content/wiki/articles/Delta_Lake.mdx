@@ -1,0 +1,94 @@
+---
+title: "Delta Lake"
+categories: ["Table formats"]
+---
+
+<Infobox type="software">
+  <Field name="developer">Delta Lake project, a [Linux Foundation](/wiki/Linux_Foundation) project (created by [Databricks](/wiki/Databricks))</Field>
+  <Field name="initial_release">2019 (open source)</Field>
+  <Field name="latest_release">4.4.1</Field>
+  <Field name="latest_release_date">2026-10-05</Field>
+  <Field name="written_in">Scala, Java (Delta Spark); Rust (delta-rs)</Field>
+  <Field name="type">[Open table format](/wiki/Open_table_format)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[delta.io](https://delta.io)</Field>
+  <Field name="repo">[github.com/delta-io/delta](https://github.com/delta-io/delta)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Apache Hudi](/wiki/Apache_Hudi), [Apache Parquet](/wiki/Apache_Parquet), [Unity Catalog](/wiki/Unity_Catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Delta Lake 4.4.1 GitHub release and the Delta Transaction Log Protocol (PROTOCOL.md)</Verified>
+
+**Delta Lake** is an [open table format](/wiki/Open_table_format) and storage framework that adds ACID transactions to tables stored as [Apache Parquet](/wiki/Apache_Parquet) files in a distributed file system or object store. A Delta table records every change in a transaction log kept next to the data, and the Delta Transaction Log Protocol specifies how readers and writers use that log.[^protocol] Delta Lake is one of the table formats used in an [open lakehouse](/wiki/Open_lakehouse), with connectors for engines such as [Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino) and Apache Flink.[^readme]
+
+## How it works
+
+A Delta Lake table is a directory that holds data files and a `_delta_log` subdirectory. The log contains JSON files named by table version, zero-padded to 20 digits. Each JSON file holds an atomic set of actions, such as adding or removing a data file or changing table metadata, that turns the previous version of the table into the next one.[^protocol]
+
+Delta Lake writers work in two phases. They first write new data files optimistically, then commit by adding the next numbered entry to the log. The table therefore has a single serial history of versions. Readers use the log to choose which data files make up a consistent snapshot, so they are isolated from concurrent writes.[^protocol] The project states that Delta Lake provides serializability for concurrent reads and writes.[^readme]
+
+Checkpoints, also stored in `_delta_log`, contain the full replayed state of the table at one version. Readers start from the newest suitable checkpoint so that they do not need to replay every JSON entry.[^protocol]
+
+Because all metadata is stored with the data, a Delta table does not need a separate metastore to be read, and a static table can be copied with ordinary file system tools.[^protocol] The protocol also defines catalog-managed tables, in which a catalog ratifies commits and clients must contact that catalog to find the latest ones.[^protocol]
+
+## Features
+
+### Time travel
+
+The Delta Lake log keeps older table versions readable, so a reader can query the table as of an earlier version. For time travel, the checkpoint used to rebuild the state must not be newer than the requested version.[^protocol] Data files that are no longer in the latest version can be removed by the vacuum command after a retention period, which defaults to 7 days.[^protocol]
+
+### Protocol versions and table features
+
+Each Delta table declares a minimum reader version and a minimum writer version. The protocol version increases when a change to the specification is not forward compatible, so that older clients refuse tables they cannot interpret correctly. From reader version 3 and writer version 7, a table instead lists named table features, and a client must support every listed feature to read or write the table.[^protocol]
+
+### Other features in the protocol
+
+The Delta protocol specification defines, among others:[^protocol]
+- **Deletion vectors**, which mark rows in a data file as deleted without rewriting the file.
+- **Change data files**, which record row-level changes for readers of a change feed.
+- **Column mapping**, which maps logical column names to physical names.
+- **Row tracking**, **in-commit timestamps**, **type widening** and the **variant** data type.
+- **Iceberg compatibility** table features, which constrain writers so that Iceberg metadata can be produced for the table.
+
+### UniForm
+
+Delta Universal Format (UniForm) lets Apache Iceberg and Apache Hudi clients read Delta tables. UniForm generates Iceberg or Hudi metadata asynchronously after Delta commits, over the same Parquet data files. Iceberg and Hudi clients can only read such tables; Hudi support is in preview.[^uniform]
+
+## History
+
+Delta Lake was created by [Databricks](/wiki/Databricks). Databricks announced the open sourcing of the Delta Lake project under the Apache License 2.0 on 24 April 2019.[^opensource] On 16 October 2019 the Linux Foundation announced that it would host Delta Lake under an open governance model.[^lf]
+
+Delta Lake 4.4.1, a patch release on top of 4.4.0, was published on 5 October 2026. Its Delta Spark artifacts are built for Apache Spark 4.2.0, 4.1.0 and 4.0.1, with Scala 2.13.[^release]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Delta Lake tables live on object storage in Parquet, and engines read the transaction log to find the current files. With catalog-managed tables, a [data catalog](/wiki/Data_catalog) takes part in each commit and is the source of truth for the latest versions.[^protocol] UniForm allows the same table to be read by Iceberg clients without copying the data.[^uniform]
+
+## Engine support
+
+The Delta Lake project lists connectors for Apache Spark (read and write), Trino (read and write), Apache Flink (write, preview), PrestoDB (read) and Apache Hive (read). The delta-rs library gives Rust code, with Python bindings, direct access to Delta tables.[^readme] [DuckDB](/wiki/DuckDB) reads Delta tables through its delta extension.[^n1] Delta Spark also ships [Spark Connect](/wiki/Spark_Connect) client and server artifacts.[^release]
+
+## Limitations
+
+Delta Lake's ACID guarantees depend on the storage system. The project requires atomic visibility of files, mutual exclusion so that only one writer can create a given log file, and consistent directory listing.[^readme] On Amazon S3, for example, writes from multiple clusters must be enabled explicitly by configuring a LogStore implementation (such as one backed by DynamoDB) that supplies the mutual exclusion S3 lacks.[^n2]
+
+Delta Lake keeps backward compatibility, so newer versions read tables written by older versions, but forward compatibility can break: an older client may not read a table that uses newer protocol features.[^readme] UniForm has its own limits; for example, the documentation lists tables with deletion vectors as unsupported.[^uniform]
+
+## See also
+
+- [Open table format](/wiki/Open_table_format)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Apache Hudi](/wiki/Apache_Hudi)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Unity Catalog](/wiki/Unity_Catalog)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^protocol]: [Delta Transaction Log Protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md). *Delta Lake project*. Retrieved 2026-11-22.
+[^readme]: [Delta Lake README](https://github.com/delta-io/delta/blob/master/README.md). *Delta Lake project*. Retrieved 2026-11-22.
+[^uniform]: [Universal Format (UniForm)](https://docs.delta.io/latest/delta-uniform.html). *Delta Lake project*. Retrieved 2026-11-22.
+[^opensource]: [Open Sourcing Delta Lake](https://www.databricks.com/blog/2019/04/24/open-sourcing-delta-lake.html). *Databricks*, 2019-04-24. Retrieved 2026-11-22.
+[^lf]: [The Delta Lake Project Turns to Linux Foundation to Become the Open Standard for Data Lakes](https://www.linuxfoundation.org/press/press-release/the-delta-lake-project-turns-to-linux-foundation-to-become-the-open-standard-for-data-lakes). *Linux Foundation*, 2019-10-16. Retrieved 2026-11-22.
+[^release]: [Delta Lake 4.4.1](https://github.com/delta-io/delta/releases/tag/v4.4.1). *GitHub*, 2026-10-05. Retrieved 2026-11-22.
+[^n1]: [Delta Extension](https://duckdb.org/docs/stable/core_extensions/delta). *DuckDB*. Retrieved 2026-11-22.
+[^n2]: [Storage configuration](https://docs.delta.io/latest/delta-storage.html). *Delta Lake project*. Retrieved 2026-11-22.

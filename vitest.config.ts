@@ -7,6 +7,7 @@ import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import path from "path";
+import { wikiPlugin } from "./scripts/wiki-index";
 
 export default defineConfig({
   plugins: [
@@ -22,6 +23,7 @@ export default defineConfig({
       rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
     }) } as any,
     react(),
+    wikiPlugin(),
   ],
   test: {
     environment: "jsdom",

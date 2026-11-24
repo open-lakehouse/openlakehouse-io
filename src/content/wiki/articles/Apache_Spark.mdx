@@ -1,0 +1,136 @@
+---
+title: "Apache Spark"
+categories: ["Query engines", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation)</Field>
+  <Field name="initial_release">2010 (open sourced)</Field>
+  <Field name="latest_release">4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala, Java, Python</Field>
+  <Field name="type">Distributed data processing engine</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[spark.apache.org](https://spark.apache.org)</Field>
+  <Field name="repo">[github.com/apache/spark](https://github.com/apache/spark)</Field>
+  <Field name="related">[Spark Connect](/wiki/Spark_Connect), [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines), [Structured Streaming](/wiki/Structured_Streaming), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the spark.apache.org news page and release notes (latest release 4.3.0), the v4.3.0 tag of apache/spark and its documentation</Verified>
+
+**Apache Spark** is an open source, distributed engine for large-scale data processing, with high-level APIs in Java, Scala, Python and R and an optimized engine that runs general execution graphs.[^docs-index] Spark runs batch queries, SQL, stream processing and machine learning on one engine, on a single machine or on a cluster. In an [open lakehouse](/wiki/Open_lakehouse), Spark is one of the engines that reads and writes [open table formats](/wiki/Open_table_format) such as [Apache Iceberg](/wiki/Apache_Iceberg) and [Delta Lake](/wiki/Delta_Lake) through a shared [data catalog](/wiki/Data_catalog).
+
+## Architecture
+
+A Spark application runs as a set of independent processes on a cluster. The **driver** program holds the `SparkContext` (wrapped by `SparkSession` in the DataFrame API) and plans the work. The driver connects to a **cluster manager**, which allocates resources, and then obtains **executors**: processes on worker nodes that run computations and store data for the application. The driver sends application code and then **tasks** to the executors.[^cluster]
+
+Each Spark application gets its own executor processes, which stay up for the whole application. This isolates applications from one another, but it also means two Spark applications cannot share in-memory data without writing it to external storage.[^cluster]
+
+### Execution model
+
+Spark evaluates transformations lazily. A transformation such as a filter or a join only records how a dataset is derived; Spark computes it when an **action**, such as `collect` or a write, needs a result. The Spark documentation explains that this lets Spark run more efficiently, for example by returning only the result of a final aggregation to the driver instead of a large intermediate dataset.[^n1]
+
+A Spark **job** is a parallel computation that Spark starts in response to an action. Spark divides each job into **stages**, sets of tasks that depend on one another in a similar way to the map and reduce stages of MapReduce, and sends each **task** to one executor.[^cluster]
+
+The **deploy mode** sets where the driver runs. In cluster mode, the driver is launched inside the cluster; in client mode, the process that submits the application runs the driver outside the cluster.[^cluster]
+
+### Cluster managers
+
+Spark 4.3 supports three cluster managers: Spark's own **standalone** manager, **Hadoop YARN** and **Kubernetes**. Applications are submitted to any of them with the `spark-submit` script. Each driver also serves a web UI, by default on port 4040.[^cluster] The project also maintains a separate Spark Kubernetes Operator for running Spark applications and clusters through Kubernetes custom resources.[^docs-index]
+
+## APIs and libraries
+
+Spark exposes several libraries on top of its core engine:[^docs-index]
+
+- **Spark SQL and DataFrames**: structured data processing through SQL or the DataFrame and Dataset APIs, optimized by the Catalyst query optimizer.[^r200][^n2]
+- **[Structured Streaming](/wiki/Structured_Streaming)**: stream processing built on the Spark SQL engine, using the same DataFrame operations as batch queries.
+- **MLlib**: a library of machine learning algorithms and pipelines.[^n3]
+- **pandas API on Spark**: a pandas-compatible API that runs on Spark. It was added in Spark 3.2.0.[^r320]
+- **GraphX**: graph processing.[^docs-index]
+
+The R API (SparkR) is marked as deprecated in the Spark 4.3 documentation. Spark 4.3 runs on Java 17, 21 or 25, Scala 2.13 and Python 3.11 or later.[^docs-index]
+
+A short PySpark example that reads a table and aggregates it:
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+spark = SparkSession.builder.appName("example").getOrCreate()
+
+orders = spark.read.table("sales.orders")
+daily = orders.groupBy("order_date").agg(F.sum("amount").alias("revenue"))
+daily.write.mode("overwrite").saveAsTable("sales.daily_revenue")
+```
+
+## Spark Connect
+
+<Hatnote>Main article: [Spark Connect](/wiki/Spark_Connect)</Hatnote>
+
+Spark Connect is a client-server protocol, introduced in Spark 3.4, in which a thin client sends unresolved logical plans to a Spark server over gRPC and receives results as Apache Arrow batches.[^connect] The client does not run inside the driver process, so applications can run in IDEs, notebooks and services away from the cluster. Besides the Python and Scala clients in the main repository, the Spark project maintains separate Spark Connect clients for Go, Rust and Swift.[^n4][^n5][^n6] Spark 4.0 added a lightweight Python client package (`pyspark-client`) and the `spark.api.mode` setting, which lets a classic application switch to Spark Connect.[^r400]
+
+## Spark Declarative Pipelines
+
+<Hatnote>Main article: [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)</Hatnote>
+
+Spark Declarative Pipelines (SDP), added in Spark 4.1.0, is a framework in which a user declares datasets (streaming tables, materialized views and temporary views) and the flows that fill them, and Spark works out the dependency order, parallelism, checkpoints and retries.[^r410] Pipelines are run with the `spark-pipelines` command line tool.[^n7]
+
+## History
+
+Spark started in 2009 as a research project at the AMPLab of the University of California, Berkeley, and was open sourced in early 2010. The project moved to the Apache Software Foundation in 2013.[^history] The ASF announced on 27 February 2014 that Spark had graduated from the Apache Incubator to become a top-level project.[^n8]
+
+| Version | Announced | Selected changes |
+| --- | --- | --- |
+| 1.0.0 | 2014-05-30 | First release of the 1.x line[^news] |
+| 2.0.0 | 2016-07-26 | First, experimental release of Structured Streaming[^news][^r200] |
+| 3.0.0 | 2020-06-18 | First release of the 3.x line; adaptive query execution, dynamic partition pruning[^news][^n9] |
+| 3.4.0 | 2023-04-13 | Python client for Spark Connect[^news][^n10] |
+| 4.0.0 | 2025-05-23 | First release of the 4.x line; VARIANT type, SQL user-defined functions, pipe syntax, Arbitrary State API v2 (`transformWithState`)[^news][^r400] |
+| 4.1.0 | 2025-12-16 | Spark Declarative Pipelines; Real-time Mode in Structured Streaming; SQL scripting and VARIANT enabled by default[^news][^r410] |
+| 4.2.0 | 2026-07-14 | SQL `CHANGES` clause for change data capture; Auto CDC in Declarative Pipelines[^news][^r420] |
+| 4.3.0 | 2026-10-30 | Stateful queries in Real-time Mode; SCD Type 2 Auto CDC; start of a quarterly feature-release cadence[^news][^r430] |
+
+Older release lines continue to receive maintenance releases; Spark 4.2.1, 4.1.4 and 4.0.5 were announced on 27 October 2026, three days before 4.3.0.[^n11]
+
+## Use in an open lakehouse
+
+Spark reads and writes lakehouse tables through table format connectors and its catalog plugin API. A catalog is registered by setting Spark properties under `spark.sql.catalog.<name>`; the [Apache Iceberg](/wiki/Apache_Iceberg) documentation, for example, shows a catalog of type `rest` that talks to an [Iceberg REST catalog](/wiki/Iceberg_REST_catalog).[^n12] [Delta Lake](/wiki/Delta_Lake) is enabled with the `io.delta.sql.DeltaSparkSessionExtension` SQL extension and the `DeltaCatalog` session catalog.[^n13]
+
+Because the table data sits in open formats such as [Apache Parquet](/wiki/Apache_Parquet) and the metadata sits in a catalog such as [Unity Catalog](/wiki/Unity_Catalog) or [Apache Polaris](/wiki/Apache_Polaris), the same tables Spark writes can be queried by other engines, for example [Trino](/wiki/Trino) or [DuckDB](/wiki/DuckDB). Spark is commonly used for the ingestion and transformation layers of a [medallion architecture](/wiki/Medallion_architecture), with [Apache Airflow](/wiki/Apache_Airflow) or Spark Declarative Pipelines deciding when each step runs.
+
+## See also
+
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Open lakehouse](/wiki/Open_lakehouse)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Airflow](/wiki/Apache_Airflow)
+
+## References
+
+[^docs-index]: [Spark Overview (Spark 4.3.0 documentation)](https://spark.apache.org/docs/4.3.0/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^cluster]: [Cluster Mode Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/cluster-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [RDD Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r200]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Spark SQL, DataFrames and Datasets Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [MLlib: Main Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/ml-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r320]: [Spark Release 3.2.0](https://spark.apache.org/releases/spark-release-3-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [apache/spark-connect-go](https://github.com/apache/spark-connect-go). *GitHub*. Retrieved 2026-11-22.
+[^n5]: [apache/spark-connect-rust](https://github.com/apache/spark-connect-rust). *GitHub*. Retrieved 2026-11-22.
+[^n6]: [apache/spark-connect-swift](https://github.com/apache/spark-connect-swift). *GitHub*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n7]: [Spark Declarative Pipelines Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/declarative-pipelines-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^history]: [History](https://spark.apache.org/history.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n8]: [The Apache Software Foundation Announces Apache Spark as a Top-Level Project](https://news.apache.org/foundation/entry/the_apache_software_foundation_announces50). *The ASF Blog*, 2014-02-27. Retrieved 2026-11-22.
+[^news]: [spark-website news posts](https://github.com/apache/spark-website/tree/asf-site/news/_posts). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n9]: [Spark Release 3.0.0](https://spark.apache.org/releases/spark-release-3-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n10]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n11]: [Spark News](https://spark.apache.org/news/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n12]: [Spark Configuration](https://iceberg.apache.org/docs/latest/spark-configuration/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^n13]: [Quickstart](https://docs.delta.io/quick-start/). *Delta Lake*. Retrieved 2026-11-22.

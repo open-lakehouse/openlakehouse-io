@@ -486,3 +486,90 @@ button.smx-c { @apply cursor-pointer outline-none focus-visible:ring-2 focus-vis
 .smx-absent { @apply bg-muted text-muted-foreground; }
 .smx-undocumented { @apply bg-transparent text-muted-foreground ring-1 ring-inset ring-border; }
 .smx-unknown { @apply bg-navy-200 text-navy-600 dark:bg-navy-700 dark:text-navy-300; }
+
+/* ---------- Open Lakehouse Wiki (/wiki/*) ---------- */
+.wiki-bar { @apply border-b border-border bg-muted/40; }
+.wiki-search { @apply flex items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-within:ring-2 focus-within:ring-ring; }
+.wiki-search input { @apply w-full bg-transparent outline-none placeholder:text-muted-foreground; }
+
+.wiki-header { @apply mb-6 max-w-5xl border-b border-border pb-3; }
+.wiki-header h1 { @apply text-3xl font-semibold tracking-tight text-foreground sm:text-4xl; }
+.wiki-from { @apply mt-1 text-sm text-muted-foreground; }
+.wiki-tools { @apply mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm; }
+.wiki-tools a { @apply inline-flex items-center gap-1 text-muted-foreground hover:text-primary; }
+
+/* Wider than blog posts: wiki articles carry an infobox and tables. */
+.prose.post-article.wiki-article { max-width: 64rem; font-size: 1.0625rem; }
+.wiki-article::after { content: ""; display: table; clear: both; }
+.wiki-article h2 { clear: right; }
+
+.wiki-infobox { @apply my-0 mb-4 w-full border border-border bg-muted/40 text-sm sm:float-right sm:ml-6 sm:w-80; border-collapse: separate; }
+.wiki-infobox caption { @apply bg-primary/10 px-3 py-2 text-center text-base font-semibold text-foreground; caption-side: top; }
+.wiki-infobox th { @apply w-1/3 px-3 py-1 text-left align-top font-semibold leading-snug text-foreground; }
+.wiki-infobox td { @apply px-3 py-1 align-top leading-snug; }
+.wiki-infobox th, .wiki-infobox td { border: 0 !important; }
+
+.wiki-verified { @apply mb-4 text-sm italic text-muted-foreground; }
+.wiki-hatnote { @apply -mt-2 mb-3 pl-6 text-sm italic text-muted-foreground; }
+/* flow-root keeps notices beside a floated infobox instead of under it. */
+.wiki-note, .wiki-warning, .wiki-status { @apply my-4 rounded-md border-l-4 px-4 py-3 text-base; display: flow-root; }
+.wiki-note > :first-child, .wiki-warning > :first-child { margin-top: 0; }
+.wiki-note > :last-child, .wiki-warning > :last-child { margin-bottom: 0; }
+.wiki-note { @apply border-primary bg-primary/5; }
+.wiki-warning { @apply border-red-500 bg-red-50 dark:bg-red-950/40; }
+.wiki-status { @apply border-navy-300 bg-muted/60; }
+.wiki-status-active { @apply border-green-600 bg-green-50 dark:bg-green-950/40; }
+.wiki-status-experimental { @apply border-sky-500 bg-sky-50 dark:bg-sky-950/40; }
+.wiki-status-maintenance, .wiki-status-proposed { @apply border-yellow-500 bg-yellow-50 dark:bg-yellow-950/40; }
+.wiki-status-deprecated, .wiki-status-removed, .wiki-status-archived { @apply border-red-500 bg-red-50 dark:bg-red-950/40; }
+
+/* Links to pages not written yet render as plain text. */
+.wiki-redlink { color: inherit; }
+.wiki-table-scroll { @apply my-6 overflow-x-auto; }
+.wiki-table-scroll table { @apply my-0 text-sm; }
+
+/* GFM footnotes are the wiki's references. */
+.wiki-article .footnotes { @apply mt-10 text-sm; }
+.wiki-article .footnotes h2 { position: static; width: auto; height: auto; margin: 0 0 0.75rem; overflow: visible; clip: auto; white-space: normal; }
+.wiki-article .footnotes ol { @apply pl-6; }
+.wiki-article .footnotes li { @apply my-1; }
+.wiki-article .footnotes li p { @apply my-0 inline; }
+.wiki-article sup a { @apply no-underline; }
+/* [1][2] like an encyclopedia, so adjacent citations do not read as 12. */
+.wiki-article sup a[data-footnote-ref]::before { content: "["; }
+.wiki-article sup a[data-footnote-ref]::after { content: "]"; }
+
+.wiki-navbox { @apply mt-10 max-w-5xl overflow-hidden rounded-md border border-border text-sm; }
+.wiki-navbox-title { @apply bg-primary/10 px-3 py-2 text-center font-semibold; }
+.wiki-navbox dl { @apply m-0; }
+.wiki-navbox dl > div { @apply grid border-t border-border sm:grid-cols-[12rem_1fr]; }
+.wiki-navbox dt { @apply bg-muted/60 px-3 py-1.5 font-semibold sm:text-right; }
+.wiki-navbox dd { @apply m-0 px-3 py-1.5; }
+.wiki-navbox a, .wiki-catlinks a, .wiki-home a, .wiki-glossary a, .wiki-license a { @apply text-primary hover:underline; }
+
+.wiki-catlinks { @apply mt-6 max-w-5xl rounded-md border border-border bg-muted/40 px-3 py-2 text-sm; }
+.wiki-license { @apply mt-6 max-w-5xl text-xs text-muted-foreground; }
+
+.wiki-columns { @apply columns-1 gap-8 sm:columns-2 lg:columns-3; }
+.wiki-columns section { break-inside: avoid; }
+.wiki-columns h3.wiki-letter { @apply mb-1 mt-0 text-base font-semibold; }
+.wiki-columns section ul { @apply mb-4 mt-0 list-none pl-0; }
+.wiki-columns section li { @apply my-0.5 pl-0; }
+.wiki-glossary > div { @apply my-3; }
+.wiki-glossary dt { @apply font-semibold; }
+.wiki-glossary dd { @apply ml-0 mt-0.5; }
+
+.wiki-hero { @apply mb-8 rounded-xl border border-border bg-muted/40 p-6; }
+.wiki-hero h1 { @apply text-3xl font-semibold tracking-tight sm:text-4xl; }
+.wiki-hero p { @apply mt-2 max-w-3xl text-lg text-muted-foreground; }
+.wiki-grid { @apply mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3; }
+.wiki-card { @apply rounded-lg border border-border border-t-4 border-t-primary bg-card p-4 text-sm; }
+.wiki-card.blue { @apply border-t-sky-500; }
+.wiki-card.yellow { @apply border-t-yellow-500; }
+.wiki-card.navy { @apply border-t-navy-500; }
+.wiki-card h2 { @apply mb-2 text-base font-semibold; }
+.wiki-card ul { @apply list-disc space-y-1 pl-5; }
+.wiki-card p { @apply mb-2; }
+.wiki-index { @apply mt-8 text-sm; }
+.wiki-index h2 { @apply mb-3 mt-6 text-xl font-semibold; }
+.wiki-index li { @apply mb-1; }

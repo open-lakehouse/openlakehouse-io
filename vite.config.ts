@@ -11,6 +11,7 @@ import rehypePrettyCode from "rehype-pretty-code";
 import { componentTagger } from "lovable-tagger";
 import { postMarkdownPlugin } from "./scripts/vite-post-markdown";
 import remarkMermaid from "./scripts/remark-mermaid.mjs";
+import { wikiPlugin } from "./scripts/wiki-index";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -35,6 +36,7 @@ export default defineConfig(({ mode }) => ({
     }) } as any,
     react(),
     postMarkdownPlugin(),
+    wikiPlugin(),
     mode === "development" && componentTagger(),
   ].filter(Boolean),
   resolve: {
