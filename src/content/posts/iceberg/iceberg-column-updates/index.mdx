@@ -2,8 +2,8 @@
 title: "Apache Iceberg v4 Column Updates Are About to Change Feature Engineering"
 date: 2026-10-27
 authors: [lisa-cao]
-excerpt: "Iceberg v4 is adding column files, companion files that can hold one or more whole columns for every row of a data file and be swapped in by position at read time. Why that matters for feature stores and other wide tables, where the design helps, and why the v4 work is not production-ready yet."
-tags: [apache-iceberg, v4, parquet, feature-store, lakehouse]
+excerpt: "Iceberg v4 is adding column files, companion files that can hold one or more whole columns for every row of a data file and be swapped in by position at read time. This post explains why that matters for feature stores and other wide tables, where the design helps, and why the v4 work is still not something you can run in production."
+tags: [apache-iceberg, parquet, lakehouse, spec]
 include: [blog]
 kind: post
 originalUrl: "https://systemsnull.net/posts/data-engineering-ai/iceberg-column-updates"
@@ -247,7 +247,7 @@ The catch is in the comment on that field in today's `parquet.thrift`: "there ar
 | Can cleanup jobs see every file? | yes | no, the link is inside a footer |
 | Formats | Parquet, ORC, Avro | Parquet only |
 
-The [File Format API](/posts/data-engineering-ai/iceberg-file-format-api) makes the same kind of choice: keep the bytes in plain data-file formats and put the table-level structure in Iceberg metadata, where every engine already has to look.
+The [File Format API](https://systemsnull.net/posts/data-engineering-ai/iceberg-file-format-api) makes the same kind of choice: keep the bytes in plain data-file formats and put the table-level structure in Iceberg metadata, where every engine already has to look.
 
 A column file is tracked by Iceberg, not by Parquet. v4-aware `expire_snapshots`, `remove_orphan_files` and `rewrite_data_files` implementations can account for column files from the manifest. A Parquet tool that opens a column file directly sees an ordinary narrow Parquet file with no link to its base file.
 
