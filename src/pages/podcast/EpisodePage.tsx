@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Clock } from "lucide-react";
+import { YouTubeEmbed } from "@/components/YouTubeEmbed";
+import { getAuthor } from "@/content/content";
+import { MdxProvider } from "@/components/MdxProvider";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
@@ -15,6 +18,10 @@ import {
   humanDuration,
   loadTranscript,
   transcriptSync,
+  loadWriteup,
+  writeupFor,
+  writeupSync,
+  youtubeFor,
 } from "@/content/podcast";
 import { SITE_URL } from "@/lib/seo";
 import { ListenLinks } from "./PodcastIndex";
@@ -42,13 +49,25 @@ const EpisodePage = () => {
   const { slug = "" } = useParams();
   const episode = getEpisode(slug);
   const [transcript, setTranscript] = useState<string | undefined>(() => transcriptSync(slug));
+  const meta = episode ? writeupFor(episode) : undefined;
+  const [Writeup, setWriteup] = useState(() => writeupSync(slug));
 
   useEffect(() => {
     if (!transcript && episode?.hasTranscript) loadTranscript(slug).then(setTranscript);
   }, [slug, episode, transcript]);
+  useEffect(() => {
+    // Client-side navigation between episodes: load this episode's write-up.
+    const cached = writeupSync(slug);
+    if (cached) setWriteup(() => cached);
+    else if (meta) loadWriteup(slug).then((c) => c && setWriteup(() => c));
+  }, [slug, meta]);
 
   if (!episode) return <NotFound />;
 
+  const video = youtubeFor(episode);
+  const authors = (meta?.authors ?? []).map(getAuthor).filter(Boolean);
+  const heading = meta?.title ?? episode.title;
+  const description = meta?.excerpt ?? (episode.summary.length > 300 ? `${episode.summary.slice(0, 297)}...` : episode.summary);
   const idx = episodes.indexOf(episode);
   const newer = episodes[idx - 1];
   const older = episodes[idx + 1];
@@ -66,8 +85,8 @@ const EpisodePage = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Seo
-        title={`${episode.title} | ${SHOW.title}`}
-        description={episode.summary.length > 300 ? `${episode.summary.slice(0, 297)}...` : episode.summary}
+        title={`${heading} | ${SHOW.title}`}
+        description={description}
         path={episodePath(episode)}
         type="article"
         image={episode.image}
@@ -97,11 +116,34 @@ const EpisodePage = () => {
               )}
             </p>
             <h1 className="text-balance text-[clamp(2rem,4vw,3rem)] font-semibold leading-[1.1] tracking-[-0.03em]">
-              {episode.title}
+              {heading}
             </h1>
+            {meta && <p className="text-lg leading-snug text-muted-foreground">{episode.title}</p>}
+            {authors.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                By{" "}
+                {authors.map((a, i) => (
+                  <span key={a.slug}>
+                    {i > 0 && " and "}
+                    <Link to={`/authors/${a.slug}`} className="font-medium text-foreground hover:underline">{a.name}</Link>
+                  </span>
+                ))}
+              </p>
+            )}
           </header>
 
-          <audio controls preload="none" className="mt-8 w-full">
+          {video && <YouTubeEmbed videoId={video.id} title={episode.title} />}
+          {Writeup && (
+            <div className="prose post-article mt-10">
+              <MdxProvider>
+                <Writeup />
+              </MdxProvider>
+            </div>
+          )}
+
+          <h2 className="mt-14 text-2xl font-semibold tracking-tight">Listen</h2>
+
+          <audio controls preload="none" className="mt-4 w-full">
             <source src={episode.audioUrl} type={episode.audioType} />
             <a href={episode.audioUrl}>Download the episode</a>
           </audio>

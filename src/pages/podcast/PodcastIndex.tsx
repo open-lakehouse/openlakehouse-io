@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
 import { getAuthor } from "@/content/content";
-import { SHOW, episodes, episodePath, formatEpisodeDate, humanDuration, seriesJsonLd } from "@/content/podcast";
+import { SHOW, episodes, episodePath, formatEpisodeDate, humanDuration, seriesJsonLd, writeupFor } from "@/content/podcast";
 import { SITE_URL } from "@/lib/seo";
 
 const breadcrumbJsonLd = {
@@ -97,10 +97,11 @@ const PodcastIndex = () => {
                     </p>
                     <h3 className="mt-2 text-xl font-semibold leading-snug tracking-tight">
                       <Link to={episodePath(e)} className="hover:text-primary">
-                        {e.title}
+                        {writeupFor(e)?.title ?? e.title}
                       </Link>
                     </h3>
-                    <p className="mt-3 line-clamp-3 text-muted-foreground">{e.summary}</p>
+                    {writeupFor(e) && <p className="mt-1 text-sm font-medium text-muted-foreground">{e.title}</p>}
+                    <p className="mt-3 line-clamp-3 text-muted-foreground">{writeupFor(e)?.excerpt ?? e.summary}</p>
                   </article>
                 </li>
               ))}

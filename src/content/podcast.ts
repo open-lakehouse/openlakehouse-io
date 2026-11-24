@@ -1,4 +1,7 @@
 import episodesJson from "./podcast/episodes.json";
+import youtubeJson from "./podcast/youtube.json";
+import writeupsJson from "./podcast/writeups.json";
+import type { ComponentType } from "react";
 import { SITE_URL } from "@/lib/seo";
 
 // Data comes from scripts/fetch-podcast.ts (Riverside RSS), refreshed on every build.
@@ -34,6 +37,38 @@ export const SHOW = {
 };
 
 export const episodes = episodesJson as Episode[];
+
+/** YouTube upload of each episode on the Open Lakehouse + AI channel, keyed by episode slug. */
+const youtube = youtubeJson as Record<string, { id: string; uploadDate: string }>;
+export const youtubeFor = (e: Episode) => youtube[e.slug];
+
+/**
+ * The written article for an episode (src/content/podcast/writeups/<slug>.mdx).
+ * It is the main body of the episode page. Titles come from writeups.json
+ * (written by scripts/fetch-podcast.ts) so list pages don't bundle the MDX.
+ */
+export type WriteupMeta = { title: string; excerpt?: string; authors: string[]; tags: string[] };
+const writeupMeta = writeupsJson as Record<string, WriteupMeta>;
+export const writeupFor = (e: Episode): WriteupMeta | undefined => writeupMeta[e.slug];
+
+type MdxModule = { default: ComponentType };
+const writeupLoaders = import.meta.glob("./podcast/writeups/*.mdx") as Record<string, () => Promise<MdxModule>>;
+const writeupsEager: Record<string, MdxModule> = import.meta.env.SSR
+  ? (import.meta.glob("./podcast/writeups/*.mdx", { eager: true }) as Record<string, MdxModule>)
+  : {};
+const writeupCache: Record<string, ComponentType> = {};
+const writeupKey = (slug: string) => `./podcast/writeups/${slug}.mdx`;
+
+/** The write-up component if it is already loaded (always true during the prerender). */
+export const writeupSync = (slug: string): ComponentType | undefined =>
+  writeupCache[slug] ?? writeupsEager[writeupKey(slug)]?.default;
+
+/** Load an episode's write-up; main.tsx calls this before mounting an episode URL. */
+export const loadWriteup = (slug: string): Promise<ComponentType | undefined> => {
+  const load = writeupLoaders[writeupKey(slug)];
+  if (!load) return Promise.resolve(undefined);
+  return load().then((m) => (writeupCache[slug] = m.default));
+};
 
 export const episodePath = (e: Episode) => `${SHOW.path}/${e.slug}`;
 export const getEpisode = (slug: string) => episodes.find((e) => e.slug === slug);
@@ -105,6 +140,20 @@ export const episodeJsonLd = (e: Episode) => ({
     encodingFormat: e.audioType,
     ...(e.duration ? { duration: isoDuration(e.duration) } : {}),
   },
+  ...(youtubeFor(e)
+    ? {
+        video: {
+          "@type": "VideoObject",
+          name: e.title,
+          description: e.summary,
+          thumbnailUrl: `https://i.ytimg.com/vi/${youtubeFor(e).id}/hqdefault.jpg`,
+          uploadDate: youtubeFor(e).uploadDate,
+          embedUrl: `https://www.youtube.com/embed/${youtubeFor(e).id}`,
+          contentUrl: `https://www.youtube.com/watch?v=${youtubeFor(e).id}`,
+          ...(e.duration ? { duration: isoDuration(e.duration) } : {}),
+        },
+      }
+    : {}),
   partOfSeries: { "@type": "PodcastSeries", "@id": seriesJsonLd["@id"], name: SHOW.title, url: seriesJsonLd.url },
   author: seriesJsonLd.author,
 });
