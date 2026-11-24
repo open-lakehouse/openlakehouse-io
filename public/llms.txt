@@ -29,7 +29,7 @@ full text of every article is mirrored in /llms-full.txt.
 - [Agentic Data Engineering](https://openlakehouse.io/agentic-data-engineering): Agentic data engineering: AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies. The declare, scope, context harness, four checks, evidence and open source stack. Markdown: https://openlakehouse.io/agentic-data-engineering.md
 
 ## Spark Matrix
-- [Spark Matrix: the matrix](https://openlakehouse.io/spark-matrix): Spark Matrix compares Apache Spark features across managed Spark platforms such as Amazon EMR, AWS Glue, Databricks, Google Cloud, Microsoft Fabric and Snowflake. Every cell is traced to the Apache Spark source or a primary vendor statement. Data build 2026-11-22. Cite this page.
+- [Spark Matrix: the matrix](https://openlakehouse.io/spark-matrix): Spark Matrix compares Apache Spark features across managed Spark platforms such as Amazon EMR, AWS Glue, Databricks, Google Cloud, Microsoft Fabric and Snowflake. Every cell is traced to the Apache Spark source or a primary vendor statement. Data build 2026-11-23. Cite this page.
 - [Spark Matrix explorer](https://openlakehouse.io/spark-matrix/explorer/): Interactive explorer for the same data: every runtime of each service, the per-release Apache Spark inventory, release notes and runtime freshness.
 
 ## Data Engineering Reference Architectures
@@ -125,6 +125,7 @@ full text of every article is mirrored in /llms-full.txt.
 ## Blog posts
 - [The Top 10 Data Engines in 2026, and What Each One Is Actually For](https://openlakehouse.io/blog/apache-spark/top-10-data-engines-2026): A ranked guide to the ten data engines that matter in 2026 (Apache Spark, Flink, DuckDB, Trino, DataFusion, Polars, ClickHouse, StarRocks, Ray and Velox), what each is best at, where it falls short, and how to choose.
 - [Unity Catalog Volumes: Unstructured Data for the Agentic Lakehouse](https://www.unitycatalog.io/blogs/uc-volumes/): Volumes govern unstructured data in Unity Catalog. Open one in a marimo
+- [Apache Iceberg v4 Column Updates Are About to Change Feature Engineering](https://systemsnull.net/posts/data-engineering-ai/iceberg-column-updates): Iceberg v4 is adding column files, companion files that can hold one or more whole columns for every row of a data file and be swapped in by position at read time. Why that matters for feature stores and other wide tables, where the design helps, and why the v4 work is not production-ready yet.
 - [An Idiot's Guide to Spark Connect Clients](https://systemsnull.net/posts/data-engineering-ai/idiots-guide-spark-connect-clients): Everything you need to go from “what is Spark?” to running jobs on a Spark Connect server from Python, Scala, Go, Rust or Swift, and working out what went wrong when it doesn't work.
 - [A Field Guide to Apache Iceberg 1.12](https://datacircus.substack.com/p/a-field-guide-to-apache-iceberg-112): This release is a consolidation effort that focuses on correctness, stability, and paving the path for V4 readiness.
 - [TUTORIAL: How to Build an Open Lakehouse on Your Laptop](https://systemsnull.net/posts/data-engineering-ai/open-lakehouse-on-your-laptop): A self-contained tutorial that builds a complete open lakehouse in an empty folder, one layer at a time, from S3-compatible storage and Delta tables through Unity Catalog, Iceberg readers,…

@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-11-22",
+  "generated": "2026-11-23",
   "latest": "4.3.0",
   "versions": [
    "3.0.0",
@@ -89,7 +89,11 @@
    },
    "python": {
     "title": "PySpark",
-    "blurb": "Python APIs, UDFs, Arrow and Python-defined data sources."
+    "blurb": "Python DataFrame APIs, Arrow interchange and Python-defined data sources."
+   },
+   "udf": {
+    "title": "UDFs and UDTFs",
+    "blurb": "User-defined functions in Python, Scala and SQL: scalar, aggregate and table functions, and how they run."
    },
    "sources": {
     "title": "Data sources",
