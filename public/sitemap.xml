@@ -66,6 +66,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/podcast</loc>
+    <lastmod>2026-11-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/technologies/compute-engines</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -413,6 +419,66 @@
   <url>
     <loc>https://openlakehouse.io/reference-architectures/industries/cybersecurity</loc>
     <lastmod>2026-11-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/graphframes-joins-spark-iceberg-view-spec-updates-parquet-serialized</loc>
+    <lastmod>2026-11-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/apache-spark-4-3-parquet-finite-vector-datafusion-comet-1-2-nvidias</loc>
+    <lastmod>2026-11-10</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/ai-special-mistrals-le-chonk-agent-standards-glm-5-3-evaluation</loc>
+    <lastmod>2026-11-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/duckdb-2-0-external-lookup-joins-arrow-database-connectivity</loc>
+    <lastmod>2026-10-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/unity-catalog-0-7-paimon-2-1-hudi-1-1-2-arrow-26-0-and-new-asf-top</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/datafusion-ballista-55-0-unity-catalog-native-iceberg-support-parquet</loc>
+    <lastmod>2026-10-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/iceberg-1-12-oidc-credentials-spark-connect-gateway-arrow-json-schemas</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/xml-functions-polars-2-0-delta-rs-and-agent-thrashing-policies</loc>
+    <lastmod>2026-09-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/filetypes-language-agnostic-udfs-parquet-versioning-and-iceberg</loc>
+    <lastmod>2026-09-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/podcast/nanosecond-timestamp-precision-iceberg-datafusion-spark-connect-rust</loc>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

@@ -10,11 +10,11 @@ import { pathToFileURL } from "node:url";
 
 const dist = resolve("dist");
 const ssrEntry = resolve("dist-ssr/entry-server.js");
-const { render, routes } = await import(pathToFileURL(ssrEntry).href);
-// The untouched SPA shell. "/" is prerendered into dist/index.html, so the
-// shell is kept as dist/app-shell.html and vercel.json rewrites every other
-// client-side route to it. Without this, every unprerendered route would ship
-// the homepage's content and canonical URL.
+const { render, routes, NOT_FOUND_PATH, ready } = await import(pathToFileURL(ssrEntry).href);
+await ready;
+// The untouched SPA shell, kept as dist/app-shell.html. Every route is
+// prerendered now, so nothing is rewritten to it; unknown paths get
+// dist/404.html with a real 404 status from Vercel.
 const shellPath = join(dist, "app-shell.html");
 const template = existsSync(shellPath) ? readFileSync(shellPath, "utf8") : readFileSync(join(dist, "index.html"), "utf8");
 writeFileSync(shellPath, template);
@@ -34,14 +34,23 @@ const stripDefaults = (html) =>
     .replace(/<meta name="description"[^>]*>\s*/, "")
     .replace(/<meta property="og:(title|description|type)"[^>]*>\s*/g, "");
 
-let count = 0;
-for (const url of routes) {
+const renderPage = (url) => {
   const { html, head } = render(url);
   // Helmet marks its tags with data-rh; keep them so the client-side Helmet
   // takes them over instead of duplicating them.
   const page = stripDefaults(template)
     .replace("</head>", `${head}\n  </head>`)
     .replace('<div id="root"></div>', `<div id="root">${html}</div>`);
+  return { html, head, page };
+};
+
+const problems = [];
+let count = 0;
+for (const url of routes) {
+  const { html, head, page } = renderPage(url);
+  // A route that renders the 404 page or a redirect (empty markup) would ship
+  // as a 200 "soft 404"; fail the build instead.
+  if (head.includes("Page not found") || html.length < 500) problems.push(`${url}: renders no content`);
   // Write <route>.html (served at /<route> with cleanUrls on Vercel and by
   // vite preview) and <route>/index.html (served at /<route>/).
   const rel = url.replace(/^\//, "");
@@ -52,5 +61,18 @@ for (const url of routes) {
   }
   count++;
 }
+writeFileSync(join(dist, "404.html"), renderPage(NOT_FOUND_PATH).page);
+
+// Every URL in the sitemap must have a prerendered page, or crawlers get a 404.
+const sitemap = readFileSync(join(dist, "sitemap.xml"), "utf8");
+const prerendered = new Set(routes);
+for (const [, loc] of sitemap.matchAll(/<loc>https?:\/\/[^/]+([^<]*)<\/loc>/g)) {
+  const path = loc.replace(/\/$/, "") || "/";
+  if (!prerendered.has(path)) problems.push(`${path}: in sitemap.xml but not prerendered`);
+}
+if (problems.length) {
+  console.error(`[prerender] ${problems.length} problem(s):\n  ${problems.join("\n  ")}`);
+  process.exit(1);
+}
 rmSync(resolve("dist-ssr"), { recursive: true, force: true });
-console.log(`[prerender] wrote ${count} static pages`);
+console.log(`[prerender] wrote ${count} static pages and 404.html; sitemap fully covered`);

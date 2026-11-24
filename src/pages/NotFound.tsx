@@ -2,6 +2,7 @@ import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { Helmet } from "react-helmet-async";
 
 const NotFound = () => {
   const location = useLocation();
@@ -12,6 +13,10 @@ const NotFound = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <Helmet>
+        <title>Page not found — Open Lakehouse</title>
+        <meta name="robots" content="noindex" />
+      </Helmet>
       <SiteHeader />
       <main className="flex-1 flex items-center justify-center bg-muted">
         <div className="text-center">

@@ -103,6 +103,11 @@ export const SiteFooter = () => {
                 </li>
               ))}
               <li>
+                <Link to="/podcast" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  This Week in Open Lakehouse (podcast)
+                </Link>
+              </li>
+              <li>
                 {/* The wiki is served by MediaWiki (vercel.json rewrite), not the SPA, so use a full page load. */}
                 <a href="/wiki/Main_Page" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Open Lakehouse Wiki
