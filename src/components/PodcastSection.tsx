@@ -2,7 +2,7 @@ import { ExternalLink, Mic } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getAuthor } from "@/content/content";
 
-import { SHOW, episodes, episodePath } from "@/content/podcast";
+import { SHOW, episodes, episodePath, episodeTitle } from "@/content/podcast";
 
 const SHOW_TITLE = SHOW.title;
 const SHOW_URL = SHOW.spotifyUrl;
@@ -61,7 +61,7 @@ export const PodcastSection = () => (
             <span className="text-xs font-semibold uppercase tracking-widest text-white/60">Latest episode</span>
             <br />
             <Link to={episodePath(latest)} className="font-semibold text-white underline-offset-4 hover:underline">
-              {latest.title}
+              {episodeTitle(latest)}
             </Link>
           </p>
         )}

@@ -1,4 +1,5 @@
 import { Suspense, lazy, type ComponentType } from "react";
+import { loadWriteup } from "@/content/podcast";
 
 // Pages that carry large build-time data (the Spark Matrix JSON) load as their
 // own chunk so the rest of the site does not download it. main.tsx calls
@@ -28,5 +29,9 @@ export const SparkMatrix = lazyWithPreload(() => import("./pages/projects/SparkM
 /** Load the chunk for a path before the first render. */
 export function preloadFor(pathname: string): Promise<unknown> {
   if (/^\/spark-matrix\/?$/.test(pathname)) return SparkMatrix.preload();
+  // Episode write-ups are per-episode chunks; load before mount so the
+  // prerendered article isn't replaced by an empty one on a direct visit.
+  const episode = pathname.match(/^\/podcast\/([a-z0-9-]+)\/?$/);
+  if (episode) return loadWriteup(episode[1]);
   return Promise.resolve();
 }

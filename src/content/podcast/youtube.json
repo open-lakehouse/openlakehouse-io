@@ -1,0 +1,38 @@
+{
+  "graphframes-joins-spark-iceberg-view-spec-updates-parquet-serialized": {
+    "id": "BfQy1EauWY4",
+    "uploadDate": "2026-11-23T07:11:26-08:00"
+  },
+  "apache-spark-4-3-parquet-finite-vector-datafusion-comet-1-2-nvidias": {
+    "id": "EotZgZftxCs",
+    "uploadDate": "2026-11-11T12:00:12-08:00"
+  },
+  "ai-special-mistrals-le-chonk-agent-standards-glm-5-3-evaluation": {
+    "id": "7I-qwlR3pbo",
+    "uploadDate": "2026-11-04T19:38:17-08:00"
+  },
+  "duckdb-2-0-external-lookup-joins-arrow-database-connectivity": {
+    "id": "phPRWiQWn_M",
+    "uploadDate": "2026-10-28T23:58:36-07:00"
+  },
+  "datafusion-ballista-55-0-unity-catalog-native-iceberg-support-parquet": {
+    "id": "vxoeo_Ok91Y",
+    "uploadDate": "2026-10-13T17:21:33-07:00"
+  },
+  "iceberg-1-12-oidc-credentials-spark-connect-gateway-arrow-json-schemas": {
+    "id": "9zWKIVkV70E",
+    "uploadDate": "2026-10-09T10:25:55-07:00"
+  },
+  "xml-functions-polars-2-0-delta-rs-and-agent-thrashing-policies": {
+    "id": "i-vq3L2BaEE",
+    "uploadDate": "2026-10-02T10:32:18-07:00"
+  },
+  "filetypes-language-agnostic-udfs-parquet-versioning-and-iceberg": {
+    "id": "RdAJXYwGYaE",
+    "uploadDate": "2026-09-25T14:53:31-07:00"
+  },
+  "nanosecond-timestamp-precision-iceberg-datafusion-spark-connect-rust": {
+    "id": "85f-ZrRbHi8",
+    "uploadDate": "2026-09-18T13:55:06-07:00"
+  }
+}

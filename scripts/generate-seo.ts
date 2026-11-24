@@ -46,6 +46,9 @@ const BASE_URL = SITE_URL;
 type PodcastEpisode = { slug: string; title: string; date: string; episodeNumber?: number; duration?: string; summary: string; notesHtml: string; hasTranscript: boolean };
 const PODCAST_TITLE = "This Week in Open Lakehouse";
 const podcastEpisodes: PodcastEpisode[] = JSON.parse(readFileSync(resolve("src/content/podcast/episodes.json"), "utf8"));
+// Same rule as episodeTitle() in src/content/podcast.ts.
+const episodeTitle = (e: PodcastEpisode) =>
+  `TWIOL #${e.episodeNumber ?? podcastEpisodes.length - podcastEpisodes.indexOf(e)}: ${e.title}`;
 const podcastTranscript = (slug: string) => {
   try {
     return readFileSync(resolve(`src/content/podcast/transcripts/${slug}.txt`), "utf8");
@@ -62,14 +65,27 @@ const notesToMarkdown = (html: string) =>
     .replace(/&amp;/g, "&")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+const podcastWriteups: Record<string, { title: string; excerpt?: string }> = JSON.parse(
+  readFileSync(resolve("src/content/podcast/writeups.json"), "utf8"),
+);
+const writeupBody = (slug: string) => {
+  try {
+    return readFileSync(resolve(`src/content/podcast/writeups/${slug}.mdx`), "utf8").replace(/^---\n[\s\S]*?\n---\n/, "").trim();
+  } catch {
+    return undefined;
+  }
+};
 const episodeMarkdown = (e: PodcastEpisode) => {
+  const w = podcastWriteups[e.slug];
+  const body = writeupBody(e.slug);
   const lines = [
-    `# ${e.title}`,
+    `# ${episodeTitle(e)}`,
     "",
     `${PODCAST_TITLE}${e.episodeNumber ? `, episode ${e.episodeNumber}` : ""}. Published ${e.date.slice(0, 10)}${e.duration ? `, ${e.duration} long` : ""}. Hosts: Lisa Cao and Scott Haines.`,
     "",
     `Canonical page: ${SITE_URL}/podcast/${e.slug}`,
     "",
+    ...(body ? ["By Lisa Cao.", "", body, ""] : []),
     "## Show notes",
     "",
     notesToMarkdown(e.notesHtml),
@@ -468,7 +484,8 @@ function renderLlms(): string {
   if (podcastEpisodes.length) {
     lines.push(`## Podcast: ${PODCAST_TITLE}`);
     for (const e of podcastEpisodes) {
-      lines.push(withDesc(e.title, `/podcast/${e.slug}`, `${e.summary} Show notes and transcript in Markdown: ${url(`/podcast/${e.slug}`)}.md`));
+      const w = podcastWriteups[e.slug];
+      lines.push(withDesc(episodeTitle(e), `/podcast/${e.slug}`, `${w?.excerpt ?? e.summary} Write-up, show notes and transcript in Markdown: ${url(`/podcast/${e.slug}`)}.md`));
     }
     lines.push("");
   }

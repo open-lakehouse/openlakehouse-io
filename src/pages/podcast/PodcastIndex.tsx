@@ -1,10 +1,12 @@
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Mic, Rss } from "lucide-react";
+import { ArrowRight, Clock, Mic, Rss, Youtube } from "lucide-react";
+import { YouTubeEmbed } from "@/components/YouTubeEmbed";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
 import { getAuthor } from "@/content/content";
-import { SHOW, episodes, episodePath, formatEpisodeDate, humanDuration, seriesJsonLd } from "@/content/podcast";
+import { SHOW, episodes, episodePath, formatEpisodeDate, humanDuration, seriesJsonLd, episodeTitle, writeupFor, youtubeFor } from "@/content/podcast";
 import { SITE_URL } from "@/lib/seo";
 
 const breadcrumbJsonLd = {
@@ -33,11 +35,31 @@ export const ListenLinks = ({ className = "" }: { className?: string }) => (
         <Rss aria-hidden="true" className="h-3.5 w-3.5" /> RSS
       </a>
     </li>
+    <li>
+      <a href={SHOW.youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-4 font-medium hover:border-primary/40 hover:bg-muted">
+        <Youtube aria-hidden="true" className="h-3.5 w-3.5" /> YouTube
+      </a>
+    </li>
   </ul>
 );
 
 const PodcastIndex = () => {
   const hosts = SHOW.hostSlugs.map(getAuthor).filter(Boolean);
+  const [query, setQuery] = useState("");
+  const shown = useMemo(() => {
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return episodes;
+    return episodes.filter((e) => {
+      const text = [episodeTitle(e), writeupFor(e)?.excerpt, e.summary, e.notesHtml].join(" ").toLowerCase();
+      return terms.every((t) => text.includes(t));
+    });
+  }, [query]);
+  const latest = episodes[0];
+  const latestVideo = latest && youtubeFor(latest);
+  const firstEpisode = episodes[episodes.length - 1];
+  const since = firstEpisode
+    ? new Date(firstEpisode.date).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })
+    : undefined;
   return (
     <div className="min-h-screen flex flex-col">
       <Seo
@@ -81,13 +103,98 @@ const PodcastIndex = () => {
               <ListenLinks />
             </header>
 
-            <h2 className="mb-6 text-2xl font-semibold tracking-tight">All episodes</h2>
+            {latest && (
+              <section aria-labelledby="latest-heading" className="mb-16">
+                <h2 id="latest-heading" className="mb-4 font-mono text-xs uppercase tracking-[0.08em] text-primary">
+                  Latest episode
+                </h2>
+                <article className="rounded-2xl border border-border bg-card p-6 shadow-card">
+                  {latestVideo && <YouTubeEmbed videoId={latestVideo.id} title={episodeTitle(latest)} />}
+                  <p className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">
+                    <time dateTime={latest.date}>{formatEpisodeDate(latest.date)}</time>
+                    {latest.duration && (
+                      <span className="inline-flex items-center gap-1">
+                        <Clock aria-hidden="true" className="h-3 w-3" /> {humanDuration(latest.duration)}
+                      </span>
+                    )}
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold leading-snug tracking-tight">
+                    <Link to={episodePath(latest)} className="hover:text-primary">{episodeTitle(latest)}</Link>
+                  </h3>
+                  <p className="mt-3 text-muted-foreground">{writeupFor(latest)?.excerpt ?? latest.summary}</p>
+                  <Link to={episodePath(latest)} className="mt-4 inline-flex items-center gap-1.5 font-medium text-primary hover:underline">
+                    Write-up, show notes and transcript <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                  </Link>
+                </article>
+              </section>
+            )}
+
+            <section aria-labelledby="about-heading" className="mb-16 grid gap-10 md:grid-cols-[3fr_2fr]">
+              <div>
+                <h2 id="about-heading" className="mb-4 text-2xl font-semibold tracking-tight">About the show</h2>
+                <div className="flex flex-col gap-4 leading-relaxed text-muted-foreground">
+                  <p>
+                    Every week Scott and I go through what changed in the open lakehouse: releases, votes and
+                    proposals on the Apache dev lists, spec changes in Iceberg, Delta, Parquet and Arrow, and
+                    the engines, catalogs and orchestrators built on top of them. We say when something is
+                    still a proposal, and we fix it in writing when we got it wrong on air.
+                  </p>
+                  {since && <p>Weekly since {since}, with the occasional special when a week's news is mostly about AI.</p>}
+                </div>
+              </div>
+              <div>
+                <h2 className="mb-4 text-2xl font-semibold tracking-tight">Every episode has</h2>
+                <ul className="flex list-disc flex-col gap-2 pl-5 text-muted-foreground">
+                  <li>The video on YouTube and the audio wherever you listen</li>
+                  <li>A write-up with links to the primary sources</li>
+                  <li>Show notes</li>
+                  <li>A full transcript</li>
+                </ul>
+              </div>
+            </section>
+
+            {hosts.length > 0 && (
+              <section aria-labelledby="hosts-heading" className="mb-16">
+                <h2 id="hosts-heading" className="mb-6 text-2xl font-semibold tracking-tight">Hosts</h2>
+                <ul className="grid gap-4 sm:grid-cols-2">
+                  {hosts.map((h) => (
+                    <li key={h.slug} className="flex items-center gap-4 rounded-2xl border border-border bg-card p-5">
+                      {h.avatar ? (
+                        <img src={h.avatar} alt="" className="h-14 w-14 rounded-full object-cover" loading="lazy" />
+                      ) : (
+                        <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-full bg-muted font-semibold">
+                          {h.name.split(" ").map((w) => w[0]).join("")}
+                        </span>
+                      )}
+                      <div>
+                        <Link to={`/authors/${h.slug}`} className="font-semibold hover:text-primary">{h.name}</Link>
+                        {h.role && <p className="text-sm text-muted-foreground">{h.role}</p>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+              <h2 className="text-2xl font-semibold tracking-tight">All episodes</h2>
+              <label className="w-full sm:w-72">
+                <span className="sr-only">Search episodes</span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(ev) => setQuery(ev.target.value)}
+                  placeholder="Search episodes"
+                  className="h-10 w-full rounded-full border border-border bg-background px-4 text-sm outline-none focus:border-primary/60"
+                />
+              </label>
+            </div>
+            {shown.length === 0 && <p className="text-muted-foreground">No episode mentions that yet.</p>}
             <ol className="flex flex-col gap-4">
-              {episodes.map((e) => (
+              {shown.map((e) => (
                 <li key={e.guid}>
                   <article className="rounded-2xl border border-border bg-card p-6 shadow-card transition-colors hover:border-primary/40">
                     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-[0.06em] text-muted-foreground">
-                      {e.episodeNumber && <span className="text-primary">Episode {e.episodeNumber}</span>}
                       <time dateTime={e.date}>{formatEpisodeDate(e.date)}</time>
                       {e.duration && (
                         <span className="inline-flex items-center gap-1">
@@ -97,10 +204,10 @@ const PodcastIndex = () => {
                     </p>
                     <h3 className="mt-2 text-xl font-semibold leading-snug tracking-tight">
                       <Link to={episodePath(e)} className="hover:text-primary">
-                        {e.title}
+                        {episodeTitle(e)}
                       </Link>
                     </h3>
-                    <p className="mt-3 line-clamp-3 text-muted-foreground">{e.summary}</p>
+                    <p className="mt-3 line-clamp-3 text-muted-foreground">{writeupFor(e)?.excerpt ?? e.summary}</p>
                   </article>
                 </li>
               ))}
