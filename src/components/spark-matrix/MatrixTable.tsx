@@ -6,7 +6,7 @@
 // Cells carry data-p (platform column) / data-a (Apache column) and data-f
 // (feature row) and are handled by one click listener on the table, which
 // keeps the prerendered markup small.
-import { Fragment, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Search } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -20,6 +20,7 @@ import {
   defaultRuntime,
   features,
   hasIt,
+  humanize,
   shortName,
   shortUrl,
   vendorCell,
@@ -53,7 +54,30 @@ interface Selection {
   via?: string;
 }
 
+interface Tip {
+  x: number;
+  y: number;
+  heading: string;
+  level?: Level;
+  text?: string;
+  quote?: string;
+  links: { label: string; href: string }[];
+}
+
+const clip = (t: string, n = 220) => (t.length > n ? t.slice(0, n - 1).trimEnd() + "…" : t);
+
 const runtimeLabel = (r?: Runtime) => (r ? r.label.replace(/\s*\(.*\)$/, "") : "No runtime");
+
+const verKey = (v: string | null) => (v ?? "0").split(".").map((n) => n.padStart(3, "0")).join(".");
+/** Newest Apache release first, so a runtime's missing features sit at the top of each category. */
+const bySinceDesc = (a: Feature, b: Feature) => verKey(b.since).localeCompare(verKey(a.since));
+const minorOf = (v: string | null) => (v ? v.split(".").slice(0, 2).join(".") : "");
+const LATEST_MINOR = APACHE_MINORS[0];
+/** Spark features in the newest Apache release line that this runtime does not have. */
+const missingFromLatest = (p: Platform, runtimeId: string | undefined) =>
+  features.filter(
+    (f) => !f.vendor_only && apacheLevel(f, LATEST_MINOR) === "documented" && !hasIt(cellFor(p, runtimeId, f).level),
+  ).length;
 
 function matches(text: string, q: string) {
   return !q || text.toLowerCase().includes(q.toLowerCase());
@@ -74,6 +98,67 @@ export function Legend() {
   );
 }
 
+/** Features of the newest Apache line that an older Apache line does not have. */
+const apacheMissing = (m: string) =>
+  features.filter((f) => !f.vendor_only && apacheLevel(f, LATEST_MINOR) === "documented" && apacheLevel(f, m) !== "documented")
+    .length;
+
+/** Above the table: how far each service, and each older Apache line, is behind the newest Apache release. */
+export function GapSummary() {
+  const total = features.filter((f) => !f.vendor_only && apacheLevel(f, LATEST_MINOR) === "documented").length;
+  const services = SHOWN_PLATFORMS.map((p) => {
+    const r = defaultRuntime(p);
+    return { p, r, n: missingFromLatest(p, r?.id) };
+  })
+    .filter((x) => x.r?.spark_base)
+    .sort((a, b) => b.n - a.n || shortName(a.p).localeCompare(shortName(b.p)));
+  const minors = APACHE_MINORS.slice(1).map((m) => ({ m, n: apacheMissing(m) }));
+  const bar = (n: number) => `${Math.round((n / Math.max(total, 1)) * 100)}%`;
+  return (
+    <section aria-labelledby="smx-gap-heading" className="mb-8 rounded-xl border border-border bg-card p-4 md:p-6">
+      <h3 id="smx-gap-heading" className="text-lg font-bold tracking-tight md:text-xl">
+        How far behind Apache Spark {LATEST_MINOR} is your platform?
+      </h3>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Spark {APACHE_MINORS.slice(1, 4).join(", ")} are not interchangeable: each minor release adds features the
+        older lines do not have. Of the {total} Spark features tracked in Apache Spark {LATEST_MINOR}, this is what each
+        line and each service at its newest generally available runtime is missing.
+      </p>
+      <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Apache Spark lines</h4>
+          <ul className="space-y-1.5 text-sm">
+            {minors.map(({ m, n }) => (
+              <li key={m} className="grid grid-cols-[3.5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
+                <span className="font-mono">{m}</span>
+                <span className="h-2 rounded bg-muted"><span className="smx-gapbar" style={{ width: bar(n) }} /></span>
+                <span className="text-right text-xs font-semibold text-red-700 dark:text-red-300">missing {n}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Managed services</h4>
+          <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+            {services.map(({ p, r, n }) => (
+              <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_4rem_4.5rem] items-center gap-2">
+                <span className="truncate" title={`${p.name}, ${runtimeLabel(r)}`}>
+                  <span className="text-muted-foreground">{p.vendor} </span>
+                  {shortName(p)}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">{r?.spark_base}</span>
+                <span className={`text-right text-xs font-semibold ${n ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"}`}>
+                  {n ? `missing ${n}` : "all of " + LATEST_MINOR}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function MatrixTable() {
   const [providers, setProviders] = useState<Set<string>>(() => new Set(PROVIDERS.map((p) => p.id)));
   const [category, setCategory] = useState("all");
@@ -81,9 +166,22 @@ export function MatrixTable() {
   const [onlyDiff, setOnlyDiff] = useState(false);
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [sel, setSel] = useState<Selection | null>(null);
+  const [tip, setTip] = useState<Tip | null>(null);
+  const tipTimer = useRef<number | undefined>(undefined);
+  const keepTip = () => window.clearTimeout(tipTimer.current);
+  const dropTip = () => {
+    keepTip();
+    tipTimer.current = window.setTimeout(() => setTip(null), 180);
+  };
   // The runtime pickers render only in the browser; the prerendered HTML names the default runtime instead.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  // The hover card is positioned in viewport coordinates, so any scroll closes it.
+  useEffect(() => {
+    const close = () => setTip(null);
+    window.addEventListener("scroll", close, { passive: true, capture: true });
+    return () => window.removeEventListener("scroll", close, { capture: true });
+  }, []);
 
   const runtimeOf = (p: Platform) => p.runtimes.find((r) => r.id === picked[p.id]) ?? defaultRuntime(p);
   const cols = SHOWN_PLATFORMS.filter((p) => providers.has(p.provider));
@@ -94,7 +192,7 @@ export function MatrixTable() {
     const list = features.filter(
       (f) => (category === "all" || f.category === category) && (matches(f.title, q) || matches(f.summary, q)),
     );
-    return list.map((f) => ({ f, cells: cols.map((p, i) => cellFor(p, colRuntimes[i]?.id, f)) }));
+    return [...list].sort(bySinceDesc).map((f) => ({ f, cells: cols.map((p, i) => cellFor(p, colRuntimes[i]?.id, f)) }));
     // colRuntimes is derived from cols and picked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category, q, providers, picked]);
@@ -140,12 +238,72 @@ export function MatrixTable() {
     setSel({ title: f.title, feature: f, platform: p, runtime: r, level: c.level, claims: c.claims, via: c.via });
   };
 
-  const cellButton = (level: Level, data: Record<string, string>) => {
+  const onTableOver = (e: MouseEvent<HTMLTableElement>) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>("button[data-f], th[data-feat]");
+    if (!el) return dropTip();
+    keepTip();
+    const box = el.getBoundingClientRect();
+    const at = { x: Math.min(box.left, window.innerWidth - 336), y: box.bottom + 6 };
+    if (el.dataset.feat) {
+      const f = features.find((x) => x.id === el.dataset.feat);
+      if (!f) return;
+      const links = f.docs ? [{ label: "Spark documentation", href: f.docs }] : [];
+      const ev = f.evidence.find((x) => x.url);
+      if (ev?.url) links.push({ label: "Apache source", href: ev.url });
+      setTip({ ...at, heading: f.title, text: f.summary + (f.since ? ` In Apache Spark since ${f.since}.` : ""), links });
+      return;
+    }
+    const fid = el.dataset.f!;
+    const a = el.dataset.a;
+    const f = features.find((x) => x.id === fid);
+    if (a && f) {
+      const level = apacheLevel(f, a);
+      const ev = f.evidence.find((x) => x.url);
+      setTip({
+        ...at,
+        heading: `${f.title} in Apache Spark ${a}`,
+        level,
+        text: level === "absent" ? `Added in Apache Spark ${f.since}.` : `In Apache Spark since ${f.since}.`,
+        links: ev?.url ? [{ label: "Apache source", href: ev.url }] : [],
+      });
+      return;
+    }
+    const p = cols[Number(el.dataset.p)];
+    const r = colRuntimes[Number(el.dataset.p)];
+    if (!p) return;
+    const c = fid.startsWith("other:") ? vendorCell(p, r?.id, fid) : f ? cellFor(p, r?.id, f) : null;
+    if (!c) return;
+    const claim = c.claims.find((x) => x.source) ?? c.claims[0];
+    const links: Tip["links"] = [];
+    if (claim?.source) links.push({ label: `Vendor source: ${shortUrl(claim.source).split("/")[0]}`, href: claim.source });
+    let text: string | undefined;
+    if (c.level === "inherited" && f) {
+      text = `${shortName(p)} documents nothing either way. Its runtime is Apache Spark ${r?.spark_base}, which has this feature (since ${f.since}).`;
+      const ev = f.evidence.find((x) => x.url);
+      if (ev?.url) links.push({ label: "Apache source", href: ev.url });
+    } else if (c.level === "absent" && f) {
+      text = `Added in Apache Spark ${f.since}. ${shortName(p)} runs Apache Spark ${r?.spark_base} and documents no backport.`;
+    } else if (c.via) {
+      text = `From ${c.via}, which this runtime pairs with.`;
+    }
+    if (r?.source) links.push({ label: "Runtime version source", href: r.source });
+    setTip({
+      ...at,
+      heading: `${f?.title ?? humanize(fid)} on ${shortName(p)}`,
+      level: c.level,
+      text: claim?.note ?? text,
+      quote: claim?.quote ? clip(claim.quote) : undefined,
+      links,
+    });
+  };
+
+  const cellButton = (level: Level, data: Record<string, string>, since?: string | null) => {
     const m = LEVEL_META[level];
+    const needs = level === "absent" && since ? `${minorOf(since)}+` : null;
     return (
       <button type="button" className={`smx-c smx-${level}`} {...data}>
-        <span aria-hidden="true">{m.short}</span>
-        <span className="sr-only">{m.label}</span>
+        <span aria-hidden="true">{needs ?? m.short}</span>
+        <span className="sr-only">{needs ? `${m.label}: added in Apache Spark ${since}` : m.label}</span>
       </button>
     );
   };
@@ -200,7 +358,7 @@ export function MatrixTable() {
       <Legend />
 
       <div className="smx-scroll">
-        <table className="smx" onClick={onTableClick}>
+        <table className="smx" onClick={onTableClick} onMouseOver={onTableOver} onMouseLeave={dropTip}>
           <caption className="sr-only">
             Apache Spark features (rows) across managed Spark services (columns), each at its newest generally available
             runtime, with Apache Spark releases for comparison. Each cell gives the support level; select it for the
@@ -216,6 +374,7 @@ export function MatrixTable() {
                 <th key={m} scope="col" className="smx-acol">
                   <span className="block text-[0.65rem] font-semibold uppercase tracking-wide text-accent">Apache</span>
                   <span className="block font-mono text-xs">{m}</span>
+                  {apacheMissing(m) > 0 ? <span className="smx-behind">Missing {apacheMissing(m)}</span> : null}
                 </th>
               ))}
               {cols.map((p, i) => {
@@ -248,6 +407,14 @@ export function MatrixTable() {
                       Spark {r?.spark_base ?? "?"}
                       {r?.spark_via ? "*" : ""}
                     </span>
+                    {(() => {
+                      const n = missingFromLatest(p, r?.id);
+                      return n > 0 ? (
+                        <span className="smx-behind">
+                          Missing {n} from {LATEST_MINOR}
+                        </span>
+                      ) : null;
+                    })()}
                   </th>
                 );
               })}
@@ -270,16 +437,17 @@ export function MatrixTable() {
                   </tr>
                   {inCat.map(({ f, cells }) => (
                     <tr key={f.id}>
-                      <th scope="row" className="smx-feat">
+                      <th scope="row" className="smx-feat" data-feat={f.id}>
                         <b>{f.title}</b>
                         <small>{f.vendor_only ? "Vendor capability" : `Apache ${f.since ?? "n/a"}`}</small>
+                        <span className="sr-only">{f.summary}</span>
                       </th>
                       {APACHE_MINORS.map((m) => (
-                        <td key={m}>{f.vendor_only ? null : cellButton(apacheLevel(f, m), { "data-f": f.id, "data-a": m })}</td>
+                        <td key={m}>{f.vendor_only ? null : cellButton(apacheLevel(f, m), { "data-f": f.id, "data-a": m }, f.since)}</td>
                       ))}
                       {cells.map((cell: CellInfo, i) => (
                         <td key={cols[i].id} className="smx-pcol">
-                          {cellButton(cell.level, { "data-f": f.id, "data-p": String(i) })}
+                          {cellButton(cell.level, { "data-f": f.id, "data-p": String(i) }, f.since)}
                         </td>
                       ))}
                     </tr>
@@ -330,6 +498,40 @@ export function MatrixTable() {
         runtime; pick another in the column header. A <span className="font-mono">*</span> marks a Spark version the vendor
         states through a paired product. Select a cell for its source.
       </p>
+
+      {tip && (
+        <div
+          role="tooltip"
+          className="fixed z-50 w-80 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground shadow-lg"
+          style={{ left: Math.max(8, tip.x), top: tip.y }}
+          onMouseEnter={keepTip}
+          onMouseLeave={dropTip}
+        >
+          <p className="font-semibold">{tip.heading}</p>
+          {tip.level && (
+            <p className="mt-1 flex items-center gap-1.5">
+              <span className={`smx-c smx-${tip.level} !h-4 !w-6 !min-w-0`} aria-hidden="true">
+                {LEVEL_META[tip.level].short.replace("4.3+", "")}
+              </span>
+              {LEVEL_META[tip.level].label}
+            </p>
+          )}
+          {tip.text && <p className="mt-1 text-muted-foreground">{tip.text}</p>}
+          {tip.quote && <blockquote className="mt-1.5 border-l-2 border-primary pl-2 italic">"{tip.quote}"</blockquote>}
+          {tip.links.length > 0 && (
+            <ul className="mt-2 space-y-0.5">
+              {tip.links.map((l) => (
+                <li key={l.href + l.label}>
+                  <a className="text-primary underline-offset-2 hover:underline" href={l.href} target="_blank" rel="noreferrer">
+                    {l.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-[0.65rem] text-muted-foreground">Click the cell for the full evidence.</p>
+        </div>
+      )}
 
       <Sheet open={!!sel} onOpenChange={(o) => !o && setSel(null)}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">

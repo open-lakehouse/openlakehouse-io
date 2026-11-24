@@ -116,6 +116,9 @@ export const FAQS: { q: string; a: string }[] = [
 const EXPLICIT: Level[] = ["ahead", "documented", "partial", "preview", "off-by-default", "unsupported"];
 
 /** The matrix as Markdown, from the vendored data: per service, its runtime, Spark base and documented levels. */
+const LATEST_MINOR = APACHE_MINORS[0];
+const LATEST_FEATURES = SPARK_FEATURES.filter((f) => f.in.some((v) => v.startsWith(LATEST_MINOR + ".")));
+
 export function matrixMarkdown(siteUrl: string): string {
   const out: string[] = [];
   out.push(
@@ -123,13 +126,19 @@ export function matrixMarkdown(siteUrl: string): string {
     "",
     `Each service is shown at its newest generally available runtime. "Spark features available" counts the ${SPARK_FEATURES.length} Apache Spark features that the runtime has at any level from Documented to Off by default. The interactive matrix is at ${siteUrl}${SLUG}; the full explorer is at ${siteUrl}${EXPLORER_PATH}.`,
     "",
-    "| Service | Vendor | Runtime | Vendor Spark version | Apache Spark base | Spark features available |",
-    "|---|---|---|---|---|---|",
+    `| Service | Vendor | Runtime | Vendor Spark version | Apache Spark base | Spark features available | Missing from Apache Spark ${LATEST_MINOR} |`,
+    "|---|---|---|---|---|---|---|",
   );
   for (const p of SHOWN_PLATFORMS) {
     const r = defaultRuntime(p);
     const n = SPARK_FEATURES.filter((f) => hasIt(cellFor(p, r?.id, f).level)).length;
-    out.push(`| ${p.name} | ${p.vendor} | ${r?.label ?? "not stated"} | ${r?.spark ?? "not stated"} | ${r?.spark_base ?? "not stated"} | ${n} |`);
+    const miss = LATEST_FEATURES.filter((f) => !hasIt(cellFor(p, r?.id, f).level)).length;
+    out.push(`| ${p.name} | ${p.vendor} | ${r?.label ?? "not stated"} | ${r?.spark ?? "not stated"} | ${r?.spark_base ?? "not stated"} | ${n} | ${miss} |`);
+  }
+  out.push("", `## What each Apache Spark release line added`, "", "Spark 4.0, 4.1, 4.2 and 4.3 are not interchangeable. These tracked features first shipped in each release line:", "");
+  for (const m of [...APACHE_MINORS].reverse()) {
+    const added = SPARK_FEATURES.filter((f) => f.since && f.since.startsWith(m + "."));
+    if (added.length) out.push(`- **Apache Spark ${m}:** ${added.map((f) => f.title).join("; ")}`);
   }
   out.push("", "Apache Spark itself, for comparison:", "");
   for (const m of APACHE_MINORS) {

@@ -483,6 +483,8 @@ button.smx-c { @apply cursor-pointer outline-none focus-visible:ring-2 focus-vis
 .smx-preview { @apply bg-blue-200 text-blue-900 dark:bg-blue-800 dark:text-blue-100; }
 .smx-off-by-default { @apply bg-yellow-100 text-yellow-900 ring-1 ring-inset ring-yellow-500 dark:bg-yellow-900 dark:text-yellow-200; }
 .smx-unsupported { @apply bg-destructive text-destructive-foreground; }
-.smx-absent { @apply bg-muted text-muted-foreground; }
+.smx-absent { @apply bg-transparent font-mono text-[0.65rem] text-red-700 border border-dashed border-red-400 dark:text-red-300 dark:border-red-500/70; }
+.smx-gapbar { @apply block h-2 rounded bg-red-500 dark:bg-red-400; }
+.smx-behind { @apply mt-0.5 block text-[0.65rem] font-semibold leading-tight text-red-700 dark:text-red-300; }
 .smx-undocumented { @apply bg-transparent text-muted-foreground ring-1 ring-inset ring-border; }
 .smx-unknown { @apply bg-navy-200 text-navy-600 dark:bg-navy-700 dark:text-navy-300; }
