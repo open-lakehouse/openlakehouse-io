@@ -7,7 +7,7 @@
 // unreachable the build keeps the last good copy instead of failing.
 // Episode slugs are pinned by GUID, so editing an episode title in Riverside
 // never changes a published URL.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
 export const FEED_URL = "https://api.riverside.com/hosting/aeXB70YD.rss";
@@ -15,6 +15,8 @@ export const FEED_URL = "https://api.riverside.com/hosting/aeXB70YD.rss";
 const OUT_DIR = resolve("src/content/podcast");
 const EPISODES_JSON = resolve(OUT_DIR, "episodes.json");
 const TRANSCRIPT_DIR = resolve(OUT_DIR, "transcripts");
+const WRITEUP_DIR = resolve(OUT_DIR, "writeups");
+const WRITEUPS_JSON = resolve(OUT_DIR, "writeups.json");
 
 export type Episode = {
   guid: string;
@@ -105,12 +107,20 @@ export const slugify = (title: string) =>
     )
     .s.replace(/-(and|or|the|w|of|a)$/, "");
 
-/** The transcription service spells the show "Open Lake House". */
-const cleanTranscript = (t: string) =>
-  t
-    .replace(/\r\n/g, "\n")
-    .replace(/\blake ?house(s?)\b/gi, (m, s) => (m[0] === "L" ? `Lakehouse${s}` : `lakehouse${s}`))
-    .trim() + "\n";
+const CORRECTIONS: [RegExp, string][] = (
+  JSON.parse(readFileSync(resolve(OUT_DIR, "transcript-corrections.json"), "utf8")).corrections as [string, string][]
+).map(([re, to]) => [new RegExp(`\\b(?:${re})\\b`, "gi"), to]);
+
+/**
+ * Fix what the transcription service mishears: the show's own name ("Open
+ * Lake House") plus the project and people names in transcript-corrections.json.
+ * Idempotent, so it runs over every transcript on every fetch.
+ */
+export const cleanTranscript = (t: string) => {
+  let out = t.replace(/\r\n/g, "\n").replace(/\blake ?house(s?)\b/gi, (m, s) => (m[0] === "L" ? `Lakehouse${s}` : `lakehouse${s}`));
+  for (const [re, to] of CORRECTIONS) out = out.replace(re, to);
+  return out.trim() + "\n";
+};
 
 export function parseFeed(xml: string, pinned: Map<string, string>): Omit<Episode, "hasTranscript">[] {
   const items = xml.split("<item>").slice(1).map((s) => s.split("</item>")[0]);
@@ -144,7 +154,31 @@ export function parseFeed(xml: string, pinned: Map<string, string>): Omit<Episod
   });
 }
 
+/**
+ * Index the episode write-ups (src/content/podcast/writeups/<slug>.mdx) so
+ * list pages can show their titles without bundling every MDX body.
+ */
+function indexWriteups() {
+  const out: Record<string, { title: string; excerpt?: string; authors: string[]; tags: string[] }> = {};
+  if (existsSync(WRITEUP_DIR)) {
+    for (const f of readdirSync(WRITEUP_DIR).filter((n) => n.endsWith(".mdx")).sort()) {
+      const fm = readFileSync(resolve(WRITEUP_DIR, f), "utf8").match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+      const field = (k: string) => fm.match(new RegExp(`^${k}:\\s*(.*)$`, "m"))?.[1]?.trim();
+      const unquote = (v?: string) => v?.replace(/^"(.*)"$/, "$1").replace(/\\"/g, '"');
+      const list = (v?: string) => (v ? v.replace(/^\[|\]$/g, "").split(",").map((x) => x.trim()).filter(Boolean) : []);
+      out[f.replace(/\.mdx$/, "")] = {
+        title: unquote(field("title")) ?? "",
+        excerpt: unquote(field("excerpt")),
+        authors: list(field("authors")),
+        tags: list(field("tags")),
+      };
+    }
+  }
+  writeFileSync(WRITEUPS_JSON, JSON.stringify(out, null, 2) + "\n");
+}
+
 async function main() {
+  indexWriteups();
   mkdirSync(TRANSCRIPT_DIR, { recursive: true });
   const previous: Episode[] = existsSync(EPISODES_JSON) ? JSON.parse(readFileSync(EPISODES_JSON, "utf8")) : [];
   const pinned = new Map(previous.map((e) => [e.guid, e.slug]));
@@ -171,6 +205,11 @@ async function main() {
       } catch (err) {
         console.warn(`[podcast] transcript failed for ${e.slug}: ${(err as Error).message}`);
       }
+    }
+    if (existsSync(file)) {
+      const before = readFileSync(file, "utf8");
+      const after = cleanTranscript(before);
+      if (after !== before) writeFileSync(file, after);
     }
     episodes.push({ ...e, hasTranscript: existsSync(file) });
   }
