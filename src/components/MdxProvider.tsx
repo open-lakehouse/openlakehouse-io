@@ -10,6 +10,7 @@ import { PromptBlock } from "./mdx/PromptBlock";
 import { Tabs, Tab } from "./mdx/Tabs";
 import { LikeC4View } from "./mdx/LikeC4View";
 import { TrestleView } from "./mdx/TrestleView";
+import { Mermaid } from "./mdx/Mermaid";
 
 const components = {
   // Available in every .mdx file — no import needed.
@@ -25,6 +26,8 @@ const components = {
   // Diagrams from docs-factory posts; their bundles live under public/.
   LikeC4View,
   TrestleView,
+  // ```mermaid fences become <Mermaid> (scripts/remark-mermaid.mjs).
+  Mermaid,
   pre: CodeBlock,
 };
 
