@@ -1,6 +1,4 @@
-# Integration Code Should Live With the Engine That Breaks It
-
-Episode: Nanosecond Timestamp Precision, Iceberg-Datafusion,Spark Connect Rust Client, and Parquet Types
+# TWIOL #1: Nanosecond Timestamp Precision, Iceberg-Datafusion,Spark Connect Rust Client, and Parquet Types
 
 This Week in Open Lakehouse, episode 1. Published 2026-09-18, 01:16:11 long. Hosts: Lisa Cao and Scott Haines.
 

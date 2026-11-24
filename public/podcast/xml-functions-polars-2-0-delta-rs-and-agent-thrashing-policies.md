@@ -1,6 +1,4 @@
-# Deprecation Week: Iceberg, Flink, Arrow and delta-rs decide what to stop carrying
-
-Episode: XML Functions, Polars 2.0, delta-rs, and Agent Thrashing Policies
+# TWIOL #3: XML Functions, Polars 2.0, delta-rs, and Agent Thrashing Policies
 
 This Week in Open Lakehouse, episode 3. Published 2026-09-29, 01:06:59 long. Hosts: Lisa Cao and Scott Haines.
 

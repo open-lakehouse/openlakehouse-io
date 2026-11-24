@@ -1,6 +1,4 @@
-# Your Lakehouse Moves at the Speed of Its Slowest Integration
-
-Episode: Iceberg 1.12, OIDC Credentials, Spark Connect Gateway, Arrow JSON Schemas, and Release Management
+# TWIOL #4: Iceberg 1.12, OIDC Credentials, Spark Connect Gateway, Arrow JSON Schemas, and Release Management
 
 This Week in Open Lakehouse, episode 4. Published 2026-10-06, 01:11:19 long. Hosts: Lisa Cao and Scott Haines.
 

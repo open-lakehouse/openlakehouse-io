@@ -1,6 +1,4 @@
-# Hygiene Releases: Unity Catalog 0.7, Paimon 2.1, and Three New Apache Top-Level Projects
-
-Episode: Unity Catalog 0.7, Paimon 2.1, Hudi 1.1.2, Arrow 26.0, and new ASF top-level projects
+# TWIOL #6: Unity Catalog 0.7, Paimon 2.1, Hudi 1.1.2, Arrow 26.0, and new ASF top-level projects
 
 This Week in Open Lakehouse, episode 6. Published 2026-10-23, 01:01:54 long. Hosts: Lisa Cao and Scott Haines.
 

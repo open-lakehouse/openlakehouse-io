@@ -11,7 +11,9 @@ import NotFound from "@/pages/NotFound";
 import {
   SHOW,
   episodeJsonLd,
+  episodeNumber,
   episodePath,
+  episodeTitle,
   episodes,
   formatEpisodeDate,
   getEpisode,
@@ -66,19 +68,19 @@ const EpisodePage = () => {
 
   const video = youtubeFor(episode);
   const authors = (meta?.authors ?? []).map(getAuthor).filter(Boolean);
-  const heading = meta?.title ?? episode.title;
+  const heading = episodeTitle(episode);
   const description = meta?.excerpt ?? (episode.summary.length > 300 ? `${episode.summary.slice(0, 297)}...` : episode.summary);
   const idx = episodes.indexOf(episode);
   const newer = episodes[idx - 1];
   const older = episodes[idx + 1];
-  const label = episode.episodeNumber ? `Episode ${episode.episodeNumber}` : "Episode";
+  const label = `Episode ${episodeNumber(episode)}`;
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: `${SITE_URL}/` },
       { "@type": "ListItem", position: 2, name: "Podcast", item: `${SITE_URL}${SHOW.path}` },
-      { "@type": "ListItem", position: 3, name: episode.title, item: `${SITE_URL}${episodePath(episode)}` },
+      { "@type": "ListItem", position: 3, name: heading, item: `${SITE_URL}${episodePath(episode)}` },
     ],
   };
 
@@ -118,7 +120,6 @@ const EpisodePage = () => {
             <h1 className="text-balance text-[clamp(2rem,4vw,3rem)] font-semibold leading-[1.1] tracking-[-0.03em]">
               {heading}
             </h1>
-            {meta && <p className="text-lg leading-snug text-muted-foreground">{episode.title}</p>}
             {authors.length > 0 && (
               <p className="text-sm text-muted-foreground">
                 By{" "}
@@ -174,13 +175,13 @@ const EpisodePage = () => {
             {older ? (
               <Link to={episodePath(older)} className="rounded-xl border border-border p-4 hover:border-primary/40">
                 <span className="block text-xs uppercase tracking-wider text-muted-foreground">Previous episode</span>
-                <span className="mt-1 block font-medium">{older.title}</span>
+                <span className="mt-1 block font-medium">{episodeTitle(older)}</span>
               </Link>
             ) : <span />}
             {newer && (
               <Link to={episodePath(newer)} className="rounded-xl border border-border p-4 text-right hover:border-primary/40">
                 <span className="block text-xs uppercase tracking-wider text-muted-foreground">Next episode</span>
-                <span className="mt-1 block font-medium">{newer.title}</span>
+                <span className="mt-1 block font-medium">{episodeTitle(newer)}</span>
               </Link>
             )}
           </nav>

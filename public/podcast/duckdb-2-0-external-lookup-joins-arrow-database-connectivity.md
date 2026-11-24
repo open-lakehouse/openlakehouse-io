@@ -1,6 +1,4 @@
-# Every Engine Wants to Be a Server Now
-
-Episode: DuckDB 2.0, External Lookup Joins, Arrow Database Connectivity, and OpenCode 2.0
+# TWIOL #7: DuckDB 2.0, External Lookup Joins, Arrow Database Connectivity, and OpenCode 2.0
 
 This Week in Open Lakehouse, episode 7. Published 2026-10-28, 01:12:15 long. Hosts: Lisa Cao and Scott Haines.
 

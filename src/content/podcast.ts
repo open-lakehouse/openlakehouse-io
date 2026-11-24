@@ -38,6 +38,11 @@ export const SHOW = {
 
 export const episodes = episodesJson as Episode[];
 
+/** Episode number; the feed leaves it off the AI special, so fall back to its place in the run (oldest is 1). */
+export const episodeNumber = (e: Episode) => e.episodeNumber ?? episodes.length - episodes.indexOf(e);
+/** Display title everywhere on the site: "TWIOL #N: <episode title>". */
+export const episodeTitle = (e: Episode) => `TWIOL #${episodeNumber(e)}: ${e.title}`;
+
 /** YouTube upload of each episode on the Open Lakehouse + AI channel, keyed by episode slug. */
 const youtube = youtubeJson as Record<string, { id: string; uploadDate: string }>;
 export const youtubeFor = (e: Episode) => youtube[e.slug];

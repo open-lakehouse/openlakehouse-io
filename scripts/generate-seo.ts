@@ -46,6 +46,9 @@ const BASE_URL = SITE_URL;
 type PodcastEpisode = { slug: string; title: string; date: string; episodeNumber?: number; duration?: string; summary: string; notesHtml: string; hasTranscript: boolean };
 const PODCAST_TITLE = "This Week in Open Lakehouse";
 const podcastEpisodes: PodcastEpisode[] = JSON.parse(readFileSync(resolve("src/content/podcast/episodes.json"), "utf8"));
+// Same rule as episodeTitle() in src/content/podcast.ts.
+const episodeTitle = (e: PodcastEpisode) =>
+  `TWIOL #${e.episodeNumber ?? podcastEpisodes.length - podcastEpisodes.indexOf(e)}: ${e.title}`;
 const podcastTranscript = (slug: string) => {
   try {
     return readFileSync(resolve(`src/content/podcast/transcripts/${slug}.txt`), "utf8");
@@ -76,9 +79,8 @@ const episodeMarkdown = (e: PodcastEpisode) => {
   const w = podcastWriteups[e.slug];
   const body = writeupBody(e.slug);
   const lines = [
-    `# ${w?.title ?? e.title}`,
+    `# ${episodeTitle(e)}`,
     "",
-    ...(w ? [`Episode: ${e.title}`, ""] : []),
     `${PODCAST_TITLE}${e.episodeNumber ? `, episode ${e.episodeNumber}` : ""}. Published ${e.date.slice(0, 10)}${e.duration ? `, ${e.duration} long` : ""}. Hosts: Lisa Cao and Scott Haines.`,
     "",
     `Canonical page: ${SITE_URL}/podcast/${e.slug}`,
@@ -483,7 +485,7 @@ function renderLlms(): string {
     lines.push(`## Podcast: ${PODCAST_TITLE}`);
     for (const e of podcastEpisodes) {
       const w = podcastWriteups[e.slug];
-      lines.push(withDesc(w?.title ?? e.title, `/podcast/${e.slug}`, `${w?.excerpt ?? e.summary} Write-up, show notes and transcript in Markdown: ${url(`/podcast/${e.slug}`)}.md`));
+      lines.push(withDesc(episodeTitle(e), `/podcast/${e.slug}`, `${w?.excerpt ?? e.summary} Write-up, show notes and transcript in Markdown: ${url(`/podcast/${e.slug}`)}.md`));
     }
     lines.push("");
   }

@@ -1,6 +1,4 @@
-# The Open Lakehouse Is Mostly Arguing About Types Now
-
-Episode: FileTypes, Language-Agnostic UDFs, Parquet Versioning, and Iceberg Updates
+# TWIOL #2: FileTypes, Language-Agnostic UDFs, Parquet Versioning, and Iceberg Updates
 
 This Week in Open Lakehouse, episode 2. Published 2026-09-18, 00:23:07 long. Hosts: Lisa Cao and Scott Haines.
 

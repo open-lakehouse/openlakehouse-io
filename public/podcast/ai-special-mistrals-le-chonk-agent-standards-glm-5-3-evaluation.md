@@ -1,6 +1,4 @@
-# Most of This Week's AI News Happened Outside the Model
-
-Episode: AI Special: Mistral's Le Chonk, Agent Standards, GLM-5.3 Evaluation, and More w/ Melanie Warrick
+# TWIOL #8: AI Special: Mistral's Le Chonk, Agent Standards, GLM-5.3 Evaluation, and More w/ Melanie Warrick
 
 This Week in Open Lakehouse. Published 2026-11-04, 01:09:05 long. Hosts: Lisa Cao and Scott Haines.
 

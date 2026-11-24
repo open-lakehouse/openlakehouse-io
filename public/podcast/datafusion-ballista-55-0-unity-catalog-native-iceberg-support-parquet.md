@@ -1,6 +1,4 @@
-# Guarantees Belong in the Layer That Can Enforce Them
-
-Episode: DataFusion Ballista 55.0, Unity Catalog Native Iceberg Support, Parquet VECTOR type, and MLflow 3.17
+# TWIOL #5: DataFusion Ballista 55.0, Unity Catalog Native Iceberg Support, Parquet VECTOR type, and MLflow 3.17
 
 This Week in Open Lakehouse, episode 5. Published 2026-10-13, 01:26:09 long. Hosts: Lisa Cao and Scott Haines.
 
