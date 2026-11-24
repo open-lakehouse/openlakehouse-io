@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated": "2026-11-22",
+  "generated": "2026-11-23",
   "latest": "4.3.0",
   "versions": [
    "3.0.0",
@@ -89,7 +89,11 @@
    },
    "python": {
     "title": "PySpark",
-    "blurb": "Python APIs, UDFs, Arrow and Python-defined data sources."
+    "blurb": "Python DataFrame APIs, Arrow interchange and Python-defined data sources."
+   },
+   "udf": {
+    "title": "UDFs and UDTFs",
+    "blurb": "User-defined functions in Python, Scala and SQL: scalar, aggregate and table functions, and how they run."
    },
    "sources": {
     "title": "Data sources",
@@ -506,74 +510,6 @@
    ]
   },
   {
-   "id": "connect-python-udf",
-   "title": "Python UDFs over Connect",
-   "category": "connect",
-   "summary": "Register and run Python UDFs from a Connect client (CommonInlineUserDefinedFunction with a Python payload).",
-   "since": "3.4.0",
-   "in": [
-    "3.4.0",
-    "3.5.0",
-    "4.0.0",
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": null,
-   "evidence": [
-    {
-     "kind": "connect",
-     "pattern": "Command.register_function",
-     "required": true,
-     "since": "3.4.0",
-     "in": [
-      "3.4.0",
-      "3.5.0",
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/commands.proto#L36",
-     "path": "sql/connect/common/src/main/protobuf/spark/connect/commands.proto"
-    }
-   ]
-  },
-  {
-   "id": "connect-udtf",
-   "title": "Python UDTFs over Connect",
-   "category": "connect",
-   "summary": "Register Python user-defined table functions from a Connect client.",
-   "since": "3.5.0",
-   "in": [
-    "3.5.0",
-    "4.0.0",
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": null,
-   "evidence": [
-    {
-     "kind": "connect",
-     "pattern": "Command.register_table_function",
-     "required": true,
-     "since": "3.5.0",
-     "in": [
-      "3.5.0",
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/commands.proto#L46",
-     "path": "sql/connect/common/src/main/protobuf/spark/connect/commands.proto"
-    }
-   ]
-  },
-  {
    "id": "connect-streaming",
    "title": "Streaming over Connect",
    "category": "connect",
@@ -846,6 +782,209 @@
      ],
      "path": "sql/connect/client/jdbc/pom.xml",
      "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/client/jdbc/pom.xml"
+    }
+   ]
+  },
+  {
+   "id": "connect-plan-compression",
+   "title": "Compressed plans",
+   "category": "connect",
+   "summary": "The client compresses large protobuf plans (zstd) before it sends them, so big queries and local data fit in the gRPC limits.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "planCompression",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/connect/common/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClient.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/client/SparkConnectClient.scala#L81"
+    }
+   ]
+  },
+  {
+   "id": "connect-chunked-results",
+   "title": "Chunked Arrow results",
+   "category": "connect",
+   "summary": "The server splits large Arrow result batches into chunks of bounded size, so big collects do not fail on message limits.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "resultChunking",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/connect/server/src/main/scala/org/apache/spark/sql/connect/config/Connect.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/config/Connect.scala#L454"
+    }
+   ]
+  },
+  {
+   "id": "connect-transform-with-state",
+   "title": "transformWithState over Connect",
+   "category": "connect",
+   "summary": "Run the transformWithState stateful operator from a Connect client.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "TransformWithStateInfo",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/relations.proto",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/relations.proto#L1083"
+    }
+   ]
+  },
+  {
+   "id": "connect-catalog-parity",
+   "title": "Full Catalog API over Connect",
+   "category": "connect",
+   "summary": "spark.catalog gains create/drop database, drop table and view, truncate, analyze and partition listing, matching the DDL commands.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "connect",
+     "pattern": "Catalog.create_database",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/catalog.proto#L60",
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/catalog.proto"
+    },
+    {
+     "kind": "connect",
+     "pattern": "Catalog.drop_table",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/catalog.proto#L58",
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/catalog.proto"
+    }
+   ]
+  },
+  {
+   "id": "connect-history-server",
+   "title": "Connect tab in the History Server",
+   "category": "connect",
+   "summary": "The Spark Connect sessions and operations tab also shows for finished applications in the Spark History Server.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "SparkConnectServerHistoryServerPlugin",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/connect/server/src/main/resources/META-INF/services/org.apache.spark.status.AppHistoryServerPlugin",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/resources/META-INF/services/org.apache.spark.status.AppHistoryServerPlugin#L18"
+    }
+   ]
+  },
+  {
+   "id": "connect-rest-api",
+   "title": "REST API for sessions and operations",
+   "category": "connect",
+   "summary": "List and inspect Connect sessions and their operations through the Spark REST API.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "file",
+     "pattern": "sql/connect/server/src/main/scala/org/apache/spark/status/api/v1/connect/ConnectResource.scala$",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "sql/connect/server/src/main/scala/org/apache/spark/status/api/v1/connect/ConnectResource.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/status/api/v1/connect/ConnectResource.scala"
+    }
+   ]
+  },
+  {
+   "id": "connect-local-reuse",
+   "title": "Reusable local Connect server",
+   "category": "connect",
+   "summary": "Local PySpark can keep one Spark Connect server alive across runs (SPARK_LOCAL_CONNECT_REUSE=1) for faster startup.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "SPARK_LOCAL_CONNECT_REUSE",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/connect/local_server.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/local_server.py#L20"
     }
    ]
   },
@@ -1225,6 +1364,153 @@
    ]
   },
   {
+   "id": "real-time-mode-python",
+   "title": "Real-time mode in PySpark",
+   "category": "streaming",
+   "summary": "The real-time trigger is available from the Python DataStreamWriter.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/streaming/real-time-mode.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "realTime",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/streaming/readwriter.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/streaming/readwriter.py#L1364"
+    }
+   ]
+  },
+  {
+   "id": "streaming-source-naming",
+   "title": "Named streaming sources",
+   "category": "streaming",
+   "summary": "Give a streaming source a stable name (DataStreamReader.name(), IDENTIFIED BY in SQL) so you can add, remove or reorder sources without a new checkpoint.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "pyspark",
+     "pattern": "DataStreamReader.name",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/streaming/readwriter.py#L252",
+     "path": "python/pyspark/sql/streaming/readwriter.py"
+    },
+    {
+     "kind": "syntax",
+     "pattern": "rule:identifiedByClause",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1250",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "python-streaming-admission-control",
+   "title": "Rate limits for Python streaming sources",
+   "category": "streaming",
+   "summary": "Python streaming readers can declare read limits (admission control) and support Trigger.AvailableNow.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "ReadLimit",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/datasource.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/datasource.py#L35"
+    }
+   ]
+  },
+  {
+   "id": "state-store-auto-repair",
+   "title": "Automatic state store snapshot repair",
+   "category": "streaming",
+   "summary": "When a state store snapshot is corrupt, Spark rebuilds it from older snapshots and changelogs instead of failing the query.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.streaming.stateStore.autoSnapshotRepair.enabled",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L3327",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "state-store-row-checksum",
+   "title": "State store row checksums",
+   "category": "streaming",
+   "summary": "Optional per-row checksums in the state store detect corrupted state.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.streaming.stateStore.rowChecksum.enabled",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L3451",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
    "id": "declarative-pipelines",
    "title": "Spark Declarative Pipelines (SDP)",
    "category": "pipelines",
@@ -1367,10 +1653,252 @@
    ]
   },
   {
-   "id": "pipelines-auto-cdc",
-   "title": "Auto CDC flows",
+   "id": "pipelines-append-flow",
+   "title": "Append flows",
    "category": "pipelines",
-   "summary": "CREATE FLOW ... AUTO CDC to apply change data feeds into a target, including SCD Type 2 history.",
+   "summary": "@dp.append_flow adds extra streaming flows that append into one target table, for example to merge several sources.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "(?m)^def append_flow",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/api.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/api.py#L36"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-sinks",
+   "title": "Sinks",
+   "category": "pipelines",
+   "summary": "dp.create_sink declares an external sink (a format plus options) that flows can write to, outside the catalog.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "(?m)^def create_sink",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/api.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/api.py#L480"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-temporary-views",
+   "title": "Temporary views",
+   "category": "pipelines",
+   "summary": "@dp.temporary_view defines an intermediate dataset that exists only while the pipeline runs and is not published.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "(?m)^def temporary_view",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/api.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/api.py#L317"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-dry-run",
+   "title": "Dry run",
+   "category": "pipelines",
+   "summary": "spark-pipelines dry-run resolves and validates the whole dataflow graph without writing any data.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "\"dry-run\"",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/cli.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/cli.py#L395"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-init",
+   "title": "Project scaffolding (spark-pipelines init)",
+   "category": "pipelines",
+   "summary": "spark-pipelines init creates a sample project with a pipeline spec, a storage directory and example Python and SQL definitions.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "file",
+     "pattern": "^python/pyspark/pipelines/init_cli.py$",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/init_cli.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/init_cli.py"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-selective-refresh",
+   "title": "Full and selective refresh",
+   "category": "pipelines",
+   "summary": "spark-pipelines run --refresh, --full-refresh and --full-refresh-all pick which datasets to update or recompute from scratch.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "--full-refresh",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/cli.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/cli.py#L376"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-events",
+   "title": "Pipeline progress events",
+   "category": "pipelines",
+   "summary": "The server streams pipeline and flow progress events back to the client while a run executes.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "connect",
+     "pattern": "ExecutePlanResponse.pipeline_event_result",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/base.proto#L423",
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/base.proto"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-auto-cdc",
+   "title": "Auto CDC flows (SCD Type 1)",
+   "category": "pipelines",
+   "summary": "dp.create_auto_cdc_flow applies a change data feed to a target table by key and sequence column, with deletes, as SCD Type 1 upserts.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "(?m)^def create_auto_cdc_flow",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/api.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/api.py#L531"
+    },
+    {
+     "kind": "file",
+     "pattern": "sql/pipelines/src/main/scala/org/apache/spark/sql/pipelines/autocdc/Scd1BatchProcessor.scala$",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/pipelines/src/main/scala/org/apache/spark/sql/pipelines/autocdc/Scd1BatchProcessor.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/pipelines/src/main/scala/org/apache/spark/sql/pipelines/autocdc/Scd1BatchProcessor.scala"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-auto-cdc-sql",
+   "title": "Auto CDC in SQL",
+   "category": "pipelines",
+   "summary": "CREATE FLOW ... AS AUTO CDC INTO declares the same change-data flow in SQL, with KEYS, SEQUENCE BY and APPLY AS DELETE WHEN clauses.",
    "since": "4.3.0",
    "in": [
     "4.3.0"
@@ -1387,6 +1915,53 @@
       "4.3.0"
      ],
      "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L428",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "pipelines-scd2",
+   "title": "Auto CDC with SCD Type 2 history",
+   "category": "pipelines",
+   "summary": "Auto CDC keeps every version of a row with __START_AT and __END_AT bounds (stored_as_scd_type=2, STORED AS SCD TYPE 2, TRACK HISTORY ON).",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "track_history_column_list",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "python/pyspark/pipelines/api.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pipelines/api.py#L542"
+    },
+    {
+     "kind": "file",
+     "pattern": "sql/pipelines/src/main/scala/org/apache/spark/sql/pipelines/autocdc/Scd2BatchProcessor.scala$",
+     "required": false,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "sql/pipelines/src/main/scala/org/apache/spark/sql/pipelines/autocdc/Scd2BatchProcessor.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/pipelines/src/main/scala/org/apache/spark/sql/pipelines/autocdc/Scd2BatchProcessor.scala"
+    },
+    {
+     "kind": "syntax",
+     "pattern": "rule:autoCdcTrackHistoryClause",
+     "required": false,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L799",
      "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
     }
    ]
@@ -1684,37 +2259,6 @@
       "4.3.0"
      ],
      "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1389",
-     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
-    }
-   ]
-  },
-  {
-   "id": "sql-udf",
-   "title": "SQL user-defined functions",
-   "category": "sql",
-   "summary": "CREATE FUNCTION ... RETURN <expr or query>, scalar and table SQL UDFs.",
-   "since": "4.0.0",
-   "in": [
-    "4.0.0",
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": "https://spark.apache.org/docs/latest/sql-ref-syntax-ddl-create-sql-function.html",
-   "evidence": [
-    {
-     "kind": "syntax",
-     "pattern": "createUserDefinedFunction",
-     "required": true,
-     "since": "4.0.0",
-     "in": [
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L354",
      "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
     }
    ]
@@ -2154,6 +2698,613 @@
    ]
   },
   {
+   "id": "sql-scripting-default",
+   "title": "SQL scripting on by default",
+   "category": "sql",
+   "summary": "SQL scripting is generally available and spark.sql.scripting.enabled defaults to true, so BEGIN ... END blocks run without a flag.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-scripting.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "\"spark.sql.scripting.enabled\"\\)(?:(?!createWithDefault)[\\s\\S]){0,2000}createWithDefault\\(true\\)",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5585"
+    }
+   ]
+  },
+  {
+   "id": "variant-colon-syntax",
+   "title": "Colon path syntax for VARIANT",
+   "category": "sql",
+   "summary": "Read fields of a VARIANT or JSON value with col:path.to.field instead of a function call.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "semiStructuredExtract",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1468",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "schema-default-collation",
+   "title": "Default collation for schemas",
+   "category": "sql",
+   "summary": "Set a default collation on a schema (ALTER SCHEMA ... DEFAULT COLLATION) that new tables and views inherit.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "setNamespaceCollation",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L249",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "sql-path",
+   "title": "SQL PATH name resolution",
+   "category": "sql",
+   "summary": "SET PATH and CURRENT_PATH() control the schemas searched for unqualified functions, tables and variables.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-syntax-aux-conf-mgmt-set-path.html",
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "setPath",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L463",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    },
+    {
+     "kind": "function",
+     "pattern": "current_path",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L112",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
+   "id": "nearest-by-join",
+   "title": "NEAREST BY top-K join",
+   "category": "sql",
+   "summary": "A join that keeps the K nearest rows on the other side by a distance or similarity expression (APPROX | EXACT NEAREST k BY ...), also in DataFrame.nearestByJoin.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "rule:nearestByClause",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1158",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    },
+    {
+     "kind": "pyspark",
+     "pattern": "DataFrame.nearestByJoin",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py#L2916",
+     "path": "python/pyspark/sql/dataframe.py"
+    }
+   ]
+  },
+  {
+   "id": "insert-replace-on-using",
+   "title": "INSERT INTO ... REPLACE ON / USING",
+   "category": "sql",
+   "summary": "Replace the target rows that match a condition (REPLACE ON) or a key list (REPLACE USING) and insert the new rows in one statement.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "insertIntoReplaceUsing",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L603",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    },
+    {
+     "kind": "syntax",
+     "pattern": "insertIntoReplaceBooleanCond",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L601",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "insert-schema-evolution",
+   "title": "INSERT WITH SCHEMA EVOLUTION",
+   "category": "sql",
+   "summary": "Let INSERT add new source columns to the target table, as MERGE WITH SCHEMA EVOLUTION already does.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "INSERT \\(WITH SCHEMA EVOLUTION\\)\\?",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L598"
+    }
+   ]
+  },
+  {
+   "id": "tablesample-system",
+   "title": "TABLESAMPLE SYSTEM",
+   "category": "sql",
+   "summary": "Block-level sampling (TABLESAMPLE SYSTEM) that data sources can push down, as an alternative to row-level BERNOULLI sampling.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "sampleType=\\(SYSTEM",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1163"
+    }
+   ]
+  },
+  {
+   "id": "comment-on-column",
+   "title": "COMMENT ON COLUMN",
+   "category": "sql",
+   "summary": "Set or change the comment of a table column with COMMENT ON COLUMN.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-syntax-ddl-comment.html",
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "commentColumn",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L400",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "time-travel-at-syntax",
+   "title": "@ time travel syntax",
+   "category": "sql",
+   "summary": "Query a table version or timestamp with table@v123 or table@<timestamp> (opt-in with spark.sql.timeTravel.atSyntax.enabled).",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.timeTravel.atSyntax.enabled",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L7738",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    },
+    {
+     "kind": "syntax",
+     "pattern": "rule:temporalTableIdentifier",
+     "required": false,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1341",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "bin-by",
+   "title": "BIN BY relation operator",
+   "category": "sql",
+   "summary": "Split rows with a time or value range into fixed-width bins and distribute values across them (opt-in with spark.sql.binByRelationOperator.enabled).",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "rule:binByClause",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1084",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "approx-top-k",
+   "title": "approx_top_k",
+   "category": "sql",
+   "summary": "Approximate most-frequent values with mergeable accumulate and combine steps.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "approx_top_k",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L469",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    },
+    {
+     "kind": "function",
+     "pattern": "approx_top_k_combine",
+     "required": false,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L471",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
+   "id": "theta-kll-sketches",
+   "title": "Theta and KLL sketches",
+   "category": "sql",
+   "summary": "theta_sketch_agg for distinct counts with set operations, and kll_sketch_agg_* for mergeable quantiles.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-sketch-aggregates.html",
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "theta_sketch_agg",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L536",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    },
+    {
+     "kind": "function",
+     "pattern": "kll_sketch_agg_bigint",
+     "required": false,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L503",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
+   "id": "tuple-sketches",
+   "title": "Tuple sketches",
+   "category": "sql",
+   "summary": "tuple_sketch_agg_* sketches carry a summary value per key for approximate distinct counts with sums or other aggregates.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-sketch-aggregates.html",
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "tuple_sketch_agg_double",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L542",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
+   "id": "vector-functions",
+   "title": "Vector similarity functions",
+   "category": "sql",
+   "summary": "vector_cosine_similarity, vector_l2_distance, vector_inner_product, vector_norm and vector aggregates on ARRAY<FLOAT> embeddings.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "vector_cosine_similarity",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L453",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    },
+    {
+     "kind": "function",
+     "pattern": "vector_l2_distance",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L455",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    },
+    {
+     "kind": "pyspark",
+     "pattern": "pyspark.sql.functions.vector_cosine_similarity",
+     "required": false,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py#L33243",
+     "path": "python/pyspark/sql/functions/builtin.py"
+    }
+   ]
+  },
+  {
+   "id": "time-bucket",
+   "title": "time_bucket",
+   "category": "sql",
+   "summary": "Round timestamps down to fixed-width buckets (for example 15 minutes) aligned to an origin.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "time_bucket",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L372",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
+   "id": "counter-diff",
+   "title": "counter_diff window function",
+   "category": "sql",
+   "summary": "Convert a cumulative counter time series to per-row deltas over an ordered window.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "counter_diff",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L98",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
+   "id": "jaro-winkler",
+   "title": "jaro_winkler_similarity",
+   "category": "sql",
+   "summary": "String similarity score for fuzzy matching of names and other short strings.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "jaro_winkler_similarity",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L187",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
+   "id": "collect-union",
+   "title": "collect_union",
+   "category": "sql",
+   "summary": "Aggregate that merges arrays from many rows into one array of distinct elements.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "function",
+     "pattern": "collect_union",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-functions/sql-expression-schema.md#L487",
+     "path": "sql/core/src/test/resources/sql-functions/sql-expression-schema.md"
+    }
+   ]
+  },
+  {
    "id": "variant",
    "title": "VARIANT type",
    "category": "types",
@@ -2480,6 +3631,58 @@
    ]
   },
   {
+   "id": "geospatial-default",
+   "title": "Geospatial types on by default",
+   "category": "types",
+   "summary": "spark.sql.geospatial.enabled defaults to true, so GEOMETRY, GEOGRAPHY and ST_ functions work without a flag, with Parquet read and write.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-geospatial-types.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "\"spark.sql.geospatial.enabled\"\\)(?:(?!createWithDefault)[\\s\\S]){0,2000}createWithDefault\\(true\\)",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L758"
+    }
+   ]
+  },
+  {
+   "id": "time-nanos",
+   "title": "Nanosecond TIME precision",
+   "category": "types",
+   "summary": "TIME(p) accepts a precision up to 9 digits, so time-of-day values can hold nanoseconds.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "MAX_PRECISION\\s*:\\s*Int\\s*=\\s*(9|NANOS_PRECISION)",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "sql/api/src/main/scala/org/apache/spark/sql/types/TimeType.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/types/TimeType.scala#L54"
+    }
+   ]
+  },
+  {
    "id": "metric-views",
    "title": "Metric views",
    "category": "semantics",
@@ -2534,148 +3737,6 @@
      ],
      "path": "python/pyspark/sql/datasource.py",
      "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/datasource.py"
-    }
-   ]
-  },
-  {
-   "id": "python-udtf",
-   "title": "Python UDTFs",
-   "category": "python",
-   "summary": "Python user-defined table functions that return many rows per input, with polymorphic analyze().",
-   "since": "3.5.0",
-   "in": [
-    "3.5.0",
-    "4.0.0",
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": "https://spark.apache.org/docs/latest/sql-ref-functions-udf-scalar.html",
-   "evidence": [
-    {
-     "kind": "pyspark",
-     "pattern": "pyspark.sql.functions.udtf",
-     "required": true,
-     "since": "3.5.0",
-     "in": [
-      "3.5.0",
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py#L33002",
-     "path": "python/pyspark/sql/functions/builtin.py"
-    }
-   ]
-  },
-  {
-   "id": "arrow-optimized-udf",
-   "title": "Arrow-optimized Python UDFs",
-   "category": "python",
-   "summary": "Regular Python UDFs serialised with Arrow (useArrow=True) for much faster (de)serialisation.",
-   "since": "3.5.0",
-   "in": [
-    "3.5.0",
-    "4.0.0",
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": null,
-   "evidence": [
-    {
-     "kind": "grep",
-     "pattern": "useArrow",
-     "required": true,
-     "since": "3.5.0",
-     "in": [
-      "3.5.0",
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "path": "python/pyspark/sql/udf.py",
-     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/udf.py#L91"
-    },
-    {
-     "kind": "config",
-     "pattern": "spark.sql.execution.pythonUDF.arrow.enabled",
-     "required": false,
-     "since": "3.4.0",
-     "in": [
-      "3.4.0",
-      "3.5.0",
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5401",
-     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
-    }
-   ]
-  },
-  {
-   "id": "arrow-udf",
-   "title": "Arrow UDFs (pyarrow-native)",
-   "category": "python",
-   "summary": "@arrow_udf: UDFs that take and return pyarrow arrays directly, no pandas in between.",
-   "since": "4.1.0",
-   "in": [
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": null,
-   "evidence": [
-    {
-     "kind": "grep",
-     "pattern": "def arrow_udf",
-     "required": true,
-     "since": "4.1.0",
-     "in": [
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "path": "python/pyspark/sql/pandas/functions.py",
-     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/functions.py#L58"
-    }
-   ]
-  },
-  {
-   "id": "apply-in-arrow",
-   "title": "applyInArrow / mapInArrow",
-   "category": "python",
-   "summary": "Grouped and partition-wise Python functions over pyarrow batches.",
-   "since": "4.0.0",
-   "in": [
-    "4.0.0",
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": null,
-   "evidence": [
-    {
-     "kind": "grep",
-     "pattern": "def applyInArrow",
-     "required": true,
-     "since": "4.0.0",
-     "in": [
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "path": "python/pyspark/sql/pandas/group_ops.py",
-     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/group_ops.py#L772"
     }
    ]
   },
@@ -2738,66 +3799,6 @@
      ],
      "path": "python/pyspark/sql/plot/__init__.py",
      "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/plot/__init__.py"
-    }
-   ]
-  },
-  {
-   "id": "python-udf-profiler",
-   "title": "Unified Python profiler",
-   "category": "python",
-   "summary": "Profile Python UDF performance and memory per session (spark.profile, spark.sql.pyspark.udf.profiler).",
-   "since": "4.0.0",
-   "in": [
-    "4.0.0",
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": null,
-   "evidence": [
-    {
-     "kind": "config",
-     "pattern": "spark.sql.pyspark.udf.profiler",
-     "required": true,
-     "since": "4.0.0",
-     "in": [
-      "4.0.0",
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5053",
-     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
-    }
-   ]
-  },
-  {
-   "id": "python-worker-logging",
-   "title": "Python worker logging",
-   "category": "python",
-   "summary": "Capture logs from Python UDF workers and query them as a table.",
-   "since": "4.1.0",
-   "in": [
-    "4.1.0",
-    "4.2.0",
-    "4.3.0"
-   ],
-   "vendor_only": false,
-   "docs": null,
-   "evidence": [
-    {
-     "kind": "config",
-     "pattern": "spark.sql.pyspark.worker.logging.enabled",
-     "required": true,
-     "since": "4.1.0",
-     "in": [
-      "4.1.0",
-      "4.2.0",
-      "4.3.0"
-     ],
-     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5104",
-     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
     }
    ]
   },
@@ -2899,6 +3900,1146 @@
      ],
      "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py#L2814",
      "path": "python/pyspark/sql/dataframe.py"
+    }
+   ]
+  },
+  {
+   "id": "python-ds-filter-pushdown",
+   "title": "Filter pushdown for Python data sources",
+   "category": "python",
+   "summary": "A Python DataSourceReader can accept filters (pushFilters) so the source skips data before it reaches Spark.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "def pushFilters",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/datasource.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/datasource.py#L520"
+    }
+   ]
+  },
+  {
+   "id": "cdc-dataframe-api",
+   "title": "Change data feed reads from the DataFrame API",
+   "category": "python",
+   "summary": "spark.read.changes() and spark.readStream.changes() read a table's row-level changes in batch or streaming, also over Connect.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "pyspark",
+     "pattern": "DataFrameReader.changes",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/readwriter.py#L564",
+     "path": "python/pyspark/sql/readwriter.py"
+    },
+    {
+     "kind": "pyspark",
+     "pattern": "DataStreamReader.changes",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/streaming/readwriter.py#L958",
+     "path": "python/pyspark/sql/streaming/readwriter.py"
+    },
+    {
+     "kind": "connect",
+     "pattern": "Relation.relation_changes",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/relations.proto#L84",
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/relations.proto"
+    }
+   ]
+  },
+  {
+   "id": "zip-with-index",
+   "title": "DataFrame.zipWithIndex",
+   "category": "python",
+   "summary": "Add a consecutive row index column without dropping to the RDD API, also over Connect.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "pyspark",
+     "pattern": "DataFrame.zipWithIndex",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py#L785",
+     "path": "python/pyspark/sql/dataframe.py"
+    }
+   ]
+  },
+  {
+   "id": "pycapsule",
+   "title": "Arrow PyCapsule interface",
+   "category": "python",
+   "summary": "DataFrames export the Arrow C stream interface (__arrow_c_stream__), so libraries that accept Arrow PyCapsule streams can read them without a pandas copy.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "__arrow_c_stream__",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/dataframe.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py#L7109"
+    }
+   ]
+  },
+  {
+   "id": "dataframe-zip",
+   "title": "DataFrame.zip",
+   "category": "python",
+   "summary": "Put the columns of two DataFrames derived from the same source side by side, row-aligned, without a join, also over Connect.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "pyspark",
+     "pattern": "DataFrame.zip",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py#L2590",
+     "path": "python/pyspark/sql/dataframe.py"
+    },
+    {
+     "kind": "connect",
+     "pattern": "Relation.zip",
+     "required": false,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/relations.proto#L86",
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/relations.proto"
+    }
+   ]
+  },
+  {
+   "id": "pandas-udf",
+   "title": "pandas UDFs",
+   "category": "udf",
+   "summary": "@pandas_udf: vectorized Python UDFs that receive and return pandas Series or DataFrames, exchanged with the JVM through Arrow.",
+   "since": "3.0.0",
+   "in": [
+    "3.0.0",
+    "3.1.1",
+    "3.2.0",
+    "3.3.0",
+    "3.4.0",
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-pyspark-pandas-with-arrow.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "(?m)^def pandas_udf",
+     "required": true,
+     "since": "3.0.0",
+     "in": [
+      "3.0.0",
+      "3.1.1",
+      "3.2.0",
+      "3.3.0",
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/pandas/functions.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/functions.py#L399"
+    }
+   ]
+  },
+  {
+   "id": "pandas-udf-type-hints",
+   "title": "Type hints select the pandas UDF kind",
+   "category": "udf",
+   "summary": "Python type hints (pd.Series -> pd.Series, Iterator[...], -> scalar) decide whether a pandas UDF is scalar, iterator or aggregate.",
+   "since": "3.0.0",
+   "in": [
+    "3.0.0",
+    "3.1.1",
+    "3.2.0",
+    "3.3.0",
+    "3.4.0",
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-pyspark-pandas-with-arrow.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "def infer_eval_type",
+     "required": true,
+     "since": "3.0.0",
+     "in": [
+      "3.0.0",
+      "3.1.1",
+      "3.2.0",
+      "3.3.0",
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/pandas/typehints.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/typehints.py#L329"
+    }
+   ]
+  },
+  {
+   "id": "map-apply-in-pandas",
+   "title": "applyInPandas / mapInPandas",
+   "category": "udf",
+   "summary": "Run a Python function over each group (applyInPandas, cogroup) or each partition (mapInPandas) as pandas DataFrames.",
+   "since": "3.0.0",
+   "in": [
+    "3.0.0",
+    "3.1.1",
+    "3.2.0",
+    "3.3.0",
+    "3.4.0",
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-pyspark-pandas-with-arrow.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "def applyInPandas",
+     "required": true,
+     "since": "3.0.0",
+     "in": [
+      "3.0.0",
+      "3.1.1",
+      "3.2.0",
+      "3.3.0",
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/pandas/group_ops.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/group_ops.py#L118"
+    },
+    {
+     "kind": "grep",
+     "pattern": "def mapInPandas",
+     "required": false,
+     "since": "3.0.0",
+     "in": [
+      "3.0.0",
+      "3.1.1",
+      "3.2.0",
+      "3.3.0",
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/pandas/map_ops.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/map_ops.py#L37"
+    }
+   ]
+  },
+  {
+   "id": "scala-udaf-aggregator",
+   "title": "Typed Scala/Java UDAFs (Aggregator)",
+   "category": "udf",
+   "summary": "functions.udaf(aggregator) turns a typed Aggregator into an untyped aggregate function you can register and call from SQL.",
+   "since": "3.0.0",
+   "in": [
+    "3.0.0",
+    "3.1.1",
+    "3.2.0",
+    "3.3.0",
+    "3.4.0",
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-functions-udf-aggregate.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "def udaf\\[",
+     "required": true,
+     "since": "3.0.0",
+     "in": [
+      "3.0.0",
+      "3.1.1",
+      "3.2.0",
+      "3.3.0",
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/api/src/main/scala/org/apache/spark/sql/functions.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/functions.scala#L17039"
+    }
+   ]
+  },
+  {
+   "id": "connect-python-udf",
+   "title": "Python UDFs over Connect",
+   "category": "udf",
+   "summary": "Register and run Python UDFs from a Connect client (CommonInlineUserDefinedFunction with a Python payload).",
+   "since": "3.4.0",
+   "in": [
+    "3.4.0",
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "connect",
+     "pattern": "Command.register_function",
+     "required": true,
+     "since": "3.4.0",
+     "in": [
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/commands.proto#L36",
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/commands.proto"
+    }
+   ]
+  },
+  {
+   "id": "arrow-optimized-udf",
+   "title": "Arrow-optimized Python UDFs",
+   "category": "udf",
+   "summary": "Regular Python UDFs serialised with Arrow (useArrow=True) for much faster (de)serialisation.",
+   "since": "3.5.0",
+   "in": [
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "useArrow",
+     "required": true,
+     "since": "3.5.0",
+     "in": [
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/udf.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/udf.py#L91"
+    },
+    {
+     "kind": "config",
+     "pattern": "spark.sql.execution.pythonUDF.arrow.enabled",
+     "required": false,
+     "since": "3.4.0",
+     "in": [
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5401",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-memory-profiler",
+   "title": "Python UDF memory profiler",
+   "category": "udf",
+   "summary": "Line-by-line memory profiles of Python UDFs on executors, with the memory_profiler package.",
+   "since": "3.4.0",
+   "in": [
+    "3.4.0",
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "memory_profiler",
+     "required": true,
+     "since": "3.4.0",
+     "in": [
+      "3.4.0",
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/profiler.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/profiler.py#L60"
+    }
+   ]
+  },
+  {
+   "id": "python-udtf",
+   "title": "Python UDTFs",
+   "category": "udf",
+   "summary": "Python user-defined table functions that return many rows per input, with polymorphic analyze().",
+   "since": "3.5.0",
+   "in": [
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-functions-udf-scalar.html",
+   "evidence": [
+    {
+     "kind": "pyspark",
+     "pattern": "pyspark.sql.functions.udtf",
+     "required": true,
+     "since": "3.5.0",
+     "in": [
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py#L33002",
+     "path": "python/pyspark/sql/functions/builtin.py"
+    }
+   ]
+  },
+  {
+   "id": "connect-udtf",
+   "title": "Python UDTFs over Connect",
+   "category": "udf",
+   "summary": "Register Python user-defined table functions from a Connect client.",
+   "since": "3.5.0",
+   "in": [
+    "3.5.0",
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "connect",
+     "pattern": "Command.register_table_function",
+     "required": true,
+     "since": "3.5.0",
+     "in": [
+      "3.5.0",
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/commands.proto#L46",
+     "path": "sql/connect/common/src/main/protobuf/spark/connect/commands.proto"
+    }
+   ]
+  },
+  {
+   "id": "sql-udf",
+   "title": "SQL user-defined functions",
+   "category": "udf",
+   "summary": "CREATE FUNCTION ... RETURN <expr or query>, scalar and table SQL UDFs.",
+   "since": "4.0.0",
+   "in": [
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/sql-ref-syntax-ddl-create-sql-function.html",
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "createUserDefinedFunction",
+     "required": true,
+     "since": "4.0.0",
+     "in": [
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L354",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "python-udtf-analyze",
+   "title": "Polymorphic Python UDTFs (analyze)",
+   "category": "udf",
+   "summary": "A UDTF's static analyze() method sees the arguments at planning time and returns the output schema, partitioning and ordering.",
+   "since": "4.0.0",
+   "in": [
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "class AnalyzeArgument",
+     "required": true,
+     "since": "4.0.0",
+     "in": [
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/udtf.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/udtf.py#L57"
+    }
+   ]
+  },
+  {
+   "id": "udtf-table-arguments",
+   "title": "TABLE arguments with PARTITION BY",
+   "category": "udf",
+   "summary": "Pass a whole table to a table function, partitioned and ordered (TABLE(t) PARTITION BY ... ORDER BY ... or WITH SINGLE PARTITION).",
+   "since": "4.0.0",
+   "in": [
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "syntax",
+     "pattern": "rule:tableArgumentPartitioning",
+     "required": true,
+     "since": "4.0.0",
+     "in": [
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4#L1266",
+     "path": "sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4"
+    }
+   ]
+  },
+  {
+   "id": "apply-in-arrow",
+   "title": "applyInArrow / mapInArrow",
+   "category": "udf",
+   "summary": "Grouped and partition-wise Python functions over pyarrow batches.",
+   "since": "4.0.0",
+   "in": [
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "def applyInArrow",
+     "required": true,
+     "since": "4.0.0",
+     "in": [
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/pandas/group_ops.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/group_ops.py#L772"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-profiler",
+   "title": "Unified Python profiler",
+   "category": "udf",
+   "summary": "Profile Python UDF performance and memory per session (spark.profile, spark.sql.pyspark.udf.profiler).",
+   "since": "4.0.0",
+   "in": [
+    "4.0.0",
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.pyspark.udf.profiler",
+     "required": true,
+     "since": "4.0.0",
+     "in": [
+      "4.0.0",
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5053",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "arrow-udf",
+   "title": "Arrow UDFs (pyarrow-native)",
+   "category": "udf",
+   "summary": "@arrow_udf: UDFs that take and return pyarrow arrays directly, no pandas in between.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "def arrow_udf",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/pandas/functions.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/functions.py#L58"
+    }
+   ]
+  },
+  {
+   "id": "arrow-udtf",
+   "title": "Arrow UDTFs",
+   "category": "udf",
+   "summary": "@arrow_udtf: table functions that receive pyarrow record batches or arrays and yield pyarrow tables or batches, without per-row conversion.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "def arrow_udtf",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/connect/functions/builtin.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/functions/builtin.py#L5706"
+    }
+   ]
+  },
+  {
+   "id": "arrow-grouped-agg-udf",
+   "title": "Arrow aggregate UDFs",
+   "category": "udf",
+   "summary": "@arrow_udf aggregate functions reduce a group's pyarrow arrays to one value, usable in groupBy().agg().",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "SQL_GROUPED_AGG_ARROW_UDF",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/util.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/util.py#L688"
+    }
+   ]
+  },
+  {
+   "id": "grouped-map-iterator",
+   "title": "Iterator-based applyInArrow / applyInPandas",
+   "category": "udf",
+   "summary": "Grouped-map functions can consume each group as an iterator of batches, so large groups do not have to fit in memory at once.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "SQL_GROUPED_MAP_ARROW_ITER_UDF",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/util.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/util.py#L681"
+    },
+    {
+     "kind": "grep",
+     "pattern": "SQL_GROUPED_MAP_PANDAS_ITER_UDF",
+     "required": false,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/util.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/util.py#L682"
+    }
+   ]
+  },
+  {
+   "id": "udf-type-hint-dispatch",
+   "title": "@udf picks the vectorized path from type hints",
+   "category": "udf",
+   "summary": "The plain @udf decorator becomes an Arrow or pandas UDF when the function's type hints say so.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "infer_eval_type_for_udf",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/sql/udf.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/udf.py#L129"
+    }
+   ]
+  },
+  {
+   "id": "python-worker-logging",
+   "title": "Python worker logging",
+   "category": "udf",
+   "summary": "Capture logs from Python UDF workers and query them as a table.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.pyspark.worker.logging.enabled",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5104",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-unix-socket",
+   "title": "Unix domain sockets for Python workers",
+   "category": "udf",
+   "summary": "The JVM and Python UDF workers can talk over Unix domain sockets instead of TCP (spark.python.unix.domain.socket.enabled).",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.python.unix.domain.socket.enabled",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/Python.scala#L73",
+     "path": "core/src/main/scala/org/apache/spark/internal/config/Python.scala"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-traceback-dump",
+   "title": "Traceback dumps for slow Python UDFs",
+   "category": "udf",
+   "summary": "Python workers can print their stack periodically, to show where a slow or hung UDF spends its time.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.execution.pyspark.udf.tracebackDumpIntervalSeconds",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5088",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "grouped-agg-iterator-udf",
+   "title": "Iterator aggregate UDFs, callable from SQL",
+   "category": "udf",
+   "summary": "Arrow and pandas grouped aggregate UDFs can read a group as an iterator of batches, and can be registered for use in SQL.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "SQL_GROUPED_AGG_ARROW_ITER_UDF",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/util.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/util.py#L690"
+    },
+    {
+     "kind": "grep",
+     "pattern": "SQL_GROUPED_AGG_PANDAS_ITER_UDF",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/pyspark/util.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/pyspark/util.py#L683"
+    }
+   ]
+  },
+  {
+   "id": "arrow-udf-default",
+   "title": "Arrow-optimized Python UDFs on by default",
+   "category": "udf",
+   "summary": "spark.sql.execution.pythonUDF.arrow.enabled defaults to true, so plain @udf functions exchange data with the JVM through Arrow.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "PYTHON_UDF_ARROW_ENABLED =(?:(?!createWithDefault)[\\s\\S]){0,2000}createWithDefault\\(true\\)",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5400"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-time-metric",
+   "title": "Python UDF time in the SQL UI",
+   "category": "udf",
+   "summary": "Python UDF operators report the time spent running Python code as a SQL metric.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "\"pythonProcessingTime\"",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/core/src/main/scala/org/apache/spark/sql/execution/python/PythonSQLMetrics.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/python/PythonSQLMetrics.scala#L54"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-transpile",
+   "title": "Python UDF transpilation (experimental)",
+   "category": "udf",
+   "summary": "Simple Python UDFs can be rewritten into native Catalyst expressions, so they run without a Python worker (spark.sql.experimental.optimizer.transpilePyUDFs).",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.experimental.optimizer.transpilePyUDFs",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L614",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-pipelined",
+   "title": "Pipelined Python UDF data transfer",
+   "category": "udf",
+   "summary": "Sending input to Python UDF workers and reading their output overlap in separate threads, which helps heavy UDFs such as model inference (spark.python.udf.pipelined.enabled).",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.python.udf.pipelined.enabled",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/Python.scala#L155",
+     "path": "core/src/main/scala/org/apache/spark/internal/config/Python.scala"
+    }
+   ]
+  },
+  {
+   "id": "python-udf-traceback-locals",
+   "title": "Local variables in UDF tracebacks",
+   "category": "udf",
+   "summary": "Python UDF error tracebacks can include the values of local variables in each frame.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5370",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "unified-udf-execution",
+   "title": "Language-agnostic UDF worker protocol (experimental)",
+   "category": "udf",
+   "summary": "A gRPC-based UDF worker protocol and execution path meant for UDFs in any language (spark.sql.execution.udf.unified.execution.enabled).",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.execution.udf.unified.execution.enabled",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L5390",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
     }
    ]
   },
@@ -3074,6 +5215,87 @@
    ]
   },
   {
+   "id": "dsv2-join-pushdown",
+   "title": "Join pushdown to DSv2 sources",
+   "category": "sources",
+   "summary": "Connectors can run joins themselves (SupportsPushDownJoin); the JDBC sources for PostgreSQL, Oracle, MySQL and SQL Server use it.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "interface SupportsPushDownJoin",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownJoin.java",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownJoin.java#L31"
+    }
+   ]
+  },
+  {
+   "id": "dsv2-transactions",
+   "title": "DSv2 transactions",
+   "category": "sources",
+   "summary": "A connector API that lets a catalog commit several operations atomically as one transaction.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "interface (Transaction|TransactionalCatalog|SupportsTransactions)\\b",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/transactions/Transaction.java",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/transactions/Transaction.java#L38"
+    }
+   ]
+  },
+  {
+   "id": "archive-reader",
+   "title": "Read files inside archives",
+   "category": "sources",
+   "summary": "File sources can read CSV, JSON, text, XML, Avro, Parquet and ORC files inside tar, zip and 7z archives (opt-in with spark.sql.files.archive.reader.enabled).",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.files.archive.reader.enabled",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L3043",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
    "id": "aqe",
    "title": "Adaptive query execution",
    "category": "execution",
@@ -3200,6 +5422,123 @@
      ],
      "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala",
      "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L7951"
+    }
+   ]
+  },
+  {
+   "id": "shuffle-checksum-retry",
+   "title": "Checksum-based shuffle retry",
+   "category": "execution",
+   "summary": "Order-independent shuffle checksums detect when a recomputed map stage produced different data, and Spark retries the whole stage instead of returning wrong results.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L1227",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "window-segment-tree",
+   "title": "Segment-tree window frames",
+   "category": "execution",
+   "summary": "Sliding window aggregates that cannot be inverted (min, max and similar) use a segment tree instead of rescanning each frame.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.window.segmentTree.enabled",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L4759",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
+    }
+   ]
+  },
+  {
+   "id": "pipelined-shuffle",
+   "title": "Pipelined shuffle and concurrent stages",
+   "category": "execution",
+   "summary": "Producer and consumer stages run at the same time over a streaming shuffle; real-time mode uses it for stateful queries.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "class StreamingShuffleManager",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "core/src/main/scala/org/apache/spark/shuffle/streaming/StreamingShuffleManager.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/shuffle/streaming/StreamingShuffleManager.scala#L93"
+    },
+    {
+     "kind": "grep",
+     "pattern": "class PipelinedShuffleDependency",
+     "required": false,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "core/src/main/scala/org/apache/spark/Dependency.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/Dependency.scala#L302"
+    }
+   ]
+  },
+  {
+   "id": "aqe-smj-to-shj",
+   "title": "AQE converts sort-merge to shuffled hash joins",
+   "category": "execution",
+   "summary": "Adaptive execution can replace a sort-merge join with a shuffled hash join at runtime when the build side turns out small enough.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala#L1517",
+     "path": "sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala"
     }
    ]
   },
@@ -3353,6 +5692,180 @@
      ],
      "path": "sql/connect/server/src/main/scala/org/apache/spark/sql/connect/ui/SparkConnectServerTab.scala",
      "url": "https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/ui/SparkConnectServerTab.scala"
+    }
+   ]
+  },
+  {
+   "id": "python-3-14",
+   "title": "Python 3.14 support",
+   "category": "ops",
+   "summary": "PySpark supports Python 3.14.",
+   "since": "4.1.0",
+   "in": [
+    "4.1.0",
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "Python :: 3.14",
+     "required": true,
+     "since": "4.1.0",
+     "in": [
+      "4.1.0",
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "python/packaging/classic/setup.py",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/python/packaging/classic/setup.py#L402"
+    }
+   ]
+  },
+  {
+   "id": "web-ui-dark-mode",
+   "title": "Modernized web UI with dark mode",
+   "category": "ops",
+   "summary": "The Spark UI gets a dark theme toggle, and SQL plan graphs gain search, pan and zoom and side-by-side initial and final AQE plans.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/web-ui.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "Theme toggle",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "core/src/main/resources/org/apache/spark/ui/static/webui.js",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/core/src/main/resources/org/apache/spark/ui/static/webui.js#L32"
+    }
+   ]
+  },
+  {
+   "id": "shs-multiple-log-dirs",
+   "title": "History Server with several log directories",
+   "category": "ops",
+   "summary": "One Spark History Server can read event logs from more than one directory.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/monitoring.html",
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.history.fs.logDirectory.names",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/History.scala#L38",
+     "path": "core/src/main/scala/org/apache/spark/internal/config/History.scala"
+    }
+   ]
+  },
+  {
+   "id": "k8s-deployment",
+   "title": "Kubernetes Deployment-based executors",
+   "category": "ops",
+   "summary": "Spark on Kubernetes can manage executors through a Kubernetes Deployment instead of individual pods.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/running-on-kubernetes.html",
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "class DeploymentPodsAllocator",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "path": "resource-managers/kubernetes/core/src/main/scala/org/apache/spark/scheduler/cluster/k8s/DeploymentPodsAllocator.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/scheduler/cluster/k8s/DeploymentPodsAllocator.scala#L45"
+    }
+   ]
+  },
+  {
+   "id": "k8s-executor-resize",
+   "title": "Kubernetes executor resizing",
+   "category": "ops",
+   "summary": "Built-in plugins resize executor pod memory and persistent volume claims when usage passes a threshold.",
+   "since": "4.2.0",
+   "in": [
+    "4.2.0",
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": "https://spark.apache.org/docs/latest/running-on-kubernetes.html",
+   "evidence": [
+    {
+     "kind": "config",
+     "pattern": "spark.kubernetes.executor.resizeInterval",
+     "required": true,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/Config.scala#L291",
+     "path": "resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/Config.scala"
+    },
+    {
+     "kind": "config",
+     "pattern": "spark.kubernetes.executor.pvc.resizeInterval",
+     "required": false,
+     "since": "4.2.0",
+     "in": [
+      "4.2.0",
+      "4.3.0"
+     ],
+     "url": "https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/Config.scala#L315",
+     "path": "resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/Config.scala"
+    }
+   ]
+  },
+  {
+   "id": "ui-csp-default",
+   "title": "Content Security Policy on by default in the UI",
+   "category": "ops",
+   "summary": "The Spark web UI sends a Content-Security-Policy header by default.",
+   "since": "4.3.0",
+   "in": [
+    "4.3.0"
+   ],
+   "vendor_only": false,
+   "docs": null,
+   "evidence": [
+    {
+     "kind": "grep",
+     "pattern": "\"spark.ui.contentSecurityPolicy.enabled\"\\)(?:(?!createWithDefault)[\\s\\S]){0,2000}createWithDefault\\(true\\)",
+     "required": true,
+     "since": "4.3.0",
+     "in": [
+      "4.3.0"
+     ],
+     "path": "core/src/main/scala/org/apache/spark/internal/config/UI.scala",
+     "url": "https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/UI.scala#L157"
     }
    ]
   },
