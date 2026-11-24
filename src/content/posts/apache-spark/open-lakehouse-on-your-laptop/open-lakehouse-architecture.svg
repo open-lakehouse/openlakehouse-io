@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 1072" font-family="IBM Plex Sans, Inter, Helvetica, Arial, sans-serif">
+<title>An open lakehouse on your laptop, Spark 4.2.0</title>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+<rect width="800" height="1072" rx="16" fill="#0e1a33"/>
+<rect x="16" y="30" width="768" height="150" rx="12" fill="none" stroke="#ff8a80" stroke-opacity="0.5" stroke-width="1.5"/>
+<rect x="28" y="20" width="294.79999999999995" height="20" rx="4" fill="#0e1a33"/>
+<text x="36" y="35" font-size="12.5" font-weight="700" fill="#ff8a80" letter-spacing="0.12em">CLIENTS · ORCHESTRATION · TRACKING</text>
+<rect x="30" y="48" width="230" height="118" rx="9" fill="#f2c94c1f" stroke="#f2c94c" stroke-width="2"/>
+<text x="42" y="71" font-size="15" font-weight="700" fill="#f2c94c" text-anchor="start">Your Python  (.venv)</text>
+<text x="42" y="90" font-size="13" fill="#e8ecf6" text-anchor="start">pyspark-client 4.2.0</text>
+<text x="42" y="109" font-size="13" fill="#e8ecf6" text-anchor="start">  sc://localhost:15002</text>
+<text x="42" y="128" font-size="13" fill="#e8ecf6" text-anchor="start">SDP CLI · the post&#x27;s scripts</text>
+<text x="42" y="147" font-size="13" fill="#a9b4cc" text-anchor="start">no JVM on your machine</text>
+<rect x="273" y="48" width="250" height="118" rx="9" fill="#ff8a801f" stroke="#ff8a80" stroke-width="2"/>
+<text x="285" y="71" font-size="15" font-weight="700" fill="#ff8a80" text-anchor="start">Airflow 3.3.2  :8085</text>
+<text x="285" y="90" font-size="13" fill="#e8ecf6" text-anchor="start">medallion DAG</text>
+<text x="285" y="109" font-size="13" fill="#e8ecf6" text-anchor="start">  SparkPipelinesOperator</text>
+<text x="285" y="128" font-size="13" fill="#e8ecf6" text-anchor="start">maintenance DAG</text>
+<text x="285" y="147" font-size="13" fill="#a9b4cc" text-anchor="start">standalone · SQLite on a volume</text>
+<rect x="536" y="48" width="234" height="118" rx="9" fill="#b8c1d61f" stroke="#b8c1d6" stroke-width="2"/>
+<text x="548" y="71" font-size="15" font-weight="700" fill="#b8c1d6" text-anchor="start">MLflow 3.16.1  :5000</text>
+<text x="548" y="90" font-size="13" fill="#e8ecf6" text-anchor="start">experiments and runs</text>
+<text x="548" y="109" font-size="13" fill="#e8ecf6" text-anchor="start">params · metrics</text>
+<text x="548" y="128" font-size="13" fill="#e8ecf6" text-anchor="start">artifacts → S3</text>
+<text x="548" y="147" font-size="13" fill="#a9b4cc" text-anchor="start">SQLite on a volume</text>
+<rect x="16" y="250" width="208" height="360" rx="12" fill="none" stroke="#c39bff" stroke-opacity="0.5" stroke-width="1.5"/>
+<rect x="28" y="240" width="114.39999999999999" height="20" rx="4" fill="#0e1a33"/>
+<text x="36" y="255" font-size="12.5" font-weight="700" fill="#c39bff" letter-spacing="0.12em">DATA SOURCES</text>
+<rect x="28" y="270" width="184" height="86" rx="9" fill="#c39bff1f" stroke="#c39bff" stroke-width="2"/>
+<text x="40" y="293" font-size="15" font-weight="700" fill="#c39bff" text-anchor="start">Order generator</text>
+<text x="40" y="312" font-size="13" fill="#e8ecf6" text-anchor="start">ghost-kitchen orders</text>
+<text x="40" y="331" font-size="13" fill="#a9b4cc" text-anchor="start">duplicates, missing</text>
+<text x="40" y="350" font-size="13" fill="#a9b4cc" text-anchor="start">locations, late events</text>
+<rect x="28" y="394" width="184" height="96" rx="9" fill="#c39bff1f" stroke="#c39bff" stroke-width="2"/>
+<text x="40" y="417" font-size="15" font-weight="700" fill="#c39bff" text-anchor="start">Kafka 4.2  :9092</text>
+<text x="40" y="436" font-size="13" fill="#e8ecf6" text-anchor="start">in:  orders</text>
+<text x="40" y="455" font-size="13" fill="#e8ecf6" text-anchor="start">out: orders-clean</text>
+<text x="40" y="474" font-size="13" fill="#a9b4cc" text-anchor="start">KRaft, no ZooKeeper</text>
+<rect x="28" y="514" width="184" height="70" rx="9" fill="#c39bff1f" stroke="#c39bff" stroke-width="2"/>
+<text x="40" y="537" font-size="15" font-weight="700" fill="#c39bff" text-anchor="start">Landing files</text>
+<text x="40" y="556" font-size="13" fill="#e8ecf6" text-anchor="start">a week as Parquet</text>
+<text x="40" y="575" font-size="13" fill="#a9b4cc" text-anchor="start">s3://lakehouse/landing/</text>
+<path d="M 120 356 L 120 394" fill="none" stroke="#c39bff" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<path d="M 60 356 L 60 376 L 21 376 L 21 549 L 28 549" fill="none" stroke="#c39bff" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<text x="128" y="380" font-size="12" fill="#c39bff" text-anchor="start">stream</text>
+<text x="26" y="370" font-size="11.5" fill="#c39bff" text-anchor="start">files</text>
+<rect x="244" y="250" width="540" height="360" rx="12" fill="none" stroke="#ffa552" stroke-opacity="0.5" stroke-width="1.5"/>
+<rect x="392" y="240" width="212.79999999999998" height="20" rx="4" fill="#0e1a33"/>
+<text x="400" y="255" font-size="12.5" font-weight="700" fill="#ffa552" letter-spacing="0.12em">PROCESSING · SPARK 4.2.0</text>
+<rect x="258" y="270" width="512" height="64" rx="9" fill="#ffa5522e" stroke="#ffa552" stroke-width="2"/>
+<text x="270" y="293" font-size="15" font-weight="700" fill="#ffa552" text-anchor="start">Spark Connect server  :15002</text>
+<text x="270" y="311.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">the driver for every client · --packages: Delta, UC, S3A, Kafka</text>
+<text x="270" y="330.0" font-size="12.5" fill="#a9b4cc" text-anchor="start">cluster: master (UI :8080) · worker</text>
+<rect x="258" y="352" width="250" height="96" rx="9" fill="#ffa5521f" stroke="#ffa552" stroke-width="2"/>
+<text x="270" y="375" font-size="15" font-weight="700" fill="#ffa552" text-anchor="start">Real-Time Mode · stateless</text>
+<text x="270" y="393.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">orders → parse, filter</text>
+<text x="270" y="412.0" font-size="12.5" fill="#e8ecf6" text-anchor="start">→ Kafka orders-clean</text>
+<text x="270" y="430.5" font-size="12.5" fill="#a9b4cc" text-anchor="start">milliseconds per record</text>
+<rect x="520" y="352" width="250" height="96" rx="9" fill="#ffa5521f" stroke="#ffa552" stroke-width="2"/>
+<text x="532" y="375" font-size="15" font-weight="700" fill="#ffa552" text-anchor="start">SDP medallion</text>
+<text x="532" y="393.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">spark-pipeline.yml</text>
+<text x="532" y="412.0" font-size="12.5" fill="#e8ecf6" text-anchor="start">bronze → silver → gold</text>
+<text x="532" y="430.5" font-size="12.5" fill="#a9b4cc" text-anchor="start">catalog-managed Delta</text>
+<rect x="258" y="462" width="250" height="104" rx="9" fill="#ffa5521f" stroke="#ffa552" stroke-width="2"/>
+<text x="270" y="485" font-size="15" font-weight="700" fill="#ffa552" text-anchor="start">Micro-batch · stateful</text>
+<text x="270" y="503.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">dedup → totals per location</text>
+<text x="270" y="522.0" font-size="12.5" fill="#e8ecf6" text-anchor="start">every second</text>
+<text x="270" y="540.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">→ Delta live_totals</text>
+<text x="270" y="559.0" font-size="12.5" fill="#a9b4cc" text-anchor="start">checkpoints on a shared volume</text>
+<rect x="520" y="462" width="250" height="104" rx="9" fill="#ffa5521f" stroke="#ffa552" stroke-width="2"/>
+<text x="532" y="485" font-size="15" font-weight="700" fill="#ffa552" text-anchor="start">Batch writes · maintenance</text>
+<text x="532" y="503.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">Delta orders_raw, UniForm on</text>
+<text x="532" y="522.0" font-size="12.5" fill="#e8ecf6" text-anchor="start">time travel</text>
+<text x="532" y="540.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">OPTIMIZE · VACUUM</text>
+<text x="532" y="559.0" font-size="12.5" fill="#a9b4cc" text-anchor="start">external Delta only</text>
+<path d="M 212 410 L 258 410" fill="none" stroke="#c39bff" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<path d="M 258 436 L 212 436" fill="none" stroke="#ffa552" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<path d="M 212 470 L 236 470 L 236 514 L 258 514" fill="none" stroke="#c39bff" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<path d="M 212 570 L 228 570 L 228 590 L 645 590 L 645 568" fill="none" stroke="#c39bff" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<text x="300" y="586" font-size="11.5" fill="#c39bff" text-anchor="start">landing/ read by SDP bronze and batch writes</text>
+<path d="M 145 166 L 300 270" fill="none" stroke="#f2c94c" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<text x="52" y="212" font-size="12.5" fill="#f2c94c" text-anchor="start">Spark Connect gRPC</text>
+<path d="M 398 166 L 398 270" fill="none" stroke="#ff8a80" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<text x="406" y="208" font-size="12.5" fill="#ff8a80" text-anchor="start">runs pipelines,</text>
+<text x="406" y="223" font-size="12.5" fill="#ff8a80" text-anchor="start">maintenance</text>
+<rect x="16" y="660" width="768" height="266" rx="12" fill="none" stroke="#7fb2ff" stroke-opacity="0.5" stroke-width="1.5"/>
+<rect x="28" y="650" width="270.2" height="20" rx="4" fill="#0e1a33"/>
+<text x="36" y="665" font-size="12.5" font-weight="700" fill="#7fb2ff" letter-spacing="0.12em">LAKEHOUSE · CATALOG AND STORAGE</text>
+<rect x="30" y="680" width="360" height="112" rx="9" fill="#6fdc921f" stroke="#6fdc92" stroke-width="2"/>
+<text x="42" y="703" font-size="15" font-weight="700" fill="#6fdc92" text-anchor="start">Unity Catalog OSS 0.6.0  :8081</text>
+<text x="42" y="721.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">lakehouse.tutorial · external Delta</text>
+<text x="42" y="740.0" font-size="12.5" fill="#e8ecf6" text-anchor="start">lakehouse.medallion · catalog-managed</text>
+<text x="42" y="758.5" font-size="12.5" fill="#a9b4cc" text-anchor="start">embedded H2 · vends S3 credentials</text>
+<text x="42" y="777.0" font-size="12.5" fill="#a9b4cc" text-anchor="start">Iceberg REST catalog</text>
+<rect x="410" y="680" width="360" height="112" rx="9" fill="#7fb2ff1f" stroke="#7fb2ff" stroke-width="2"/>
+<text x="422" y="703" font-size="15" font-weight="700" fill="#7fb2ff" text-anchor="start">SeaweedFS 3.80  ·  S3 API  :8333</text>
+<text x="422" y="721.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">s3://lakehouse/  landing · tables · managed</text>
+<text x="422" y="740.0" font-size="12.5" fill="#e8ecf6" text-anchor="start">Delta tables: Parquet + _delta_log</text>
+<text x="422" y="758.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">UniForm: + Iceberg metadata/</text>
+<text x="422" y="777.0" font-size="12.5" fill="#a9b4cc" text-anchor="start">MLflow artifacts</text>
+<rect x="410" y="824" width="360" height="86" rx="9" fill="#7fb2ff1f" stroke="#7fb2ff" stroke-width="2"/>
+<text x="422" y="847" font-size="15" font-weight="700" fill="#7fb2ff" text-anchor="start">Docker volumes</text>
+<text x="422" y="865.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">SeaweedFS data · UC database</text>
+<text x="422" y="884.0" font-size="12.5" fill="#e8ecf6" text-anchor="start">Spark packages + checkpoints</text>
+<text x="422" y="902.5" font-size="12.5" fill="#a9b4cc" text-anchor="start">Airflow and MLflow SQLite</text>
+<rect x="30" y="824" width="360" height="86" rx="9" fill="#6fdc921f" stroke="#6fdc92" stroke-width="2" stroke-dasharray="6 5"/>
+<text x="42" y="847" font-size="15" font-weight="700" fill="#6fdc92" text-anchor="start">Iceberg readers · UniForm</text>
+<text x="42" y="865.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">PyIceberg · DuckDB (iceberg extension)</text>
+<text x="42" y="884.0" font-size="12.5" fill="#a9b4cc" text-anchor="start">read orders_raw as Iceberg:</text>
+<text x="42" y="902.5" font-size="12.5" fill="#a9b4cc" text-anchor="start">metadata/ + the same Parquet files</text>
+<path d="M 390 726 L 410 726" fill="none" stroke="#6fdc92" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<path d="M 390 870 L 400 870 L 400 770 L 410 770" fill="none" stroke="#6fdc92" stroke-width="2" stroke-dasharray="5 4" opacity="0.45" marker-end="url(#ah)"/>
+<text x="36" y="813" font-size="11.5" fill="#6fdc92" text-anchor="start">reads from S3, no Spark</text>
+<path d="M 365 612 L 365 680" fill="none" stroke="#6fdc92" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<text x="373" y="650" font-size="12.5" fill="#6fdc92" text-anchor="start">UC Spark connector</text>
+<path d="M 650 612 L 650 680" fill="none" stroke="#7fb2ff" stroke-width="2" opacity="0.45" marker-end="url(#ah)"/>
+<text x="658" y="650" font-size="12.5" fill="#7fb2ff" text-anchor="start">S3A · Parquet + logs</text>
+<rect x="16" y="960" width="768" height="92" rx="12" fill="none" stroke="#f07ad8" stroke-opacity="0.5" stroke-width="1.5"/>
+<rect x="28" y="950" width="73.39999999999999" height="20" rx="4" fill="#0e1a33"/>
+<text x="36" y="965" font-size="12.5" font-weight="700" fill="#f07ad8" letter-spacing="0.12em">RUNS ON</text>
+<rect x="30" y="978" width="740" height="58" rx="9" fill="#f07ad81f" stroke="#f07ad8" stroke-width="2"/>
+<text x="42" y="1001" font-size="15" font-weight="700" fill="#f07ad8" text-anchor="start">Docker Compose  ·  one compose.yaml</text>
+<text x="42" y="1019.5" font-size="12.5" fill="#e8ecf6" text-anchor="start">official images · docker compose up -d --wait · healthchecks</text>
+</svg>
