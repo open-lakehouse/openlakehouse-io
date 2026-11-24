@@ -4064,7 +4064,7 @@ Spark Matrix is an open-source comparison of Apache Spark features across manage
 - **Preview.** Documented as preview, beta or experimental on this runtime.
 - **Off by default.** Available, but the vendor turns it off by default (for example ANSI mode).
 - **Unsupported.** The vendor documents that the feature is not supported or not available.
-- **Not in this Spark.** The runtime's Apache Spark version predates the feature, and the vendor documents no backport.
+- **Not in this Spark.** The runtime's Apache Spark version predates the feature, and the vendor documents no backport. The cell names the Apache release that added it.
 - **Not documented.** A platform capability (table format, engine) that the vendor's documentation does not mention for this runtime.
 - **Unknown.** The vendor does not state which Spark version the runtime is based on, and documents nothing about the feature.
 
@@ -4084,34 +4084,44 @@ Spark Matrix is an open-source comparison of Apache Spark features across manage
 
 Each service is shown at its newest generally available runtime. "Spark features available" counts the 95 Apache Spark features that the runtime has at any level from Documented to Off by default. The interactive matrix is at https://openlakehouse.io/spark-matrix; the full explorer is at https://openlakehouse.io/spark-matrix/explorer/.
 
-| Service | Vendor | Runtime | Vendor Spark version | Apache Spark base | Spark features available |
-|---|---|---|---|---|---|
-| Databricks Connect | Databricks | Databricks Connect 19 (latest Python release 19.3.0; pairs with Databricks Runtime 19) | 4.3.0 | 4.3.0 | 95 |
-| Databricks Runtime (classic compute) | Databricks | Databricks Runtime 19 (GA feature development phase; LTS transition date not yet set) | 4.3.0 | 4.3.0 | 95 |
-| Databricks serverless compute for notebooks and jobs | Databricks | Serverless compute, weekly releases since August 17, 2026 (include updates from Databricks Runtime 19) | 4.3.0 | 4.3.0 | 93 |
-| Managed Service for Apache Spark clusters (formerly Dataproc on Compute Engine) | Google Cloud | Image 4.0.0 (debian13 / ubuntu24 / ml-ubuntu24 / rocky9) | 4.2.0 | 4.2.0 | 85 |
-| Managed Service for Apache Spark serverless (formerly Google Cloud Serverless for Apache Spark / Dataproc Serverless) | Google Cloud | Spark runtime 4.0.0 | 4.2.0 | 4.2.0 | 85 |
-| Amazon EMR on EC2 | AWS | EMR Spark 8.2.0 (AWS runtime for Apache Spark) | 4.1.3-amzn-0 | 4.1.3 | 79 |
-| Amazon EMR on EKS | AWS | EMR Spark 8.2.0 on EKS | 4.1.3-amzn-0 | 4.1.3 | 79 |
-| Amazon EMR Serverless | AWS | EMR Spark 8.2.0 (Serverless) | 4.1.3-amzn-0 | 4.1.3 | 79 |
-| Alibaba Cloud EMR Serverless Spark | Alibaba Cloud | esr-5.3.0 (Spark 4.1.1, Scala 2.13) | 4.1.1 | 4.1.1 | 79 |
-| AWS Glue (Spark jobs) | AWS | AWS Glue 6.0 | 4.1.1 | 4.1.1 | 79 |
-| Microsoft Fabric (Spark runtime) | Microsoft | Fabric Runtime 2.0 | 4.1.1 | 4.1.1 | 79 |
-| IBM Analytics Engine (serverless) | IBM | Spark 4.0 | 4.0 | 4.0 | 67 |
-| IBM watsonx.data Gluten-accelerated Spark engine (Premium Edition 2.4.x) | IBM | Apache Spark 4.0 | Apache Spark 4.0 | 4.0 | 66 |
-| IBM watsonx.data Spark engine (Premium Edition 2.4.x) | IBM | Apache Spark 4.0.0 | Apache Spark 4.0.0 | 4.0.0 | 67 |
-| Cloudera Runtime (Cloudera Base on premises / Data Hub on cloud) | Cloudera | Cloudera Runtime 7.3.3 | 3.5.8.7.3.3.0-56 | 3.5.8 | 31 |
-| Amazon Athena for Apache Spark | AWS | Apache Spark version 3.5 | 3.5.6 | 3.5.6 | 32 |
-| Azure Synapse Analytics Apache Spark pools | Microsoft | Azure Synapse Runtime for Apache Spark 3.5 | 3.5.5 | 3.5.5 | 32 |
-| Cloudera Data Engineering (Cloudera Data Services on premises) | Cloudera | Spark 3.5.4 (CDE 1.27.0 / Data Services 1.5.5 SP4) | Spark 3.5.4 | 3.5.4 | 32 |
-| Cloudera Data Engineering (Cloudera on cloud) | Cloudera | Spark 3.5.4 (CDE 1.26.2, Data Lake 7.3.1 / 7.3.2) | Spark 3.5.4 | 3.5.4 | 32 |
-| Snowpark Connect for Spark | Snowflake | snowpark-connect 1.51.0 (PySpark 3.5.3 Spark Connect API) | PySpark 3.5.3 Spark Connect API | 3.5.3 | 30 |
-| Managed Service for Apache Spark on GKE (formerly Dataproc on GKE) | Google Cloud | Spark engine 3.5-dataproc-28 | 3.5 | 3.5 | 32 |
-| OCI Data Flow | Oracle | Spark 3.5.0 | 3.5.0 | 3.5.0 | 32 |
-| Azure HDInsight (Spark clusters) | Microsoft | HDInsight 5.1 | 3.3.1 | 3.3.1 | 8 |
-| BigQuery stored procedures for Apache Spark | Google Cloud | No version published | not stated | not stated | 0 |
-| Databricks SQL warehouses | Databricks | No version published | not stated | not stated | 9 |
-| Spark in BigQuery Studio notebooks | Google Cloud | No version published | not stated | not stated | 2 |
+| Service | Vendor | Runtime | Vendor Spark version | Apache Spark base | Spark features available | Missing from Apache Spark 4.3 |
+|---|---|---|---|---|---|---|
+| Databricks Connect | Databricks | Databricks Connect 19 (latest Python release 19.3.0; pairs with Databricks Runtime 19) | 4.3.0 | 4.3.0 | 95 | 0 |
+| Databricks Runtime (classic compute) | Databricks | Databricks Runtime 19 (GA feature development phase; LTS transition date not yet set) | 4.3.0 | 4.3.0 | 95 | 0 |
+| Databricks serverless compute for notebooks and jobs | Databricks | Serverless compute, weekly releases since August 17, 2026 (include updates from Databricks Runtime 19) | 4.3.0 | 4.3.0 | 93 | 2 |
+| Managed Service for Apache Spark clusters (formerly Dataproc on Compute Engine) | Google Cloud | Image 4.0.0 (debian13 / ubuntu24 / ml-ubuntu24 / rocky9) | 4.2.0 | 4.2.0 | 85 | 10 |
+| Managed Service for Apache Spark serverless (formerly Google Cloud Serverless for Apache Spark / Dataproc Serverless) | Google Cloud | Spark runtime 4.0.0 | 4.2.0 | 4.2.0 | 85 | 10 |
+| Amazon EMR on EC2 | AWS | EMR Spark 8.2.0 (AWS runtime for Apache Spark) | 4.1.3-amzn-0 | 4.1.3 | 79 | 16 |
+| Amazon EMR on EKS | AWS | EMR Spark 8.2.0 on EKS | 4.1.3-amzn-0 | 4.1.3 | 79 | 16 |
+| Amazon EMR Serverless | AWS | EMR Spark 8.2.0 (Serverless) | 4.1.3-amzn-0 | 4.1.3 | 79 | 16 |
+| Alibaba Cloud EMR Serverless Spark | Alibaba Cloud | esr-5.3.0 (Spark 4.1.1, Scala 2.13) | 4.1.1 | 4.1.1 | 79 | 16 |
+| AWS Glue (Spark jobs) | AWS | AWS Glue 6.0 | 4.1.1 | 4.1.1 | 79 | 16 |
+| Microsoft Fabric (Spark runtime) | Microsoft | Fabric Runtime 2.0 | 4.1.1 | 4.1.1 | 79 | 16 |
+| IBM Analytics Engine (serverless) | IBM | Spark 4.0 | 4.0 | 4.0 | 67 | 28 |
+| IBM watsonx.data Gluten-accelerated Spark engine (Premium Edition 2.4.x) | IBM | Apache Spark 4.0 | Apache Spark 4.0 | 4.0 | 66 | 29 |
+| IBM watsonx.data Spark engine (Premium Edition 2.4.x) | IBM | Apache Spark 4.0.0 | Apache Spark 4.0.0 | 4.0.0 | 67 | 28 |
+| Cloudera Runtime (Cloudera Base on premises / Data Hub on cloud) | Cloudera | Cloudera Runtime 7.3.3 | 3.5.8.7.3.3.0-56 | 3.5.8 | 31 | 64 |
+| Amazon Athena for Apache Spark | AWS | Apache Spark version 3.5 | 3.5.6 | 3.5.6 | 32 | 63 |
+| Azure Synapse Analytics Apache Spark pools | Microsoft | Azure Synapse Runtime for Apache Spark 3.5 | 3.5.5 | 3.5.5 | 32 | 63 |
+| Cloudera Data Engineering (Cloudera Data Services on premises) | Cloudera | Spark 3.5.4 (CDE 1.27.0 / Data Services 1.5.5 SP4) | Spark 3.5.4 | 3.5.4 | 32 | 63 |
+| Cloudera Data Engineering (Cloudera on cloud) | Cloudera | Spark 3.5.4 (CDE 1.26.2, Data Lake 7.3.1 / 7.3.2) | Spark 3.5.4 | 3.5.4 | 32 | 63 |
+| Snowpark Connect for Spark | Snowflake | snowpark-connect 1.51.0 (PySpark 3.5.3 Spark Connect API) | PySpark 3.5.3 Spark Connect API | 3.5.3 | 30 | 65 |
+| Managed Service for Apache Spark on GKE (formerly Dataproc on GKE) | Google Cloud | Spark engine 3.5-dataproc-28 | 3.5 | 3.5 | 32 | 63 |
+| OCI Data Flow | Oracle | Spark 3.5.0 | 3.5.0 | 3.5.0 | 32 | 63 |
+| Azure HDInsight (Spark clusters) | Microsoft | HDInsight 5.1 | 3.3.1 | 3.3.1 | 8 | 87 |
+| BigQuery stored procedures for Apache Spark | Google Cloud | No version published | not stated | not stated | 0 | 95 |
+| Databricks SQL warehouses | Databricks | No version published | not stated | not stated | 9 | 86 |
+| Spark in BigQuery Studio notebooks | Google Cloud | No version published | not stated | not stated | 2 | 93 |
+
+## What each Apache Spark release line added
+
+Spark 4.0, 4.1, 4.2 and 4.3 are not interchangeable. These tracked features first shipped in each release line:
+
+- **Apache Spark 3.5:** Reattachable execution; Python UDTFs over Connect; Streaming over Connect; RocksDB changelog checkpointing; dropDuplicatesWithinWatermark; IDENTIFIER clause; Named function arguments; Sketch aggregates (HLL, Theta, KLL); Python UDTFs; Arrow-optimized Python UDFs; Spark Connect UI tab
+- **Apache Spark 4.0:** Pure-Python client package (pyspark-client); Session release and cloning; Rich error details; Spark ML over Connect; MERGE INTO from the DataFrame API over Connect; checkpoint() and localCheckpoint() over Connect; Execute external commands; transformWithState (Scala/Java); transformWithState in Python; State data source (read state as a table); Python streaming data sources; ANSI SQL mode on by default; SQL scripting; SQL pipe syntax; Session variables; EXECUTE IMMEDIATE; SQL user-defined functions; Stored procedures (CALL); MERGE WITH SCHEMA EVOLUTION; CLUSTER BY on tables; DESCRIBE ... AS JSON; VARIANT type; Variant shredding in Parquet; Collations; Python data source API; applyInArrow / mapInArrow; DataFrame.toArrow; Native DataFrame plotting; Unified Python profiler; DataFrame.mergeInto; DataFrame.lateralJoin; Built-in XML source; Structured (JSON) logging; Java 21 support; Java 17 minimum (Scala 2.13 only)
+- **Apache Spark 4.1:** JDBC driver for Spark Connect; Real-time mode; Spark Declarative Pipelines (SDP); spark-pipelines CLI; Pipelines Python API; Pipelines SQL (materialized views, streaming tables, flows); Recursive CTEs; Table constraints (PRIMARY KEY, FOREIGN KEY, CHECK, UNIQUE); TIME type; GEOMETRY and GEOGRAPHY types; Arrow UDFs (pyarrow-native); Python worker logging
+- **Apache Spark 4.2:** Operation status RPC; Cursors in SQL scripts; QUALIFY clause; Change data feed reads (CHANGES clause); Metric views; Java 25 support
+- **Apache Spark 4.3:** Stateful real-time mode; Auto CDC flows; ASOF JOIN; JSON_TABLE; ANSI UNNEST; VARIANT transformation functions; Nanosecond timestamps; DSv2 connector developer guide; Arrow-native Dataset caching; Shuffle-free single-task execution for small queries
 
 Apache Spark itself, for comparison:
 

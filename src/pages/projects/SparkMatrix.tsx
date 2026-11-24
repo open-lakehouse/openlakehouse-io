@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowLeft, ArrowRight, ExternalLink, Github, Table2 } from "lucide-react";
-import { MatrixTable } from "@/components/spark-matrix/MatrixTable";
+import { GapSummary, MatrixTable } from "@/components/spark-matrix/MatrixTable";
 import { SHOWN_PLATFORMS, RETIRED_PLATFORMS, SPARK_FEATURES, defaultRuntime } from "@/lib/spark-matrix";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -173,6 +173,7 @@ const SparkMatrix = () => (
             </a>
           </p>
         </div>
+        <GapSummary />
         <MatrixTable />
       </section>
 
