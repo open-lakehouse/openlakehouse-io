@@ -4,7 +4,9 @@ import { Seo } from "@/components/Seo";
 import { canonicalUrl, SITE_NAME, SITE_URL } from "@/lib/seo";
 import { WikiAnchor } from "@/components/wiki/WikiMdx";
 import { WIKI_HOME, WIKI_LICENSE, WIKI_NAME, WIKI_REPO, articles, categoryMembers, wikiPages } from "@/content/wiki";
-import { WikiSearch, WikiShell } from "@/components/wiki/WikiShell";
+
+const REPO_WIKI_DIR = `${WIKI_REPO}/tree/main/src/content/wiki`;
+import { WikiShell } from "@/components/wiki/WikiShell";
 
 export const WIKI_TAGLINE =
   "The open reference for the open lakehouse and the agentic lakehouse: open table formats, catalogs, engines, pipelines, and the AI agents that work on them. Every fact is cited and dated.";
@@ -14,7 +16,7 @@ const W = ({ to, children }: { to: string; children?: ReactNode }) => (
 );
 
 const Card = ({ title, tone = "", children }: { title: string; tone?: string; children: ReactNode }) => (
-  <section className={`wiki-card ${tone}`}>
+  <section className={`olw-card ${tone}`}>
     <h2>{title}</h2>
     {children}
   </section>
@@ -27,7 +29,14 @@ const categories = wikiPages
   .sort((a, b) => a.p.title.localeCompare(b.p.title));
 
 export const WikiHome = () => (
-  <WikiShell>
+  <WikiShell
+    title={<span className="sr-only">{WIKI_NAME}</span>}
+    tabsLeft={[{ label: "Main Page", to: WIKI_HOME, current: true }]}
+    tabsRight={[
+      { label: "Read", to: WIKI_HOME, current: true },
+      { label: "View source", href: REPO_WIKI_DIR },
+    ]}
+  >
     <Seo
       title={WIKI_NAME}
       suffix={false}
@@ -43,18 +52,18 @@ export const WikiHome = () => (
         publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
       }}
     />
-    <div className="container mx-auto px-4 py-8 wiki-home">
-      <header className="wiki-hero">
-        <h1>{WIKI_NAME}</h1>
+    <div className="olw-home">
+      <header className="olw-hero">
+        <div className="olw-hero-title">{WIKI_NAME}</div>
         <p>
           The open reference for the <W to="Open lakehouse">open lakehouse</W> and the{" "}
           <W to="Agentic lakehouse">agentic lakehouse</W>: open table formats, catalogs, engines, pipelines, and the AI
-          agents that work on them. Every fact is cited and dated. Anyone can suggest a change with a pull request.
+          agents that work on them. Every fact is cited and dated. Anyone can{" "}
+          <W to="Open Lakehouse Wiki:Style guide">suggest a change</W> with a pull request.
         </p>
-        <WikiSearch className="mt-4 max-w-md" />
       </header>
 
-      <div className="wiki-grid">
+      <div className="olw-grid">
         <Card title="Start here">
           <ul>
             <li><W to="Open lakehouse" />: open tables on object storage, any engine</li>
@@ -102,7 +111,7 @@ export const WikiHome = () => (
         </Card>
       </div>
 
-      <div className="wiki-grid">
+      <div className="olw-grid">
         <Card title="Concepts the docs assume you know" tone="yellow">
           <ul>
             <li>How engines work: <W to="Executor" />, <W to="Shuffle" />, <W to="Partition" />, <W to="Predicate pushdown" /></li>
@@ -130,7 +139,7 @@ export const WikiHome = () => (
         </Card>
       </div>
 
-      <div className="wiki-grid">
+      <div className="olw-grid">
         <Card title="How this wiki works" tone="navy">
           <ul>
             <li>Pages are neutral and vendor-neutral, and every checkable fact links to a primary source.</li>
@@ -152,9 +161,9 @@ export const WikiHome = () => (
         </Card>
       </div>
 
-      <section className="wiki-index" aria-labelledby="all-articles">
+      <section className="olw-home-index" aria-labelledby="all-articles">
         <h2 id="all-articles">All articles</h2>
-        <ul className="wiki-columns">
+        <ul className="olw-home-columns">
           {articles.map((p) => (
             <li key={p.key}>
               <WikiAnchor href={p.path}>{p.displayTitle ?? p.title}</WikiAnchor>
@@ -162,10 +171,10 @@ export const WikiHome = () => (
           ))}
         </ul>
         <h2 id="categories">Categories</h2>
-        <ul className="wiki-columns">
+        <ul className="olw-home-columns">
           {categories.map(({ p, n }) => (
             <li key={p.key}>
-              <WikiAnchor href={p.path}>{p.title}</WikiAnchor> <span className="text-muted-foreground">({n})</span>
+              <WikiAnchor href={p.path}>{p.title}</WikiAnchor> <span className="olw-count">({n})</span>
             </li>
           ))}
         </ul>

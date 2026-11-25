@@ -3,7 +3,6 @@
 import { createContext, useContext, type AnchorHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
 import { MDXProvider } from "@mdx-js/react";
 import { Link } from "react-router-dom";
-import { CodeBlock } from "@/components/CodeBlock";
 import { categoryPath, wikiPathExists, type WikiPageMeta } from "@/content/wiki";
 
 export const WikiPageContext = createContext<WikiPageMeta | null>(null);
@@ -35,7 +34,7 @@ const LABELS: Record<string, string> = {
 export const Infobox = ({ name, children }: { type?: "software" | "concept"; name?: string; children: ReactNode }) => {
   const page = useContext(WikiPageContext);
   return (
-    <table className="wiki-infobox">
+    <table className="olw-infobox">
       <caption>{name ?? page?.displayTitle ?? page?.title}</caption>
       <tbody>{children}</tbody>
     </table>
@@ -61,7 +60,7 @@ const longDate = (iso: string) => {
 
 /** When the page's facts were last checked against primary sources, and against what. */
 export const Verified = ({ date, children }: { date: string; children?: ReactNode }) => (
-  <div className="wiki-verified">
+  <div className="olw-verified">
     Last verified <time dateTime={date}>{longDate(date)}</time>
     {children ? <> against {children}</> : null}.
   </div>
@@ -82,20 +81,20 @@ const STATUS_LABEL: Record<string, string> = {
  * matching category (Deprecated, Removed, ...) automatically.
  */
 export const Status = ({ level, since, children }: { level: string; since?: string; children?: ReactNode }) => (
-  <div className={`wiki-status wiki-status-${level}`}>
+  <div className={`olw-status olw-status-${level}`}>
     <strong>Status: {STATUS_LABEL[level] ?? level}</strong>
     {since ? ` since ${since}` : ""}. {children}
   </div>
 );
 
 /** "Main article: ..." or "See also: ..." line under a heading. */
-export const Hatnote = ({ children }: { children: ReactNode }) => <div className="wiki-hatnote">{children}</div>;
+export const Hatnote = ({ children }: { children: ReactNode }) => <div className="olw-hatnote">{children}</div>;
 
-export const Note = ({ children }: { children: ReactNode }) => <div className="wiki-note">{children}</div>;
+export const Note = ({ children }: { children: ReactNode }) => <div className="olw-note">{children}</div>;
 
 /** For data loss risks, known bugs and breaking changes. */
 export const Warning = ({ children }: { children: ReactNode }) => (
-  <div className="wiki-warning" role="note">
+  <div className="olw-warning" role="note">
     {children}
   </div>
 );
@@ -111,7 +110,7 @@ export const WikiAnchor = ({ href = "", children, ...rest }: AnchorHTMLAttribute
   if (href.startsWith("/wiki/")) {
     if (!wikiPathExists(href))
       return (
-        <span className="wiki-redlink" title="No article yet">
+        <span className="olw-redlink" title="This page does not exist yet">
           {children}
         </span>
       );
@@ -134,20 +133,8 @@ export const WikiAnchor = ({ href = "", children, ...rest }: AnchorHTMLAttribute
   );
 };
 
-/** The footnotes section heading is "Footnotes" for screen readers only; the wiki calls it References. */
-const H2 = ({ id, children, className, ...rest }: HTMLAttributes<HTMLHeadingElement>) =>
-  id === "footnote-label" ? (
-    <h2 id={id} {...rest}>
-      References
-    </h2>
-  ) : (
-    <h2 id={id} className={className} {...rest}>
-      {children}
-    </h2>
-  );
-
 const Table = (props: HTMLAttributes<HTMLTableElement>) => (
-  <div className="wiki-table-scroll">
+  <div className="olw-table-scroll">
     <table {...props} />
   </div>
 );
@@ -161,9 +148,7 @@ const components = {
   Note,
   Warning,
   a: WikiAnchor,
-  h2: H2,
   table: Table,
-  pre: CodeBlock,
 };
 
 export const WikiMdxProvider = ({ children }: { children: ReactNode }) => (
@@ -172,13 +157,14 @@ export const WikiMdxProvider = ({ children }: { children: ReactNode }) => (
 
 export const CategoryLinks = ({ categories }: { categories: string[] }) =>
   categories.length ? (
-    <div className="wiki-catlinks">
+    <div className="olw-catlinks">
       <Link to="/wiki/Main_Page#categories">Categories</Link>:{" "}
-      {categories.map((c, i) => (
-        <span key={c}>
-          {i > 0 && " · "}
-          <Link to={categoryPath(c)}>{c}</Link>
-        </span>
-      ))}
+      <ul>
+        {categories.map((c) => (
+          <li key={c}>
+            <Link to={categoryPath(c)}>{c}</Link>
+          </li>
+        ))}
+      </ul>
     </div>
   ) : null;

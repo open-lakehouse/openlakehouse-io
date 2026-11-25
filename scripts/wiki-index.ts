@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Plugin } from "vite";
+import GithubSlugger from "github-slugger";
 
 export const WIKI_DIR = path.resolve(process.cwd(), "src/content/wiki");
 
@@ -34,6 +35,8 @@ export type WikiPageMeta = {
   summary: string;
   /** Wiki paths this page links to. */
   links: string[];
+  /** ## and ### headings with the ids rehype-slug gives them, for the contents list. */
+  headings: { depth: 2 | 3; text: string; id: string }[];
 };
 
 export type WikiIndex = { pages: WikiPageMeta[] };
@@ -135,6 +138,11 @@ export function buildWikiIndex(dir = WIKI_DIR): WikiIndex {
       if (status && STATUS_CATEGORY[status] && !categories.includes(STATUS_CATEGORY[status]))
         categories.push(STATUS_CATEGORY[status]);
       const lead = plain(leadOf(body));
+      const slugger = new GithubSlugger();
+      const headings = [...prose.matchAll(/^(#{2,3}) (.+)$/gm)].map((m) => {
+        const text = plain(m[2]);
+        return { depth: m[1].length as 2 | 3, text, id: slugger.slug(text) };
+      });
       const links = [...new Set([...prose.matchAll(/\]\((\/wiki\/[^)#\s]+)/g)].map((m) => m[1]))];
       pages.push({
         path: `/wiki/${key}`,
@@ -149,6 +157,7 @@ export function buildWikiIndex(dir = WIKI_DIR): WikiIndex {
         lead,
         summary: firstSentence(lead),
         links,
+        headings,
       });
     }
   }
@@ -157,7 +166,7 @@ export function buildWikiIndex(dir = WIKI_DIR): WikiIndex {
   for (const c of new Set(pages.flatMap((p) => p.categories))) {
     if (have.has(c)) continue;
     const key = `Category:${titleToKey(c)}`;
-    pages.push({ path: `/wiki/${key}`, key, kind: "category", file: "", title: c, categories: [], lead: "", summary: "", links: [] });
+    pages.push({ path: `/wiki/${key}`, key, kind: "category", file: "", title: c, categories: [], lead: "", summary: "", links: [], headings: [] });
   }
   return { pages };
 }

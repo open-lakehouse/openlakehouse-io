@@ -53,3 +53,12 @@ describe("wiki index", () => {
     expect(guide?.categories).not.toContain("Deprecated");
   });
 });
+
+describe("wiki references", () => {
+  it("gives every article with citations a References heading", () => {
+    for (const p of pages.filter((p) => p.kind === "article")) {
+      const text = source(p.file);
+      if (/^\[\^[^\]]+\]:/m.test(text)) expect(text, p.file).toMatch(/^## References$/m);
+    }
+  });
+});
