@@ -1,0 +1,110 @@
+---
+title: "Whole-stage code generation"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">WholeStageCodegen, whole-stage codegen, WSCG</Field>
+  <Field name="field">Query execution performance</Field>
+  <Field name="introduced">Apache Spark 2.0.0 (SPARK-12795)</Field>
+  <Field name="key_parts">`WholeStageCodegenExec`, `CollapseCodegenStages`, `InputAdapter`, codegen stage ID, Java source compiler (Janino by default)</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Project Tungsten](/wiki/Project_Tungsten), [Catalyst optimizer](/wiki/Catalyst_optimizer), [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan), [Job, stage and task](/wiki/Job,_stage_and_task)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 2.0.0 release notes, SPARK-12795, the 2016 Databricks engineering post on whole-stage code generation, the v4.3.0 tag of apache/spark (WholeStageCodegenExec.scala, SQLConf.scala, docs/sql-ref-syntax-qry-explain.md, docs/web-ui.md) and EXPLAIN and EXPLAIN CODEGEN output from a PySpark 4.3.0 run</Verified>
+
+**Whole-stage code generation** is the technique by which [Apache Spark](/wiki/Apache_Spark) compiles a chain of physical operators, such as a scan, a filter, a projection and a partial aggregation, into a single generated Java function at run time.[^wscg][^sqlconf] It shipped in Spark 2.0.0, whose release notes credit it with 2 to 10 times speedups for common SQL and DataFrame operators, and it is part of the work known as [Project Tungsten](/wiki/Project_Tungsten).[^r200][^jira] It is on by default in Spark 4.3.0 and applies to DataFrame, Dataset and SQL queries.
+
+## Why does Spark generate code?
+
+Before whole-stage code generation, Spark ran each physical operator as an iterator that pulls rows from its child, the "Volcano" model used by many databases. Spark developers Sameer Agarwal, Davies Liu and Reynold Xin explained in a 2016 Databricks post that each such call is a virtual function dispatch and keeps the row in memory. Collapsing a fragment of the query into one function eliminates those calls and lets the JVM JIT compiler keep intermediate data in CPU registers, close to what hand-written code would do.[^blog2016]
+
+Spark turns the generated Java source into bytecode at run time. Spark 4.3.0 added an internal setting, `spark.sql.codegen.compiler`, with the values `janino` (the Janino library, the default) and `jdk` (`javax.tools.JavaCompiler`); its documentation says Janino is several times faster and remains the better choice for most workloads.[^sqlconf]
+
+## What do WholeStageCodegen nodes mean in a plan?
+
+In a physical plan printed by `EXPLAIN` or `df.explain()`, an operator that is part of a generated function is prefixed with `*(n)`. The number *n* is the **codegen stage ID**: all operators with the same ID are fused into one generated function. IDs start at 1 in each query and are assigned in depth-first post-order, so not all neighbouring operators with a star share an ID.[^wscg] In `EXPLAIN FORMATTED` the same information appears as `*` in the outline and `[codegen id : n]` in each node's details.[^explain]
+
+This sort-merge join plan from PySpark 4.3.0 (with [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) and broadcast joins turned off; plan IDs removed) has five codegen stages:
+
+```
+*(5) Project [k#9L]
++- *(5) SortMergeJoin [k#9L], [k#11L], Inner
+   :- *(2) Sort [k#9L ASC NULLS FIRST], false, 0
+   :  +- Exchange hashpartitioning(k#9L, 200), ENSURE_REQUIREMENTS
+   :     +- *(1) Project [id#8L AS k#9L]
+   :        +- *(1) Range (0, 1000000, step=1, splits=2)
+   +- *(4) Sort [k#11L ASC NULLS FIRST], false, 0
+      +- Exchange hashpartitioning(k#11L, 200), ENSURE_REQUIREMENTS
+         +- *(3) Project [id#10L AS k#11L]
+            +- *(3) Range (0, 100, step=1, splits=2)
+```
+
+How to read it:
+
+- **Operators without a star are not generated.** `Exchange` is a [shuffle](/wiki/Shuffle) boundary and is never part of a generated function. The generated code of stage 1 ends where it writes rows to the shuffle.
+- **An `InputAdapter` is hidden.** Where a generated stage reads from an operator that does not support code generation, Spark inserts an `InputAdapter`, which feeds rows from that operator into the generated code. In Spark 4.3.0 it is not printed in the tree.[^wscg]
+- **Codegen stages are not Spark stages.** A [scheduler stage](/wiki/Job,_stage_and_task) is bounded by shuffles; one scheduler stage can contain several codegen stages. Above, codegen stages 2, 4 and 5 all run in the final scheduler stage, after both shuffles.
+- **Before AQE runs, stars are missing.** With [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) on (the default), the plan printed before execution starts with `AdaptiveSparkPlan isFinalPlan=false` and shows no `*(n)` prefixes; they appear in the final plan printed after an action.
+
+The Spark web UI uses the same IDs. Stage DAGs group nodes under `WholeStageCodegen` boxes annotated with the codegen ID, which links a stage to the query in the SQL tab.[^webui]
+
+## How do you see the generated code?
+
+`EXPLAIN CODEGEN` (or `df.explain(mode="codegen")`) prints the physical plan and the generated Java source of each stage.[^explain] Each subtree comes with statistics on the compiled code:
+
+```sql
+EXPLAIN CODEGEN SELECT sum(id) FROM range(10) WHERE id > 2;
+```
+
+```
+Found 2 WholeStageCodegen subtrees.
+== Subtree 1 / 2 (maxMethodCodeSize:282; maxConstantPoolSize:217(0.33% used); numInnerClasses:0) ==
+*(1) HashAggregate(keys=[], functions=[partial_sum(id#4360L)], ...
+```
+
+`maxMethodCodeSize` is the largest compiled method in bytes of bytecode. It matters because of the fallback rule for huge methods described below.
+
+## When does whole-stage code generation fall back?
+
+Spark falls back to the interpreted, operator-at-a-time path for part of a plan in these cases, all defined in the Spark 4.3.0 source:[^wscg][^sqlconf]
+
+| Case | Effect | Setting (default) |
+| --- | --- | --- |
+| The operator does not implement code generation, for example the Python UDF operator `BatchEvalPython` | The operator runs without a star; an `InputAdapter` connects it to generated neighbours | (none) |
+| An expression in the operator only supports interpreted evaluation (`CodegenFallback`) | The whole operator is left out of code generation | (none) |
+| The operator's input or output schema has more fields, counting nested fields, than the limit | The operator is left out of code generation | `spark.sql.codegen.maxFields` (100) |
+| The generated Java code fails to compile | A warning "Whole-stage codegen disabled for plan (id=n)" is logged and the subtree runs interpreted | `spark.sql.codegen.fallback` (true) |
+| A compiled method is larger than the limit in bytecode | An info message "Found too long generated codes and JIT optimization might not work" is logged and the subtree runs interpreted | `spark.sql.codegen.hugeMethodLimit` (65535) |
+| Code generation is turned off | No whole-stage code generation at all | `spark.sql.codegen.wholeStage` (true) |
+
+The 65535 default for `spark.sql.codegen.hugeMethodLimit` is the largest bytecode size of a valid Java method. On HotSpot, a method larger than 8 KB of bytecode is not JIT-compiled, so Spark also splits long generated functions into smaller ones (`spark.sql.codegen.methodSplitThreshold`).[^sqlconf] All settings in this table are internal configurations in Spark 4.3.0.[^sqlconf]
+
+Two of these cases were seen in PySpark 4.3.0 runs. A Python UDF produced `BatchEvalPython` without a star between two generated stages:
+
+```
+*(2) Project [pythonUDF0#21L AS <lambda>(k)#20L]
++- BatchEvalPython [<lambda>(id#8L)#19L], [pythonUDF0#21L]
+   +- *(1) Range (0, 1000000, step=1, splits=2)
+```
+
+A `select` of 101 computed columns left the `Project` unstarred, while the `Filter` and `Range` below it, which have one column, kept `*(1)`.
+
+## See also
+
+- [Project Tungsten](/wiki/Project_Tungsten)
+- [Catalyst optimizer](/wiki/Catalyst_optimizer)
+- [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan)
+- [Job, stage and task](/wiki/Job,_stage_and_task)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+
+## References
+
+[^wscg]: [WholeStageCodegenExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/WholeStageCodegenExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r200]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira]: [SPARK-12795: Whole stage codegen](https://issues.apache.org/jira/browse/SPARK-12795). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^blog2016]: [Apache Spark as a Compiler: Joining a Billion Rows per Second on a Laptop](https://www.databricks.com/blog/2016/05/23/apache-spark-as-a-compiler-joining-a-billion-rows-per-second-on-a-laptop.html). *Databricks*, 2016-05-23. Retrieved 2026-11-23.
+[^explain]: [EXPLAIN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-explain.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.

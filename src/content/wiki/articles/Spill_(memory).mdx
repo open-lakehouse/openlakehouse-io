@@ -1,0 +1,74 @@
+---
+title: "Spill (memory)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept" name="Spill">
+  <Field name="also_known_as">Spill to disk, memory spill</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Execution memory, spill files on local disk, spill metrics</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino), [Apache Flink](/wiki/Apache_Flink)</Field>
+  <Field name="related">[Spark memory management](/wiki/Spark_memory_management), [Shuffle](/wiki/Shuffle), [Data skew](/wiki/Data_skew), [Executor](/wiki/Executor)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/web-ui.md, docs/monitoring.md, docs/tuning.md, docs/configuration.md, docs/rdd-programming-guide.md), the Trino 484 docs (Spill to disk, Spilling properties) and the Apache Flink 2.3 docs (TaskManager memory, memory tuning, configuration)</Verified>
+
+**Spill** is the act of a query engine writing intermediate data from memory to local disk while an operation runs, because the data for a sort, aggregation, join or shuffle does not fit in the memory the operation is allowed to use. In [Apache Spark](/wiki/Apache_Spark), a task spills when its share of execution memory is full; the task keeps running, reads the spilled data back later, and finishes slower instead of failing.[^rddguide][^tuning] [Trino](/wiki/Trino) and [Apache Flink](/wiki/Apache_Flink) spill too, under different rules.
+
+## What is spill in Apache Spark?
+
+Spark divides each executor's unified memory region into execution memory, used for shuffles, joins, sorts and aggregations, and storage memory, used for cached data.[^tuning] Shuffle operations build in-memory structures to organize records; when these do not fit, Spark spills them to disk, which adds disk I/O and garbage collection.[^rddguide] Spill files go to the scratch directories in `spark.local.dir` (default `/tmp`), and data spilled during shuffles is compressed by default (`spark.shuffle.spill.compress`).[^config]
+
+Spill is not the same as shuffle files. Shuffle files are the normal output of the map side of a [shuffle](/wiki/Shuffle), written by every shuffle; spill files are temporary overflow inside one task. A shuffle with no spill still writes shuffle files.[^rddguide]
+
+## Spill metrics in the Spark UI
+
+The Spark UI reports spill in two places.
+
+- **Stage page.** The task summary and the per-executor table show **Shuffle spill (memory)**, the size of the spilled data in its deserialized form in memory, and **Shuffle spill (disk)**, the size of its serialized form on disk.[^webui] The memory figure is usually the larger of the two, because the serialized and compressed form on disk is smaller.
+- **SQL tab.** Operators such as `Sort` and `HashAggregate` show a `spill size` metric (bytes spilled to disk by that operator) next to `peak memory`.[^webui]
+
+The same numbers are in the task metrics of the REST API and event log as `memoryBytesSpilled` and `diskBytesSpilled`.[^monitoring]
+
+## What causes spill?
+
+- **Too few shuffle partitions.** Each task gets a larger slice of data. `spark.sql.shuffle.partitions` defaults to 200; with [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) on, Spark starts from that number and coalesces small partitions.[^perf]
+- **[Data skew](/wiki/Data_skew).** One task gets most of the data, so only that task spills.
+- **Little execution memory per task.** All running tasks on an executor share its execution memory, so more cores per executor means less memory per task. The region size is set by `spark.executor.memory` and `spark.memory.fraction` (default 0.6).[^tuning][^config]
+- **Large cached datasets.** Cached blocks occupy storage memory. Execution can evict them, but only down to `spark.memory.storageFraction` (default 0.5) of the region.[^tuning]
+
+Common fixes follow from the causes: more shuffle partitions, fixing skew, more memory per executor or fewer cores per executor, and caching less. A small amount of spill is normal; it matters when spill dominates a stage's run time.
+
+## Spill compared across engines
+
+|  | Apache Spark | Trino | Apache Flink |
+| --- | --- | --- | --- |
+| Default behaviour | Always on; tasks spill execution data when memory runs out[^rddguide] | Off (`spill-enabled` defaults to false); without it, queries over the memory limits are killed[^trinospillprops][^trinospill] | For batch jobs, Flink spills to disk when managed memory is not enough[^flinktuning] |
+| Memory that spills | Execution memory in the executor's unified region (heap, or off-heap if enabled)[^tuning] | Revocable memory, which does not count toward query limits and which the memory manager can take back[^trinospill] | Managed memory, native (off-heap) memory used for sorting, hash tables and cached intermediate results; by default 0.4 of total Flink memory (`taskmanager.memory.managed.fraction`)[^flinkmem][^flinkconfig] |
+| Where spill goes | `spark.local.dir`[^config] | `spiller-spill-path`, which must be set when spilling is on; a comma-separated list spreads spill over several disks[^trinospillprops] | `io.tmp.dirs` (default: the JVM temporary directory), which also holds RocksDB files and cached jars[^flinkconfig] |
+| Operations that spill | Shuffle, sort, aggregation and join structures[^rddguide][^webui] | Joins, aggregations, `ORDER BY` and window functions[^trinospill] | Batch algorithms such as external sorts and hash joins[^flinkconfig] |
+| Status | Core part of execution | The Trino docs call spill to disk legacy functionality and point to fault-tolerant execution with the task retry policy instead[^trinospill] | Core part of batch execution |
+
+In Trino, spill is enabled per cluster and is limited by `max-spill-per-node` (all queries on a node) and `query-max-spill-per-node` (one query on a node), both 100GB by default.[^trinospillprops] The Trino docs warn that a query forced to spill may run orders of magnitude longer than one that runs in memory, and that spill does not guarantee that every memory-intensive query will succeed.[^trinospill]
+
+## See also
+
+- [Spark memory management](/wiki/Spark_memory_management)
+- [Shuffle](/wiki/Shuffle)
+- [Data skew](/wiki/Data_skew)
+- [Executor](/wiki/Executor)
+- [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark)
+
+## References
+
+[^rddguide]: [RDD Programming Guide: Shuffle operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#shuffle-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tuning]: [Tuning Spark (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trinospillprops]: [Spilling properties (Trino 484)](https://trino.io/docs/current/admin/properties-spilling.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^trinospill]: [Spill to disk (Trino 484)](https://trino.io/docs/current/admin/spill.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^flinktuning]: [Memory tuning guide (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-stable/docs/deployment/memory/mem_tuning/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flinkmem]: [Set up TaskManager Memory (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-stable/docs/deployment/memory/mem_setup_tm/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flinkconfig]: [Configuration (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-stable/docs/deployment/config/). *Apache Software Foundation*. Retrieved 2026-11-23.

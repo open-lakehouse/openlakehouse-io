@@ -1,0 +1,118 @@
+---
+title: "Pandas API on Spark"
+categories: ["Concepts", "Glossary terms", "Query engines", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">pandas-on-Spark, `pyspark.pandas`; formerly Koalas</Field>
+  <Field name="field">Data processing, Python DataFrames</Field>
+  <Field name="introduced">Apache Spark 3.2.0 (2021)</Field>
+  <Field name="key_parts">`pyspark.pandas` DataFrame, Series and Index; default index; options (`compute.*`); conversion to and from Spark DataFrames</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (PySpark) 3.2.0 and later; Koalas for Spark 3.1 and earlier</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Spark Connect](/wiki/Spark_Connect), [pyspark-client](/wiki/Pyspark-client)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">python/pyspark/pandas/config.py and python/pyspark/pandas/__init__.py at tag v4.3.0, the pandas-on-Spark options, best practices and FAQ pages under python/docs/source/tutorial/pandas_on_spark at v4.3.0 (and the options page at v3.2.0, v3.3.0, v3.5.0, v4.0.0 and v4.1.0), the Koalas migration guide at v4.3.0, the Spark 3.2.0, 3.5.0 and 4.0.0 release notes, SPARK-34849, SPARK-42497 and SPARK-52026, the databricks/koalas repository and README, and the koalas and pyspark packages on PyPI</Verified>
+
+**Pandas API on Spark** (the `pyspark.pandas` module, also called pandas-on-Spark) is the part of PySpark in [Apache Spark](/wiki/Apache_Spark) that implements the pandas DataFrame, Series and Index API on top of Spark, so code written for pandas can run distributed on a Spark cluster.[^r320] It was added in Spark 3.2.0 through SPARK-34849, which brought the Koalas project into PySpark.[^spip] The API looks like pandas, but results depend on Spark's distributed execution, which changes how the index, row order and some operations behave.[^options]
+
+## What is pandas API on Spark?
+
+Pandas API on Spark is imported as `import pyspark.pandas as ps`. A pandas-on-Spark DataFrame is backed by a Spark DataFrame and runs through the Spark SQL engine, so Spark configuration, the web UI and deployment modes apply to it unchanged.[^bp] The Spark 3.2.0 release notes describe it as letting pandas users scale out their applications on Spark with a one-line code change.[^r320]
+
+The pandas-on-Spark FAQ recommends the pandas API for users who already know pandas and want to work with large data, and the PySpark DataFrame API for users learning Spark from the start.[^faq] In Spark 4.3.0, the pandas-on-Spark extra of the `pyspark` package requires pandas 2.2.0 or later and PyArrow 18.0.0 or later.[^n1]
+
+## How is pandas API on Spark used?
+
+A pandas-on-Spark DataFrame can be created directly, converted from a Spark DataFrame with `DataFrame.pandas_api()`, and converted back with `to_spark()`. Converting to a plain pandas DataFrame with `to_pandas()` collects all data to the client, so it suits only small results.[^pyspark-conv]
+
+```python
+import pyspark.pandas as ps
+
+sdf = spark.createDataFrame(
+    [(1, "a", 10.0), (2, "b", 20.0), (3, "a", 30.0)],
+    ["order_id", "category", "amount"],
+)
+
+# Use a real column as the index instead of generating a default index
+psdf = sdf.pandas_api(index_col="order_id")
+psdf["amount_with_tax"] = psdf["amount"] * 1.2
+
+print(psdf.groupby("category")["amount"].sum().sort_index())
+
+result = psdf.to_spark(index_col="order_id")  # back to a Spark DataFrame
+```
+
+Pandas API on Spark also works over [Spark Connect](/wiki/Spark_Connect): Spark 3.5.0 added pandas API support to the Python Spark Connect client (SPARK-42497).[^r350] The pure-Python [pyspark-client](/wiki/Pyspark-client) package includes `pyspark.pandas`.[^n2]
+
+## How does pandas API on Spark differ from pandas?
+
+### Default index
+
+A pandas DataFrame always has an index. When pandas API on Spark creates a DataFrame from a Spark DataFrame without an index column, it attaches a **default index**, whose type is set by `compute.default_index_type`.[^options] The three types are:[^options]
+- `sequence`: a sequence increasing by one, computed with a Window function without a partition specification, which moves all data to one partition; the documentation says to avoid it for large data.
+- `distributed-sequence` (the default): a globally sequential index computed in a distributed way with a group-by and group-map approach.
+- `distributed`: `monotonically_increasing_id` values, fully distributed but not consecutive and not deterministic.
+
+The default was `sequence` in Spark 3.2.0 and has been `distributed-sequence` since Spark 3.3.0.[^opt320][^n3] The best practices guide warns that `distributed-sequence` does not keep the same row-to-index mapping across operations such as `apply()`, `groupby()` or `transform()`, which can attach results to the wrong rows. It recommends setting an explicit index column, persisting the DataFrame, or using `sequence`.[^bp]
+
+### Row order
+
+Pandas API on Spark does not guarantee row order. With `compute.ordered_head` at its default of `False`, `head()` can return rows from any partitions; setting it to `True` makes `head()` follow natural order at extra cost.[^options][^config]
+
+### Operations that are slow or behave differently
+
+- **Single-partition operations.** Some APIs, such as `DataFrame.rank`, use a Window without a partition specification and move all data to one machine; the guide suggests `GroupBy.rank` instead.[^bp]
+- **Operations on different DataFrames.** Combining two DataFrames or Series needs an internal join. `compute.ops_on_diff_frames` defaulted to `False` through Spark 3.5 and defaults to `True` from Spark 4.0.0.[^n4][^opt400][^config]
+- **Column names.** Names with leading and trailing double underscores are reserved, duplicate column names are not allowed, and case-sensitive column names are disallowed unless `spark.sql.caseSensitive` is enabled.[^bp]
+- **Shortcut limits.** `compute.shortcut_limit` and `compute.max_rows` (both 1000 by default) control when small inputs are computed by collecting them and using pandas.[^options]
+- **Streaming.** Pandas API on Spark does not officially support [Structured Streaming](/wiki/Structured_Streaming); the FAQ suggests using it inside `foreachBatch`.[^faq]
+
+### ANSI mode
+
+Spark 4.0.0 enables ANSI SQL mode by default. In Spark 4.0.0, pandas API on Spark raises `PANDAS_API_ON_SPARK_FAIL_ON_ANSI_MODE` when ANSI mode is on, unless `compute.fail_on_ansi_mode` is set to `False` (SPARK-52026).[^jira52026][^opt400] Spark 4.1.0 added the option `compute.ansi_mode_support`, which defaults to `True`; the fail-on-ANSI check raises only when that option is `False`.[^n5][^config]
+
+## Is pandas API on Spark deprecated?
+
+No. As of Spark 4.3.0, `pyspark.pandas` ships in PySpark, and its module code and documentation contain no deprecation notice.[^config][^options] Individual methods have been removed: the Spark 4.0.0 release notes list the removal of deprecated APIs from pandas API on Spark (SPARK-45550), and the migration guide lists `DataFrame.koalas` and the PySpark `DataFrame.to_koalas` and `to_pandas_on_spark` aliases as removed in Spark 4.0, replaced by `pandas_on_spark` and `pandas_api`.[^r400][^k2p]
+
+## History
+
+Pandas API on Spark began as **Koalas**, a separate open source project in the `databricks/koalas` GitHub repository, created on 3 January 2019 and licensed under the Apache License 2.0.[^koalas-repo] Koalas 0.1.0 was published on PyPI on 23 April 2019, and its last release, 1.8.2, on 19 October 2021.[^koalas-pypi]
+
+The SPIP SPARK-34849, "Support pandas API layer on PySpark", was filed on 24 March 2021 to port Koalas into PySpark, and the work shipped in Spark 3.2.0 as the `pyspark.pandas` module.[^spip][^r320] The Koalas README now marks the project as deprecated: it supports Spark 3.1 and earlier, the repository is in maintenance mode, and users of Spark 3.2 and later are told to use PySpark directly. The repository was not archived on the date checked.[^koalas-repo]
+
+Migration from Koalas mostly means changing `import databricks.koalas as ks` to `import pyspark.pandas as ps`. The Spark migration guide lists the renamed and removed Koalas-specific names, such as `databricks.koalas.__version__`, replaced by `pyspark.__version__`.[^k2p] The usage-logger environment variable `KOALAS_USAGE_LOGGER` is still read for compatibility, after `PYSPARK_PANDAS_USAGE_LOGGER`.[^n6]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [pyspark-client](/wiki/Pyspark-client)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration)
+- [Shuffle](/wiki/Shuffle)
+- [Partition](/wiki/Partition)
+
+## References
+
+[^r320]: [Spark Release 3.2.0](https://spark.apache.org/releases/spark-release-3-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^spip]: [SPARK-34849: SPIP: Support pandas API layer on PySpark](https://issues.apache.org/jira/browse/SPARK-34849). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^options]: [Options and settings (pandas API on Spark, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/tutorial/pandas_on_spark/options.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^bp]: [Best Practices (pandas API on Spark, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/tutorial/pandas_on_spark/best_practices.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^faq]: [FAQ (pandas API on Spark, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/tutorial/pandas_on_spark/faq.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [pyspark 4.3.0](https://pypi.org/project/pyspark/4.3.0/). *Python Package Index*. Retrieved 2026-11-23.
+[^pyspark-conv]: [From/to pandas and PySpark DataFrames (pandas API on Spark, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/tutorial/pandas_on_spark/pandas_pyspark.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [python/packaging/client/setup.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/packaging/client/setup.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^opt320]: [Options and settings (pandas API on Spark, v3.2.0)](https://github.com/apache/spark/blob/v3.2.0/python/docs/source/user_guide/pandas_on_spark/options.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [Options and settings (pandas API on Spark, v3.3.0)](https://github.com/apache/spark/blob/v3.3.0/python/docs/source/user_guide/pandas_on_spark/options.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [python/pyspark/pandas/config.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pandas/config.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [Options and settings (pandas API on Spark, v3.5.0)](https://github.com/apache/spark/blob/v3.5.0/python/docs/source/user_guide/pandas_on_spark/options.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^opt400]: [Options and settings (pandas API on Spark, v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/python/docs/source/tutorial/pandas_on_spark/options.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira52026]: [SPARK-52026: Block pandas API on Spark on ANSI mode by default](https://issues.apache.org/jira/browse/SPARK-52026). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n5]: [Options and settings (pandas API on Spark, v4.1.0)](https://github.com/apache/spark/blob/v4.1.0/python/docs/source/tutorial/pandas_on_spark/options.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k2p]: [Migrating from Koalas to pandas API on Spark (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/migration_guide/koalas_to_pyspark.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^koalas-repo]: [databricks/koalas: Koalas: pandas API on Apache Spark](https://github.com/databricks/koalas). *GitHub*. Retrieved 2026-11-23.
+[^koalas-pypi]: [koalas release history](https://pypi.org/project/koalas/#history). *Python Package Index*. Retrieved 2026-11-23.
+[^n6]: [python/pyspark/pandas/__init__.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/pandas/__init__.py). *Apache Software Foundation*. Retrieved 2026-11-23.

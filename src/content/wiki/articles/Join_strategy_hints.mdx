@@ -1,0 +1,92 @@
+---
+title: "Join strategy hints"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Join hints (Spark SQL)</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="introduced">`BROADCAST` before Spark 3.0; `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL` in Apache Spark 3.0.0</Field>
+  <Field name="key_parts">`BROADCAST`, `MERGE`, `SHUFFLE_HASH`, `SHUFFLE_REPLICATE_NL`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Data skew](/wiki/Data_skew), [Broadcast join](/wiki/Broadcast_join)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-syntax-qry-select-hints.md, docs/sql-performance-tuning.md, SparkStrategies.scala, adaptive/DemoteBroadcastHashJoin.scala, adaptive/ConvertSortMergeJoinToShuffledHashJoin.scala, adaptive/OptimizeSkewedJoin.scala, exchange/BroadcastExchangeExec.scala, SQLConf.scala, core unsafe/map/BytesToBytesMap.java) and SPARK-27225</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) SQL, **join strategy hints** are comments of the form `/*+ HINT(table) */`, or `DataFrame.hint()` calls, that ask the planner to use a specific physical join algorithm for a relation instead of the one it would pick from statistics.[^hints] Spark supports four: `BROADCAST`, `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL`. A hint is a suggestion, not a command: Spark ignores it when the hinted strategy does not support the join type.[^hints]
+
+## Which join hints does Spark support?
+
+Before Spark 3.0 only the `BROADCAST` hint existed. Spark 3.0.0 added `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL`, one for each of Spark's other join strategies.[^hints][^spark27225]
+
+| Hint | Aliases | Physical join it asks for | Notes |
+| --- | --- | --- | --- |
+| `BROADCAST` | `BROADCASTJOIN`, `MAPJOIN` | Broadcast hash join (with equi-join keys) or broadcast nested loop join (without) | The hinted side is broadcast even if it is larger than `spark.sql.autoBroadcastJoinThreshold` (default 10 MB). If both sides are hinted, the smaller one by statistics is broadcast.[^hints][^perf] |
+| `MERGE` | `SHUFFLE_MERGE`, `MERGEJOIN` | Shuffle sort-merge join | Needs sortable join keys.[^strategies] |
+| `SHUFFLE_HASH` | none | Shuffle hash join | If both sides are hinted, the smaller side by statistics becomes the build side.[^hints] |
+| `SHUFFLE_REPLICATE_NL` | none | Shuffle-and-replicate nested loop join (cartesian product) | Used only for inner-like joins.[^strategies] |
+
+The `BROADCAST` hint is still bounded by hard limits: Spark fails a broadcast whose table is 8 GiB or larger (`spark.sql.maxBroadcastTableSize`, added in 4.1.0) or that has too many rows. The row limit depends on the broadcast mode: for a hash join whose key is not a single `LongType` column it is `BytesToBytesMap.MAX_CAPACITY / 1.5`, that is 2<sup>29</sup> / 1.5 or 357,913,941 rows, and in other cases it is 512,000,000 rows.[^btbm][^bee][^sqlconf]
+
+## How to write a join hint
+
+In Spark SQL the hint goes in a comment right after `SELECT` and names the table or alias it applies to. In PySpark the same hint is set with `hint()` on the DataFrame that should get the strategy, or with `broadcast()` from `pyspark.sql.functions`.[^perf]
+
+```sql
+SELECT /*+ BROADCAST(d) */ f.order_id, d.region
+FROM sales f JOIN dim_store d ON f.store_id = d.store_id;
+
+SELECT /*+ SHUFFLE_HASH(c) */ * FROM orders o JOIN customers c ON o.cust_id = c.cust_id;
+```
+
+```python
+from pyspark.sql.functions import broadcast
+
+orders.join(broadcast(stores), "store_id")
+orders.join(customers.hint("merge"), "cust_id")
+```
+
+## Which hint wins when several are given?
+
+When the two sides of a join carry different strategy hints, Spark prefers `BROADCAST` over `MERGE` over `SHUFFLE_HASH` over `SHUFFLE_REPLICATE_NL`, and logs a warning that the overridden hint will not take effect.[^hints]
+
+Spark's join selection looks at hints before it looks at sizes. For an equi-join, it tries the hinted strategies in the order above; only if there is no hint, or no hint applies, does it fall back to its default order: broadcast hash join if a side is under the broadcast threshold, then shuffle hash join, then sort-merge join, then cartesian product, then broadcast nested loop join.[^strategies] A `MERGE` or `SHUFFLE_HASH` hint on a join without equi-join keys cannot be honored, and Spark reports it as unsupported.[^strategies]
+
+## How do join hints interact with Adaptive Query Execution?
+
+[Adaptive Query Execution](/wiki/Adaptive_Query_Execution) (AQE), on by default since Spark 3.2.0, re-plans joins at runtime from the sizes of completed shuffle stages. Three AQE rules change joins, and each treats hints differently.[^perf]
+
+- **Sort-merge join to broadcast join.** AQE turns a sort-merge join into a broadcast hash join when a side's runtime size is under `spark.sql.adaptive.autoBroadcastJoinThreshold` (which defaults to `spark.sql.autoBroadcastJoinThreshold`).[^perf] AQE also has a rule that marks a side with many empty partitions as "do not broadcast", but the rule leaves a side alone if the user already gave it a strategy hint.[^demote]
+- **Sort-merge join to shuffled hash join.** AQE can switch a sort-merge join to a shuffled hash join when every partition is under `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold` (default 0, so off). It skips joins that carry a `MERGE` hint.[^perf][^smj2shj]
+- **Skew join splitting.** AQE splits skewed partitions of sort-merge and shuffled hash joins, whichever strategy chose them, so a `MERGE` or `SHUFFLE_HASH` hint does not turn off skew handling.[^skew] See [data skew](/wiki/Data_skew).
+
+Hints and AQE work from different information. A hint records a choice the user knows in advance; AQE uses the measured size of each shuffle stage. With AQE on, a table that is small only after filtering can be broadcast without a hint, because AQE sees its runtime size; this is less efficient than planning the broadcast up front, but avoids the sort on both sides.[^perf]
+
+## Join hints compared with partitioning hints
+
+Spark SQL has a second family of hints that does not pick a join algorithm. **Partitioning hints** (`COALESCE`, `REPARTITION`, `REPARTITION_BY_RANGE`, `REBALANCE` and `REBALANCE_BY_SIZE`) set how a query's output is partitioned, for example to control the number of files written to a [Delta Lake](/wiki/Delta_Lake) or [Apache Iceberg](/wiki/Apache_Iceberg) table. `REBALANCE` and `REBALANCE_BY_SIZE` only work with AQE on.[^hints]
+
+In [Trino](/wiki/Trino), the closest equivalent is the `join_distribution_type` session property, which chooses between partitioned and broadcast joins for the whole query rather than per table.[^trinocbo]
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Data skew](/wiki/Data_skew)
+- [Broadcast variable](/wiki/Broadcast_variable)
+
+## References
+
+[^hints]: [Hints (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-hints.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^spark27225]: [SPARK-27225: Implement join strategy hints](https://issues.apache.org/jira/browse/SPARK-27225). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^strategies]: [SparkStrategies.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^btbm]: [BytesToBytesMap.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/unsafe/map/BytesToBytesMap.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^bee]: [BroadcastExchangeExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/BroadcastExchangeExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^demote]: [DemoteBroadcastHashJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/DemoteBroadcastHashJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^smj2shj]: [ConvertSortMergeJoinToShuffledHashJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/ConvertSortMergeJoinToShuffledHashJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^skew]: [OptimizeSkewedJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/OptimizeSkewedJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trinocbo]: [Cost-based optimizations (Trino 484)](https://trino.io/docs/current/optimizer/cost-based-optimizations.html). *Trino Software Foundation*. Retrieved 2026-11-23.

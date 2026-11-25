@@ -488,14 +488,50 @@
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Accumulator</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Adaptive_Query_Execution</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Agentic_lakehouse</loc>
     <lastmod>2026-11-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Aggregate_pushdown</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Apache_Airflow</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Apache_Celeborn</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Apache_DataFusion_Comet</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Apache_Gluten</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -542,8 +578,80 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Apache_Uniffle</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Arrow-optimized_Python_UDF</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Bloom_filter_(data_files)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Broadcast_join</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Broadcast_variable</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Bucketing</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Business_Source_License</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Caching_and_persistence</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Catalog_plugin_API_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Catalyst_optimizer</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Checkpointing_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Collation_(Spark_SQL)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Column_pruning</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -554,8 +662,38 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Cost-based_optimizer_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/DataFrame</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Data_Source_V2</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Data_catalog</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Data_skew</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Dataset_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -572,8 +710,44 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Directed_acyclic_graph_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Driver_(Apache_Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/DuckDB</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Dynamic_allocation</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Dynamic_partition_pruning</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Encoder_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Event_time_and_processing_time</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -590,6 +764,42 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Executor_decommissioning</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Executor_memory_overhead</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/External_shuffle_service</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/ForeachBatch</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/GPU_acceleration_in_Spark</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Garbage_collection_in_Spark</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/GraphFrames</loc>
     <lastmod>2026-11-22</lastmod>
     <changefreq>monthly</changefreq>
@@ -598,6 +808,12 @@
   <url>
     <loc>https://openlakehouse.io/wiki/GraphX</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Higher-order_functions_(Spark_SQL)</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -638,6 +854,42 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Job,_stage_and_task</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Join_strategy_hints</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Kubernetes_Operator_for_Apache_Spark</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Lateral_column_alias</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Lazy_evaluation</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Logical_plan_and_physical_plan</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Logical_type</loc>
     <lastmod>2026-11-22</lastmod>
     <changefreq>monthly</changefreq>
@@ -652,6 +904,12 @@
   <url>
     <loc>https://openlakehouse.io/wiki/MapGroupsWithState_and_flatMapGroupsWithState</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Matei_Zaharia</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -674,6 +932,18 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Narrow_and_wide_transformations</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Native_execution_engine_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Open_lakehouse</loc>
     <lastmod>2026-11-22</lastmod>
     <changefreq>monthly</changefreq>
@@ -686,8 +956,38 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Output_mode</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Pandas_API_on_Spark</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Pandas_UDF</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Parameterized_queries_(Spark_SQL)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Partition</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Partition_pruning</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -710,8 +1010,74 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Push-based_shuffle</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Pyspark-client</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Python_UDTF</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Python_data_source_API_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/RDD</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Real-time_mode_(Structured_Streaming)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Remote_shuffle_service</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/RocksDB_state_store</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Runtime_filter</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Ryan_Blue</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/SQL_pipe_syntax</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Salting</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -722,8 +1088,20 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Session_window</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Shuffle</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Shuffle_hash_join</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -734,14 +1112,38 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Sort-merge_join</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark-submit</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Spark.mllib_(RDD-based_API)</loc>
     <lastmod>2026-11-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/SparkContext</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/SparkR</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/SparkSession</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -758,8 +1160,56 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Spark_Connect_client</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_Connect_plugin</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_Connect_server</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Spark_Declarative_Pipelines</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_History_Server</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_Kubernetes_pod_template</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_Kubernetes_shuffle_storage</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_SQL_ANSI_mode</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_SQL_scripting</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -770,8 +1220,128 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Spark_Thrift_Server</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_UI</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_configuration_precedence</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_error_classes</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_event_log</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_listener</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_memory_management</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_on_Kubernetes</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_on_YARN</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_plugin</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_resource_profiles</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spark_standalone_cluster_manager</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Speculative_execution</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Spill_(memory)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/State_store</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Stateful_stream_processing</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Stream-static_join</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Stream-stream_join</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Stream_processing</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Streaming_checkpoint</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Streaming_deduplication</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -784,6 +1354,12 @@
   <url>
     <loc>https://openlakehouse.io/wiki/Structured_Streaming</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Time_travel_(SQL)</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -812,14 +1388,44 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/User-defined_function_(Spark)</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Variant_type</loc>
     <lastmod>2026-11-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Velox</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Watermark</loc>
     <lastmod>2026-11-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Whole-stage_code_generation</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Window_functions</loc>
+    <lastmod>2026-11-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Windowing_(stream_processing)</loc>
+    <lastmod>2026-11-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -879,6 +1485,11 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://openlakehouse.io/wiki/Category:People</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://openlakehouse.io/wiki/Category:Pipelines_and_orchestration</loc>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
@@ -910,6 +1521,11 @@
   </url>
   <url>
     <loc>https://openlakehouse.io/wiki/Open_Lakehouse_Wiki:Style_guide</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://openlakehouse.io/wiki/Category:Apache_Parquet</loc>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>

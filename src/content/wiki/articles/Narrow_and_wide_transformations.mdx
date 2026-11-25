@@ -1,0 +1,100 @@
+---
+title: "Narrow and wide transformations"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Narrow and shuffle dependencies</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Narrow dependency, shuffle (wide) dependency, `Exchange` operator, stage boundary</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Job, stage and task](/wiki/Job,_stage_and_task), [Directed acyclic graph (Spark)](/wiki/Directed_acyclic_graph_(Spark)), [Partition](/wiki/Partition), [Broadcast join](/wiki/Broadcast_join)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (core DAGScheduler.scala, EnsureRequirements.scala, docs/rdd-programming-guide.md, docs/sql-performance-tuning.md), the Apache Iceberg 1.12.0 Spark configuration page and physical plans of 18 DataFrame operations from a PySpark 4.3.0 run</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **narrow transformation** is one where each output [partition](/wiki/Partition) depends on a single input partition, so it runs inside the same task as the step before it; a **wide transformation** needs data from many input partitions and therefore causes a [shuffle](/wiki/Shuffle) and a new stage.[^dag][^rddguide] The distinction decides how Spark splits a job into stages. Narrow steps are cheap and are pipelined together; wide steps write shuffle files to disk and send them over the network, which makes them the main cost in most jobs.
+
+## How do narrow and wide transformations differ?
+
+Spark's scheduler states the rule directly. RDD operations with narrow dependencies, like `map()` and `filter()`, are pipelined into one set of tasks in each stage, while operations with shuffle dependencies need two stages: one to write a set of map output files and another to read them after a barrier.[^dag]
+
+A wide transformation exists because a task works on one partition at a time. For `reduceByKey`, the values of one key are usually spread over many partitions and machines, so Spark must read from all partitions and bring each key's values together. This all-to-all step is the shuffle; it involves disk I/O, data serialization and network I/O.[^rddguide]
+
+|  | Narrow transformation | Wide transformation |
+| --- | --- | --- |
+| Input partitions per output partition | One | Many |
+| Data movement | None; the task reads its own partition | A shuffle across executors |
+| Effect on stages | Pipelined into the current stage | Ends a stage and starts a new one[^dag] |
+| In a DataFrame physical plan | No `Exchange` node | An `Exchange` node (or a `BroadcastExchange` for a [broadcast join](/wiki/Broadcast_join)) |
+| Number of output partitions | Same as the input (or fewer, for `coalesce`) | For DataFrame and SQL, `spark.sql.shuffle.partitions` (default 200) unless set explicitly or changed by [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)[^perf] |
+
+## Which operators shuffle?
+
+The Spark documentation lists repartition operations (such as `repartition` and `coalesce`), most `ByKey` operations except counting (such as `groupByKey` and `reduceByKey`) and join operations (such as `cogroup` and `join`) as operations that can cause a shuffle.[^rddguide] "Can" matters: in the DataFrame plans below, `coalesce` to fewer partitions merges partitions without an `Exchange`, and a join does not shuffle again an input that is already partitioned by its keys.
+
+The following table shows what Spark 4.3.0 actually planned for common DataFrame operations. Each row is the physical plan of the operation on a 100-row DataFrame in PySpark 4.3.0, with [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) and automatic broadcast joins turned off so that the base plan is visible.
+
+| DataFrame operation | Narrow or wide | `Exchange` in the physical plan |
+| --- | --- | --- |
+| `filter`, `where` | Narrow | None |
+| `select`, `withColumn` | Narrow | None |
+| `explode` | Narrow | None |
+| `union` | Narrow | None |
+| `sample` | Narrow | None |
+| `coalesce(n)` | Narrow | None |
+| `sortWithinPartitions` | Narrow | None |
+| `limit(n)` alone | Narrow | None |
+| `limit(n)` followed by `groupBy` | Wide | `Exchange SinglePartition` |
+| `groupBy(...).agg(...)`, `count` per key | Wide | `Exchange hashpartitioning(key, 200)` |
+| `distinct`, `dropDuplicates` | Wide | `Exchange hashpartitioning(...)` |
+| `orderBy`, `sort` | Wide | `Exchange rangepartitioning(... ASC NULLS FIRST, 200)` |
+| `repartition(4)` | Wide | `Exchange RoundRobinPartitioning(4)` |
+| `repartition("col")` | Wide | `Exchange hashpartitioning(col, 200), REPARTITION_BY_COL` |
+| `join` (sort-merge) | Wide | One `Exchange hashpartitioning` per side |
+| Window with `partitionBy` | Wide | `Exchange hashpartitioning(partition key, 200)` |
+| `intersect` | Wide | `Exchange hashpartitioning` on all columns |
+
+A [broadcast join](/wiki/Broadcast_join) replaces the two shuffles of a sort-merge join with a `BroadcastExchange` of the small side. Spark plans one automatically when a side's estimated size is below `spark.sql.autoBroadcastJoinThreshold` (default 10 MB).[^perf]
+
+## Spark avoids shuffles it does not need
+
+Spark adds an `Exchange` only when an operator's input is not already distributed the way the operator requires. The planner rule that does this is `EnsureRequirements`, which is why shuffles it adds are labeled `ENSURE_REQUIREMENTS` in the plan.[^ensure] In the PySpark 4.3.0 plan below, a `groupBy("g")` is followed by a join on the same key. The aggregate's output is already hash-partitioned by `g`, so the join reuses it and only the other side is shuffled:
+
+```
+*(5) SortMergeJoin [g#5L], [g#7L], Inner
+:- *(2) Sort [g#5L ASC NULLS FIRST], false, 0
+:  +- *(2) HashAggregate(keys=[g#5L], functions=[count(1)])
+:     +- Exchange hashpartitioning(g#5L, 200), ENSURE_REQUIREMENTS
+:        +- *(1) HashAggregate(keys=[g#5L], functions=[partial_count(1)])
+:           ...
++- *(4) Sort [g#7L ASC NULLS FIRST], false, 0
+   +- Exchange hashpartitioning(g#7L, 200), ENSURE_REQUIREMENTS
+      ...
+```
+
+Tables stored with a matching layout can avoid the shuffle entirely. Storage-partitioned join uses the partitioning reported by a compatible V2 data source to skip the shuffle phase of a join (`spark.sql.sources.v2.bucketing.enabled`, default true, since 3.3.0).[^perf] [Apache Iceberg](/wiki/Apache_Iceberg) supports it through `spark.sql.iceberg.planning.preserve-data-grouping` (default false), which groups scan tasks for the same partition into the same read split.[^icecfg]
+
+## How to reduce the cost of wide transformations
+
+- Filter and select columns before a wide step, so that less data is shuffled. The [Catalyst optimizer](/wiki/Catalyst_optimizer) pushes many filters down automatically (see [Predicate pushdown](/wiki/Predicate_pushdown)).
+- Use a [broadcast join](/wiki/Broadcast_join) when one side is small.
+- Prefer aggregations that combine on the map side. `reduceByKey` and `aggregateByKey` build in-memory structures on the map side; in the DataFrame API, the `partial_count` and `partial_sum` steps in the plan show the same map-side combine.[^rddguide]
+- Let [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) coalesce small shuffle partitions and split skewed ones.[^perf]
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [Job, stage and task](/wiki/Job,_stage_and_task)
+- [Directed acyclic graph (Spark)](/wiki/Directed_acyclic_graph_(Spark))
+- [Partition](/wiki/Partition)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Sort-merge join](/wiki/Sort-merge_join)
+
+## References
+
+[^dag]: [DAGScheduler.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rddguide]: [RDD Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ensure]: [EnsureRequirements.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/EnsureRequirements.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icecfg]: [Spark Configuration (Apache Iceberg 1.12.0 documentation)](https://iceberg.apache.org/docs/latest/spark-configuration/). *Apache Software Foundation*. Retrieved 2026-11-23.

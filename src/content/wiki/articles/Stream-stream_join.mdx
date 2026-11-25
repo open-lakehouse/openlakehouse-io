@@ -1,0 +1,105 @@
+---
+title: "Stream-stream join"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Streaming join, interval join (Flink)</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="introduced">Apache Spark 2.3</Field>
+  <Field name="key_parts">Two streaming inputs, join keys, [watermark](/wiki/Watermark) on each input, event-time range or window condition, buffered state</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark), [Apache Flink](/wiki/Apache_Flink) (interval join, regular join), Kafka Streams (`JoinWindows`)</Field>
+  <Field name="related">[Stream-static join](/wiki/Stream-static_join), [Watermark](/wiki/Watermark), [State store](/wiki/State_store), [Stateful stream processing](/wiki/Stateful_stream_processing)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (join operations, support matrix, recovery semantics) and Real-time Mode guide, the Apache Flink 2.3 DataStream "Joining" and SQL "Joins" pages, and the Kafka Streams 4.4 DSL developer guide</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), a **stream-stream join** joins two streaming DataFrames, so that each new row from one stream is matched with rows that have arrived, or will arrive, on the other. Because a match can come later, Spark buffers past rows of both inputs as state; [watermarks](/wiki/Watermark) on both inputs and a time condition in the join let Spark drop buffered rows that can no longer match, so that state does not grow without limit. Spark added stream-stream joins in Spark 2.3.[^ss-join] The result of the join is the same as a batch join over the same data.[^ss-joinops]
+
+## Why does a stream-stream join need state?
+
+At any moment, both sides of a stream-stream join are incomplete. A row received now on one input can match a row that the other input has not received yet. Spark therefore keeps past input from both streams in the [state store](/wiki/State_store), matches every new row against it, and handles late and out-of-order data the same way as for aggregations.[^ss-join]
+
+Without limits, all past input must be kept, because any new row could match any old one.[^ss-inner] In a long-running query, that state grows until the query fails or slows down.
+
+## How do watermarks and time constraints bound state?
+
+To let Spark clear old rows, a join needs two things:[^ss-inner]
+1. a watermark on both inputs, saying how late each input's data can be; and
+1. an event-time constraint between the inputs, so that Spark can tell when an old row of one input can no longer match the other. The constraint is either a time range, such as `leftTime BETWEEN rightTime AND rightTime + INTERVAL 1 HOUR`, or a join on event-time windows, such as `leftTimeWindow = rightTimeWindow`.
+
+With both, the rows kept for each side are roughly those within the other side's watermark delay plus the width of the time range. The guarantee follows the watermark rule: with a 2-hour watermark, no row less than 2 hours late is dropped, but a row later than that may or may not be processed.[^ss-join]
+
+### Example
+
+The Spark guide's example joins ad impressions with ad clicks. Impressions can be up to 2 hours late, clicks up to 3 hours late, and a click counts if it happens within 1 hour after its impression.[^ss-inner]
+
+```python
+from pyspark.sql.functions import expr
+
+impressions = spark.readStream.table("main.ads.impressions")   # impressionAdId, impressionTime
+clicks = spark.readStream.table("main.ads.clicks")             # clickAdId, clickTime
+
+joined = (impressions.withWatermark("impressionTime", "2 hours")
+    .join(
+        clicks.withWatermark("clickTime", "3 hours"),
+        expr("""
+            clickAdId = impressionAdId AND
+            clickTime >= impressionTime AND
+            clickTime <= impressionTime + interval 1 hour
+        """),
+        "leftOuter",
+    ))
+```
+
+## Which join types are supported?
+
+Inner joins are supported on any columns and conditions; watermarks and time constraints are optional, but without them state is unbounded. Outer and semi joins require them, because Spark must know when a row will never match in order to emit the outer row with nulls, or to evict an unmatched left row.[^ss-join] The support matrix in Spark 4.3.0:[^ss-matrix]
+
+| Join type | Requirement |
+| --- | --- |
+| Inner | Supported; watermarks on both sides and a time constraint are optional and enable state cleanup |
+| Left outer | Watermark on the right side and a time constraint required; left watermark optional, for full cleanup |
+| Right outer | Watermark on the left side and a time constraint required; right watermark optional |
+| Full outer | Watermark on one side and a time constraint required; the other watermark optional |
+| Left semi | Watermark on the right side and a time constraint required; left watermark optional |
+
+Other rules apply. Joins can be chained (`df1.join(df2, ...).join(df3, ...)`), and a query with a stream-stream join must use append [output mode](/wiki/Output_mode). `mapGroupsWithState` and `flatMapGroupsWithState` cannot be used before or after a join, but in append mode aggregations, deduplication and other joins can.[^ss-matrix] Changing the join type, the equi-join columns or the input schema is not allowed between restarts from the same [streaming checkpoint](/wiki/Streaming_checkpoint).[^ss-changes] Stream-stream joins are not supported in Real-time Mode as of Spark 4.3.0.[^rtm]
+
+## Why are outer join results delayed?
+
+An outer row with nulls is emitted only after Spark is sure no match will arrive, so its delay depends on the watermark delay and the time range. In the micro-batch engine, the watermark advances at the end of a batch and the next batch uses it to clean state and emit outer rows. Since a batch runs only when there is new data, outer output can be held back if either input stops receiving data for a while.[^ss-outer]
+
+## Stream-stream joins in other engines
+
+[Apache Flink](/wiki/Apache_Flink)'s DataStream API has an **interval join**: elements of stream B with the same key match an element of stream A when `a.timestamp + lowerBound <= b.timestamp <= a.timestamp + upperBound`. It supports only inner joins.[^flink-dsjoin]
+
+Flink SQL distinguishes **regular joins**, which keep both inputs in state forever unless a state TTL is configured (which can affect correctness), from **interval joins**, which need at least one equi-join predicate and a condition that bounds time on both sides.[^flink-sqljoin] A Spark join with a time-range condition and watermarks corresponds to an interval join; a Spark inner join without them corresponds to a regular join without TTL.
+
+Kafka Streams uses `JoinWindows`, a sliding window over record timestamps, for windowed stream-stream joins.[^kstreams]
+
+|  | Spark stream-stream join | Flink DataStream interval join | Flink SQL interval join | Flink SQL regular join |
+| --- | --- | --- | --- | --- |
+| Time bound | Optional for inner, required for outer and semi[^ss-join] | Required (lower and upper bound)[^flink-dsjoin] | Required on both sides[^flink-sqljoin] | None[^flink-sqljoin] |
+| Can state grow without limit? | Yes, for an inner join without watermarks and a time constraint[^ss-inner] | No; the time bounds are part of the join[^flink-dsjoin] | No; the time condition is required[^flink-sqljoin] | Yes, unless a state TTL is configured[^flink-sqljoin] |
+
+## See also
+
+- [Stream-static join](/wiki/Stream-static_join)
+- [Watermark](/wiki/Watermark)
+- [State store](/wiki/State_store)
+- [Stateful stream processing](/wiki/Stateful_stream_processing)
+- [Output mode](/wiki/Output_mode)
+
+## References
+
+[^ss-join]: [Structured Streaming: Stream-stream Joins (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#stream-stream-joins). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-joinops]: [Structured Streaming: Join Operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#join-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-inner]: [Structured Streaming: Inner Joins with optional Watermarking (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#inner-joins-with-optional-watermarking). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-matrix]: [Structured Streaming: Support matrix for joins in streaming queries (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-changes]: [Structured Streaming: Recovery Semantics after Changes in a Streaming Query (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#recovery-semantics-after-changes-in-a-streaming-query). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-outer]: [Structured Streaming: Outer Joins with Watermarking (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#outer-joins-with-watermarking). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-dsjoin]: [Joining (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/dev/datastream/operators/joining/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-sqljoin]: [Joins (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/sql/reference/queries/joins/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^kstreams]: [Kafka Streams DSL (Apache Kafka 4.4)](https://kafka.apache.org/44/streams/developer-guide/dsl-api/). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,93 @@
+---
+title: "Arrow-optimized Python UDF"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Arrow Python UDF, `useArrow=True` UDF</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 3.5.0 (SPARK-40307); default since Spark 4.2.0</Field>
+  <Field name="key_parts">`udf(useArrow=...)`, `spark.sql.execution.pythonUDF.arrow.enabled`, Arrow record batches, Python worker</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (PySpark)</Field>
+  <Field name="related">[User-defined function (Spark)](/wiki/User-defined_function_(Spark)), [Pandas UDF](/wiki/Pandas_UDF), [Apache Arrow](/wiki/Apache_Arrow)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SQLConf.scala, python/pyspark/sql/functions/builtin.py, the "Apache Arrow in PySpark" tutorial, the PySpark UDF user guide, the PySpark migration guide), the Spark 3.5.0, 4.0.0 and 4.2.0 release notes and the 2023 Databricks blog post on the feature</Verified>
+
+In PySpark, an **Arrow-optimized Python UDF** is a regular row-at-a-time Python [user-defined function](/wiki/User-defined_function_(Spark)) whose input and output move between the JVM and the Python worker as [Apache Arrow](/wiki/Apache_Arrow) batches instead of pickled Python objects.[^arrow] The function code is the same as for a pickled UDF; only the transfer and the type coercion rules change.[^arrow] [Apache Spark](/wiki/Apache_Spark) introduced Arrow-optimized Python UDFs in version 3.5.0 and made them the default for `pyspark.sql.functions.udf` in version 4.2.0.[^r350][^upgrade]
+
+## What changed compared with pickled Python UDFs?
+
+A pickled Python UDF serializes every row with cloudpickle on its way to and from the Python worker, and the PySpark user guide says this causes performance bottlenecks with large inputs and outputs.[^guide] An Arrow-optimized Python UDF still calls the function once per row, but Spark ships the rows in Arrow batches, a columnar format shared by the JVM and Python.[^arrow][^guide]
+
+|  | Arrow-optimized Python UDF | Pickled Python UDF |
+| --- | --- | --- |
+| Serialization between JVM and Python | Apache Arrow batches | Pickle (cloudpickle) |
+| Function receives | Python objects, one row per call | Python objects, one row per call |
+| Type coercion of results | Arrow type system; errors on unsafe conversions since Spark 4.1 | Falls back to `None` on many type mismatches |
+| Default in Spark 4.3.0 | Yes (since 4.2.0) | No; set `useArrow=False` or the configuration to `false` |
+
+Sources for the table: the PySpark Arrow guide and the migration guide.[^arrow][^upgrade]
+
+In a Databricks benchmark for Spark 3.5, an Arrow-optimized Python UDF ran about 1.6 times faster than a pickled Python UDF for a single transformation, and about 1.9 times faster when UDFs were chained on a 32 GB dataset, on a cluster of three workers with 16 vCPUs and 122 GiB each.[^blog]
+
+## How is Arrow optimization turned on or off?
+
+The `useArrow` argument of `pyspark.sql.functions.udf` controls a single UDF. When `useArrow` is not set (`None`), the session configuration `spark.sql.execution.pythonUDF.arrow.enabled` decides.[^arrow][^builtin]
+
+In Spark 4.3.0, `spark.sql.execution.pythonUDF.arrow.enabled` defaults to `true`, and the optimization applies only when the function takes at least one argument.[^sqlconf] The default changed to `true` in Spark 4.2.0 (SPARK-54555); before that, Arrow optimization had to be requested explicitly.[^upgrade][^r420]
+
+```python
+from pyspark.sql.functions import udf
+
+@udf(returnType="int")                  # Arrow-optimized by default in Spark 4.2+
+def slen(s: str) -> int:
+    return len(s)
+
+@udf(returnType="int", useArrow=False)  # pickled Python UDF
+def slen_pickled(s: str) -> int:
+    return len(s)
+
+# Restore pickled UDFs for every UDF in the session that does not set useArrow:
+spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+```
+
+## How does type coercion differ?
+
+Type coercion matters when the Python value a UDF returns does not match its declared return type. The PySpark guide says pickled UDFs often fall back to `None` on a mismatch, which can lose data silently, and that converting dates, datetimes and tuples to strings can give ambiguous results; Arrow-optimized UDFs use Arrow's type system to make the coercion consistent.[^arrow] The full coercion tables are in the pull request that the guide links (apache/spark#41706).[^arrow]
+
+Several behaviour changes in Spark 4.x affect Arrow-optimized UDFs:[^upgrade]
+- **Spark 4.1** removed an unnecessary conversion to pandas objects in the serializer, which changes coercion when the output type differs from the declared schema. `spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled=true` restores the old behaviour.
+- **Spark 4.1** supports user-defined types (UDTs) as input and output instead of falling back to a pickled UDF; `spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT=true` restores the fallback.
+- **Spark 4.1** turned on `spark.sql.execution.pandas.convertToArrowArraySafely` by default, so integer overflow, floating point truncation and loss of precision in returned data raise errors.
+- **Spark 4.2** made Arrow optimization the default, as described above.
+
+## Other settings
+
+`spark.sql.execution.pythonUDF.arrow.concurrency.level`, added in Spark 4.0.0 (SPARK-50446), runs an Arrow-optimized Python UDF with more than one level of concurrency, which the configuration description says can help UDFs that do a lot of I/O. It has no default and must be greater than 1 when set.[^sqlconf][^n1]
+
+The Arrow batch size is set by `spark.sql.execution.arrow.maxRecordsPerBatch`, default 10,000 rows.[^arrow]
+
+## Arrow-optimized Python UDF vs pandas UDF and Arrow UDF
+
+An Arrow-optimized Python UDF changes only the transfer; the function still handles one row at a time. A [Pandas UDF](/wiki/Pandas_UDF) or an Arrow UDF (`arrow_udf`, Spark 4.1.0 and later) is vectorized: the function receives a whole batch as pandas or PyArrow objects.[^guide] Python UDTFs have the same switch, `spark.sql.execution.pythonUDTF.arrow.enabled`, which also defaults to `true` since Spark 4.2; see [Python UDTF](/wiki/Python_UDTF).[^upgrade]
+
+## See also
+
+- [User-defined function (Spark)](/wiki/User-defined_function_(Spark))
+- [Pandas UDF](/wiki/Pandas_UDF)
+- [Python UDTF](/wiki/Python_UDTF)
+- [Apache Arrow](/wiki/Apache_Arrow)
+- [Spark Connect](/wiki/Spark_Connect)
+
+## References
+
+[^arrow]: [Apache Arrow in PySpark (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/tutorial/sql/arrow_pandas.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^upgrade]: [Upgrading PySpark (PySpark 4.3.0 migration guide)](https://spark.apache.org/docs/4.3.0/api/python/migration_guide/pyspark_upgrade.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^guide]: [Chapter 5: Unleashing UDFs & UDTFs (PySpark 4.3.0 user guide)](https://spark.apache.org/docs/4.3.0/api/python/user_guide/udfandudtf.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^blog]: [Arrow-optimized Python UDFs in Apache Spark 3.5](https://www.databricks.com/blog/arrow-optimized-python-udfs-apache-sparktm-35). *Databricks*, 2023-11-06. Retrieved 2026-11-23.
+[^builtin]: [python/pyspark/sql/functions/builtin.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,96 @@
+---
+title: "GPU acceleration in Spark"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">GPU-accelerated Spark, Spark on GPUs</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 3.0 (accelerator-aware scheduling)</Field>
+  <Field name="key_parts">GPU resource scheduling, SQL plugins, GPU machine learning libraries</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), NVIDIA cuDF plugin for Apache Spark (formerly RAPIDS Accelerator), [Apache Gluten](/wiki/Apache_Gluten), cuML Spark</Field>
+  <Field name="related">[Spark resource profiles](/wiki/Spark_resource_profiles), [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)), [Velox](/wiki/Velox)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/configuration.md, python/pyspark/ml/torch/distributor.py), the NVIDIA cuDF plugin for Apache Spark download, configuration, supported operators, FAQ and getting-started pages and its v26.10.0 GitHub release, the apache/gluten README and VeloxGPU.md on the main branch, and the NVIDIA/cuml-spark repository</Verified>
+
+**GPU acceleration in Spark** is the use of graphics processing units (GPUs) to run parts of an [Apache Spark](/wiki/Apache_Spark) application, either by scheduling GPUs to tasks that use them directly (for example deep learning training) or by replacing Spark SQL operators with GPU implementations. Apache Spark itself provides the first part: since Spark 3.0, its scheduler can request GPUs for executors and assign GPU addresses to tasks.[^r300][^conf] Running Spark SQL and DataFrame operators on a GPU needs a plugin such as the NVIDIA cuDF plugin for Apache Spark, formerly called the RAPIDS Accelerator for Apache Spark.[^dl]
+
+## Comparison of GPU options for Spark
+
+|  | Apache Spark GPU scheduling | NVIDIA cuDF plugin for Apache Spark | Apache Gluten with Velox cuDF | cuML Spark |
+| --- | --- | --- | --- | --- |
+| What runs on the GPU | User code that reads the GPU addresses Spark assigns (RDD functions, pandas UDFs, ML training)[^conf] | Supported Spark SQL and DataFrame operators, file scans and writes[^overview] | Velox plan nodes converted to cuDF operators[^glutengpu] | PySpark ML algorithms backed by the cuML library[^cumlspark] |
+| How it is enabled | `spark.executor.resource.gpu.amount`, `spark.task.resource.gpu.amount`, a discovery script, or a [resource profile](/wiki/Spark_resource_profiles)[^conf] | `spark.plugins=com.nvidia.spark.SQLPlugin` plus the `rapids-4-spark` jar[^onprem][^dl] | `spark.gluten.sql.columnar.cudf=true` in a GPU build of Gluten[^glutengpu] | Change the import, for example `spark_rapids_ml.feature.PCA` in place of `pyspark.ml.feature.PCA`[^cumlspark] |
+| Unsupported work | Not applicable; Spark does not use the GPU itself[^conf] | Falls back to the Spark CPU implementation; RDD operations are not accelerated[^overview] | Falls back to CPU operators, with row and columnar conversion[^glutengpu] | Algorithms not in its list are not provided[^cumlspark] |
+| Status | Part of Apache Spark since 3.0.0[^r300] | Release v26.10.0, published 2026-11-05[^rel] | Experimental; documented on the main branch, not in the v1.7.0 release[^glutengpu] | Release v26.06.0, published 2026-07-22[^cumlrel] |
+| Spark versions | 3.0.0 and later[^r300] | 3.3.0 to 4.2.0 in release v26.10.0; 4.3.0 is not listed[^dl] | Same as Gluten on CPU[^glutengpu] | Not stated in the README |
+| License | Apache License 2.0[^sparklic] | Source code Apache 2.0; documentation CC BY 4.0[^lic] | Apache License 2.0[^glutenreadme] | Apache License 2.0[^cumlspark] |
+
+## How does Apache Spark schedule GPUs?
+
+Apache Spark schedules GPUs as a custom resource named `gpu`. An application sets `spark.executor.resource.gpu.amount` (default 0) for GPUs per executor and `spark.task.resource.gpu.amount` for GPUs per task; fractional task amounts let several tasks share one GPU. On YARN and Kubernetes, the executor also needs `spark.executor.resource.gpu.discoveryScript`, and Kubernetes needs `spark.executor.resource.gpu.vendor`, for example `nvidia.com`.[^conf] Spark then assigns GPU addresses to each task, which user code reads with `TaskContext.get().resources()`.[^conf] Since Spark 3.1, [Spark resource profiles](/wiki/Spark_resource_profiles) let one stage request GPU executors while other stages use CPU-only executors.[^conf]
+
+Spark's own GPU support is used by machine learning code inside Spark. `pyspark.ml.torch.distributor.TorchDistributor`, added in Spark 3.4.0, runs distributed PyTorch training on Spark; with `use_gpu=True` (the default) on a cluster it requires `spark.task.resource.gpu.amount` of at least 1.[^torch]
+
+## What is the NVIDIA cuDF plugin for Apache Spark?
+
+The NVIDIA cuDF plugin for Apache Spark is a set of Spark plugins, built on the cuDF library and UCX, that run DataFrame and SQL processing on NVIDIA GPUs. NVIDIA renamed it from the RAPIDS Accelerator for Apache Spark; the GitHub repository moved from `NVIDIA/spark-rapids` to `NVIDIA/cudf-spark`, and the artifact name `rapids-4-spark` stays the same for now.[^dl][^readme] The plugin hooks into Spark at the Catalyst level, after the language APIs have been converted to a DataFrame plan, so it applies to PySpark, Scala, Java and SQL alike.[^faq]
+
+The cuDF plugin is turned on with `spark.plugins=com.nvidia.spark.SQLPlugin`. NVIDIA's on-premise example combines it with Spark's own GPU settings, `spark.executor.resource.gpu.amount=1` and `spark.task.resource.gpu.amount=0.25`.[^onprem] The getting-started guide asks for Apache Spark 3.3 or later and one GPU per executor.[^overview]
+
+```bash
+spark-submit \
+  --jars rapids-4-spark_2.13-26.10.0.jar \
+  --conf spark.plugins=com.nvidia.spark.SQLPlugin \
+  --conf spark.executor.resource.gpu.amount=1 \
+  --conf spark.task.resource.gpu.amount=0.25 \
+  --conf spark.rapids.sql.explain=NOT_ON_GPU \
+  app.py
+```
+
+### Which operators and formats run on the GPU?
+
+The cuDF plugin replaces physical operators such as `FileSourceScanExec`, `FilterExec`, `ProjectExec`, `HashAggregateExec`, `SortExec`, `WindowExec`, `ShuffleExchangeExec`, `BroadcastHashJoinExec`, `ShuffledHashJoinExec` and `SortMergeJoinExec`, and pandas UDF operators such as `MapInPandasExec`.[^ops] Its supported-operators page lists GPU reads for Avro, CSV, [Delta Lake](/wiki/Delta_Lake), Hive text, [Apache Iceberg](/wiki/Apache_Iceberg), JSON, ORC and [Apache Parquet](/wiki/Apache_Parquet), and GPU writes for Delta Lake, Hive text, Iceberg, ORC and Parquet. Timestamps are supported only in the UTC time zone.[^ops]
+
+The cuDF plugin's FAQ states that only a limited set of SQL and DataFrame operations is supported; some MLlib functions such as PCA are accelerated, while GraphX and RDD code are not. Dataset operations that take Scala or Java functions, such as `flatMap` or `foreachPartition`, still run correctly but mostly on the CPU.[^faq]
+
+### What happens when an operator is not supported?
+
+When the cuDF plugin cannot run an operation on the GPU, that part of the plan runs on the Spark CPU implementation, so the query still completes.[^overview] The plugin decides this with rules, not the Spark scheduler.[^faq] `spark.rapids.sql.enabled` (default true) turns GPU SQL on or off, and `spark.rapids.sql.explain` logs the parts of a plan that were not placed on the GPU, for example with the value `NOT_ON_GPU`.[^configs]
+
+## What other GPU options exist for Spark?
+
+[Apache Gluten](/wiki/Apache_Gluten), a project that offloads Spark SQL execution to native engines such as [Velox](/wiki/Velox), documents an experimental GPU path on its main branch: with `spark.gluten.sql.columnar.cudf=true`, Velox plan nodes are converted to GPU operators built on cuDF, and unsupported operators fall back to the CPU.[^glutengpu] See [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)) for CPU-based native engines.
+
+cuML Spark (repository `NVIDIA/cuml-spark`) provides PySpark ML compatible algorithms on GPUs, including KMeans, LinearRegression, LogisticRegression, PCA, RandomForestClassifier and UMAP.[^cumlspark]
+
+## See also
+
+- [Spark resource profiles](/wiki/Spark_resource_profiles)
+- [Executor](/wiki/Executor)
+- [Apache Gluten](/wiki/Apache_Gluten)
+- [Apache DataFusion Comet](/wiki/Apache_DataFusion_Comet)
+- [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))
+- [Velox](/wiki/Velox)
+- [Project Tungsten](/wiki/Project_Tungsten)
+
+## References
+
+[^r300]: [Spark Release 3.0.0](https://spark.apache.org/releases/spark-release-3-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^conf]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dl]: [Download (NVIDIA cuDF plugin for Apache Spark)](https://nvidia.github.io/cudf-spark/docs/download.html). *NVIDIA*. Retrieved 2026-11-23.
+[^overview]: [Getting started overview (cuDF plugin for Apache Spark User Guide)](https://docs.nvidia.com/cudf-spark/latest/getting-started/overview.html). *NVIDIA*. Retrieved 2026-11-23.
+[^glutengpu]: [GPU Acceleration in Velox/Gluten (VeloxGPU.md, main branch)](https://github.com/apache/gluten/blob/main/docs/backends/velox/get-started/VeloxGPU.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^cumlspark]: [NVIDIA/cuml-spark](https://github.com/NVIDIA/cuml-spark). *GitHub*. Retrieved 2026-11-23.
+[^onprem]: [Getting started on-prem (cuDF plugin for Apache Spark User Guide)](https://docs.nvidia.com/cudf-spark/latest/getting-started/on-premise.html). *NVIDIA*. Retrieved 2026-11-23.
+[^rel]: [v26.10.0 release](https://github.com/NVIDIA/cudf-spark/releases/tag/v26.10.0). *GitHub*. Retrieved 2026-11-23.
+[^cumlrel]: [Releases, NVIDIA/cuml-spark](https://github.com/NVIDIA/cuml-spark/releases). *GitHub*. Retrieved 2026-11-23.
+[^sparklic]: [LICENSE (apache/spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/LICENSE). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^lic]: [LICENSE, NVIDIA/cudf-spark](https://github.com/NVIDIA/cudf-spark/blob/main/LICENSE). *GitHub*. Retrieved 2026-11-23.
+[^glutenreadme]: [Apache Gluten README](https://github.com/apache/gluten/blob/main/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^torch]: [pyspark/ml/torch/distributor.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/ml/torch/distributor.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^readme]: [NVIDIA cuDF plugin for Apache Spark README](https://github.com/NVIDIA/cudf-spark/blob/main/README.md). *GitHub*. Retrieved 2026-11-23.
+[^faq]: [Frequently Asked Questions (cuDF plugin for Apache Spark User Guide)](https://docs.nvidia.com/cudf-spark/latest/faq.html). *NVIDIA*. Retrieved 2026-11-23.
+[^ops]: [Supported Operators (NVIDIA cuDF plugin for Apache Spark)](https://nvidia.github.io/cudf-spark/docs/supported_ops.html). *NVIDIA*. Retrieved 2026-11-23.
+[^configs]: [Configuration (NVIDIA cuDF plugin for Apache Spark)](https://nvidia.github.io/cudf-spark/docs/configs.html). *NVIDIA*. Retrieved 2026-11-23.

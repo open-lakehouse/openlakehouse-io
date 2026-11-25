@@ -78,6 +78,16 @@ Length: say what the reader needs, then stop. A good first version is 400 to 1,2
 - Each article goes in one or more of these `categories`: Concepts, Table formats, Catalogs, Query engines, Pipelines and orchestration, AI agents, Object storage, plus a project category where it exists (Apache Spark). Concepts and Glossary terms put the article in the [glossary](/wiki/Open_Lakehouse_Wiki:Glossary).
 - Add new articles to the navigation box in `src/content/wiki-navbox.ts`.
 
+## Biographies
+
+Pages about a person associated with open lakehouse technologies.
+
+- **Path.** `src/content/wiki/articles/Given_Name_Family_Name.mdx`; the title is the person's common name.
+- **Top of the page, in order:** `<Infobox type="person">` (fields: `known_for`, `role`, `affiliations`, `projects`, `nationality`, `website`), then `<Verified>`, then a lead sentence that starts with the bold name and says what the person is known for: "**Jane Doe** is a software engineer known for ...".
+- **Sections:** lead; `## Career and work`; `## Contributions to the open lakehouse`; `## Selected works`; `## See also`; `## References`. Put the page in the `People` category.
+- **Sources.** Every checkable fact needs a footnote citation. No fact from memory.
+- **Living persons.** Take extra care: include only sourced, verifiable claims. No speculation, no private details, no unsourced career dates. Keep the tone neutral and third person. If a fact cannot be confirmed from a primary or reputable source, leave it out.
+
 ## Files and workflow
 
 - One file per page: `src/content/wiki/articles/Title_With_Underscores.mdx`. Category pages are in `categories/`, pages about the wiki itself in `project/`.

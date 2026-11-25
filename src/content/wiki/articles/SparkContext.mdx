@@ -1,0 +1,72 @@
+---
+title: "SparkContext"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">`sc` (the variable name in shells)</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Connection to the cluster manager, executors, DAG and task schedulers, RDD API, broadcast variables, accumulators, job groups and tags</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (Spark Classic only)</Field>
+  <Field name="related">[SparkSession](/wiki/SparkSession), [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark)), [RDD](/wiki/RDD), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (core SparkContext.scala, the Spark 2.0.0 release notes, docs/cluster-overview.md, docs/spark-connect-overview.md, docs/app-dev-spark-connect.md, python/pyspark/sql/connect/session.py, python/pyspark/sql/session.py, sql/api SparkSession.scala)</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **SparkContext** is the object in the [driver](/wiki/Driver_(Apache_Spark)) that represents the connection to a Spark cluster; it acquires [executors](/wiki/Executor), schedules work on them and is used to create [RDDs](/wiki/RDD), accumulators and broadcast variables.[^sc] The source code still calls it the "main entry point for Spark functionality", but since Spark 2.0.0 DataFrame and SQL code starts from a [SparkSession](/wiki/SparkSession), which creates or reuses a SparkContext underneath.[^sc][^r200] In Spark 4 the SparkContext still runs every classic application, but [Spark Connect](/wiki/Spark_Connect) clients cannot use it.
+
+## What does SparkContext still do in Spark 4?
+
+SparkContext remains the core of a Spark Classic application in Spark 4.3.0. The cluster overview describes Spark applications as independent sets of processes coordinated by the SparkContext in the driver program: it connects to the cluster manager (standalone, YARN or Kubernetes), acquires executors, sends them the application code and then sends them tasks.[^cluster] DataFrame and SQL queries are planned by the [SparkSession](/wiki/SparkSession) and then run as jobs submitted through this SparkContext.
+
+Only one SparkContext may be active per JVM. Creating a second one while the first is running fails with "Only one SparkContext should be running in this JVM (see SPARK-2243)"; the first must be stopped with `stop()` before a new one is made.[^sc] A side effect of this design is isolation: each application has its own executors, so two applications cannot share in-memory data except through external storage.[^cluster]
+
+The public API of SparkContext in Spark 4.3.0 still covers these areas:[^sc]
+
+| Area | Examples of SparkContext methods |
+| --- | --- |
+| Creating RDDs | `parallelize`, `textFile`, `runJob` |
+| Shared variables | `broadcast`, `longAccumulator` |
+| Shipping dependencies | `addFile`, `addJar` |
+| Grouping and cancelling jobs | `setJobGroup`, `cancelJobGroup`, `setLocalProperty` |
+| Inspecting the application | `applicationId`, `uiWebUrl`, `statusTracker`, `defaultParallelism`, `setLogLevel` |
+| Fault tolerance for long lineages | `setCheckpointDir` |
+
+In PySpark Classic, `spark.sparkContext` returns the SparkContext behind a session. Code that uses only DataFrames and SQL seldom needs it; code that uses the RDD API, accumulators or `sc.setJobGroup` does.
+
+## Why do Spark Connect clients not have a SparkContext?
+
+A Spark Connect client does not run in the same process as the Spark driver. It builds logical plans and sends them to a Spark Connect server, which runs the driver and its SparkContext. The Spark Connect overview lists two consequences: the protocol, which is built on logical plans, does not support all of Spark's execution APIs, "most importantly RDDs"; and the client, which gets a session rather than the whole application, has no access to the static Spark configuration or the SparkContext.[^connect]
+
+The reason is that one server's SparkContext serves many client sessions. The overview explains that a Connect client gets a session-based interface and has no access to properties that change the environment for all connected clients, the SparkContext above all.[^connect] In PySpark 4.3.0, reading `spark.sparkContext` on a Connect session raises `JVM_ATTRIBUTE_NOT_SUPPORTED`, and the Scala API marks `SparkSession.sparkContext` as `@ClassicOnly`.[^connsession][^scalasession]
+
+## What replaces SparkContext calls in Spark Connect?
+
+The Spark Connect application guide says that RDDs can no longer be used directly from Spark Connect clients, and that alternatives for missing RDD functionality are provided in the higher-level APIs.[^appdev] For common SparkContext calls, the [SparkSession](/wiki/SparkSession) has methods that work over Spark Connect:
+
+| SparkContext usage | Session-level alternative |
+| --- | --- |
+| `sc.parallelize(data)` | `spark.createDataFrame(data)` or `spark.range(n)`, which build a DataFrame instead of an RDD[^pysession] |
+| `sc.addFile`, `sc.addPyFile` | `spark.addArtifacts(...)`[^pysession] |
+| `sc.setJobGroup`, `sc.cancelJobGroup` | `spark.addTag(tag)`, then `spark.interruptTag(tag)` or `spark.interruptAll()`[^pysession] |
+
+The session-level methods in this table work in both Connect and Classic sessions since Spark 4.0.0, so code that uses them runs in either mode.[^pysession]
+
+## See also
+
+- [SparkSession](/wiki/SparkSession)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))
+- [RDD](/wiki/RDD)
+- [Job, stage and task](/wiki/Job,_stage_and_task)
+
+## References
+
+[^sc]: [SparkContext.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/SparkContext.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r200]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^cluster]: [Cluster Mode Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/cluster-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connsession]: [connect/session.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/session.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scalasession]: [SparkSession.scala, sql/api (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/SparkSession.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^appdev]: [Application Development with Spark Connect (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/app-dev-spark-connect.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pysession]: [session.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/session.py). *Apache Software Foundation*. Retrieved 2026-11-23.

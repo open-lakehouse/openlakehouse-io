@@ -13,5 +13,6 @@ export const NAVBOX: { group: string; links: [string, string][] }[] = [
   { group: "Streaming", links: [["Stream processing", "Stream processing"], ["Streaming lakehouse", "Streaming lakehouse"], ["Watermark", "Watermark"], ["Exactly-once semantics", "Exactly-once semantics"], ["Trigger (Structured Streaming)", "Trigger"], ["TransformWithState", "transformWithState"], ["MapGroupsWithState and flatMapGroupsWithState", "mapGroupsWithState"]] },
   { group: "Spark APIs and legacy", links: [["RDD", "RDD"], ["MLlib", "MLlib"], ["Spark.mllib (RDD-based API)", "spark.mllib"], ["SparkR", "SparkR"], ["Project Tungsten", "Project Tungsten"], ["GraphFrames", "GraphFrames"], ["GraphX", "GraphX"], ["Spark Streaming (DStreams)", "Spark Streaming (DStreams)"], ["Hive on Spark", "Hive on Spark"], ["Apache Mesos support in Spark", "Mesos support"], ["Spark 3 to Spark 4 migration", "Spark 3 to Spark 4 migration"], ["Scala 2.12 and 2.13 in Spark", "Scala 2.12 and 2.13 in Spark"], ["Category:Deprecated", "All deprecated"]] },
   { group: "Storage and licensing", links: [["MinIO", "MinIO"], ["Business Source License", "Business Source License"]] },
+  { group: "People", links: [["Category:People", "People"]] },
   { group: "Reference", links: [["Open Lakehouse Wiki:Glossary", "Glossary"], ["Category:Glossary terms", "All concept pages"]] },
 ];

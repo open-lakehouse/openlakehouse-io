@@ -1,0 +1,99 @@
+---
+title: "Apache Celeborn"
+categories: ["Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) (originally Alibaba)</Field>
+  <Field name="latest_release">0.7.0</Field>
+  <Field name="latest_release_date">2026-08-16</Field>
+  <Field name="written_in">Java, Scala</Field>
+  <Field name="type">[Remote shuffle service](/wiki/Remote_shuffle_service)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[celeborn.apache.org](https://celeborn.apache.org)</Field>
+  <Field name="repo">[github.com/apache/celeborn](https://github.com/apache/celeborn)</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Apache Flink](/wiki/Apache_Flink), [Apache Uniffle](/wiki/Apache_Uniffle), [Shuffle](/wiki/Shuffle)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v0.7.0 tag of apache/celeborn (README.md, docs/README.md, docs/deploy.md, docs/deploy_on_k8s.md, docs/configuration/client.md, docs/decommissioning.md), the Celeborn download page, the Celeborn incubation status page and proposal, and the v4.3.0 tag of apache/spark</Verified>
+
+**Apache Celeborn** is an open source [remote shuffle service](/wiki/Remote_shuffle_service): a cluster of master and worker servers that stores and serves the intermediate [shuffle](/wiki/Shuffle) data of [Apache Spark](/wiki/Apache_Spark), [Apache Flink](/wiki/Apache_Flink) and Hadoop MapReduce jobs, so that the data does not live on the compute nodes' local disks. The project describes itself as an intermediate data service whose current focus is shuffle data.[^readme] Celeborn is a top-level project of the Apache Software Foundation.
+
+## History
+
+Celeborn was started at Alibaba in 2020 under the name "RemoteShuffleService" and open sourced in 2021.[^proposal] It entered the Apache Incubator on 2022-10-18, made its first Apache release (0.2.0-incubating) on 2023-03-01, and graduated to a top-level project on 2024-03-21.[^incubator]
+
+The latest release is 0.7.0, published on 2026-08-16.[^download] In 0.3.0 the Spark shuffle manager class was renamed from `org.apache.spark.shuffle.celeborn.RssShuffleManager` to `org.apache.spark.shuffle.celeborn.SparkShuffleManager`.[^readme]
+
+## Architecture
+
+A Celeborn cluster has three components:[^readme]
+- **Master** manages resources and keeps shared state consistent across master nodes with the Raft protocol.
+- **Worker** handles read and write requests and merges the data for each reducer.
+- **Client**, including the **LifecycleManager**, which keeps the metadata of each shuffle and runs inside the Spark driver.
+
+Celeborn balances load with **slots**, a logical count of how many partitions a worker can hold. A worker's slot count is its total usable disk size divided by the average shuffle file size, and the master spreads partitions across workers by tracking slot usage.[^readme]
+
+## How does a shuffle work with Celeborn?
+
+In a Celeborn shuffle, map tasks push their data to workers instead of writing it to local disk. The README describes the steps: mappers register the shuffle with the LifecycleManager, which requests slots from the master; workers reserve the slots and create files; mappers push data to the assigned workers, which merge it, replicate it to a peer and flush it to disk; once all mappers finish, the workers commit the files, and reducers ask for file locations and read the merged data.[^readme]
+
+Server-side replication is controlled by `celeborn.client.push.replicate.enabled` (default false). The deployment guide recommends turning it on, except when there is only one worker or when HDFS is the storage.[^readme][^clientconf]
+
+## Which engines does Celeborn support?
+
+The 0.7.0 release supports:[^readme][^quickstart]
+- **[Apache Spark](/wiki/Apache_Spark)** 3.0 through 4.2. Spark 4.x clients need Java 17 and Scala 2.13.
+- **[Apache Flink](/wiki/Apache_Flink)** 1.18 through 2.3, for batch jobs only. Flink loads Celeborn through its `shuffle-service-factory.class` setting.
+- **Hadoop MapReduce** 3.
+- **Apache Tez**, with a client the README marks as experimental.
+
+## How do you use Celeborn with Apache Spark?
+
+A Spark application uses Celeborn by putting the Celeborn client jar on the classpath and replacing the shuffle manager. The deployment guide's settings include:[^readme]
+
+```properties
+spark.shuffle.manager               org.apache.spark.shuffle.celeborn.SparkShuffleManager
+spark.serializer                    org.apache.spark.serializer.KryoSerializer
+spark.celeborn.master.endpoints     clb-1:9097,clb-2:9097,clb-3:9097
+spark.shuffle.service.enabled       false
+# Dynamic allocation without the external shuffle service (Spark 3.5.0 or later)
+spark.shuffle.sort.io.plugin.class  org.apache.spark.shuffle.celeborn.CelebornShuffleDataIO
+spark.dynamicAllocation.shuffleTracking.enabled false
+```
+
+Spark selects the shuffle implementation with `spark.shuffle.manager` and the shuffle storage implementation with `spark.shuffle.sort.io.plugin.class`; Celeborn plugs into both.[^sparkconf] A Kryo serializer is required because the Java serializer does not support relocation of serialized objects. The guide also recommends keeping [AQE](/wiki/Adaptive_query_execution) and skew-join handling on, and setting `spark.sql.adaptive.localShuffleReader.enabled` to false.[^readme]
+
+## How is Celeborn deployed?
+
+Celeborn runs as its own cluster, separate from the compute engine. On hosts, operators start masters and workers with `sbin/start-master.sh` and `sbin/start-worker.sh`; for high availability, several masters form a Raft group.[^deploy] On [Kubernetes](/wiki/Kubernetes), the project provides a Helm chart.[^k8s]
+
+Workers store shuffle data on local disks or remote storage. `celeborn.storage.availableTypes` accepts `MEMORY`, `HDD`, `SSD`, `HDFS`, `S3` and `OSS`, with `HDD` as the default.[^clientconf] Workers can be decommissioned through a REST API, which lets an operator drain a worker before removing it.[^n1]
+
+## Celeborn compared with Apache Uniffle
+
+<Hatnote>Main article: [Remote shuffle service](/wiki/Remote_shuffle_service)</Hatnote>
+
+[Apache Uniffle](/wiki/Apache_Uniffle) is the other remote shuffle service at the ASF. Both push map output to dedicated servers and plug into Spark through `spark.shuffle.manager`. Celeborn's 0.7.0 release covers Spark up to 4.2 and Flink batch jobs, while Uniffle 0.10.0 lists Spark 2.3 to 3.5, MapReduce and Tez.[^readme][^n2] The [Remote shuffle service](/wiki/Remote_shuffle_service) article has a full comparison table.
+
+## See also
+
+- [Remote shuffle service](/wiki/Remote_shuffle_service)
+- [Apache Uniffle](/wiki/Apache_Uniffle)
+- [Shuffle](/wiki/Shuffle)
+- [Executor](/wiki/Executor)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^readme]: [Apache Celeborn README (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^proposal]: [Celeborn Proposal](https://cwiki.apache.org/confluence/display/INCUBATOR/CelebornProposal). *Apache Incubator*. Retrieved 2026-11-23.
+[^incubator]: [Celeborn Project Incubation Status](https://incubator.apache.org/projects/celeborn.html). *Apache Incubator*. Retrieved 2026-11-23.
+[^download]: [Download](https://celeborn.apache.org/download/). *Apache Celeborn*. Retrieved 2026-11-23.
+[^clientconf]: [Client configuration (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/docs/configuration/client.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^quickstart]: [Celeborn quick start (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/docs/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sparkconf]: [config/package.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^deploy]: [Deploy Celeborn (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/docs/deploy.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8s]: [Deploy Celeborn on Kubernetes (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/docs/deploy_on_k8s.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Decommissioning (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/docs/decommissioning.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [Apache Uniffle README (v0.10.0)](https://github.com/apache/uniffle/blob/v0.10.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.

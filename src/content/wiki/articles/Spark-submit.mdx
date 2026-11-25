@@ -1,0 +1,118 @@
+---
+title: "Spark-submit"
+displayTitle: "spark-submit"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software" name="spark-submit">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 1.0.0</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Shell script, Scala</Field>
+  <Field name="type">Application launcher for Apache Spark</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[Submitting Applications](https://spark.apache.org/docs/4.3.0/submitting-applications.html)</Field>
+  <Field name="repo">[github.com/apache/spark (core/.../deploy/SparkSubmit.scala)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/SparkSubmit.scala)</Field>
+  <Field name="related">[Spark configuration precedence](/wiki/Spark_configuration_precedence), [Spark on YARN](/wiki/Spark_on_YARN), [Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/submitting-applications.md, docs/configuration.md, docs/spark-standalone.md, docs/running-on-yarn.md, SparkSubmitArguments.scala and JavaUtils.java), SPARK-48392 and the Spark 1.0.0 release notes</Verified>
+
+**spark-submit** is the command-line script in the `bin` directory of [Apache Spark](/wiki/Apache_Spark) that launches a packaged Spark application (a JAR, a Python file or an R file) on a local machine or on any supported cluster manager through one interface.[^submit] It sets up the classpath with Spark and its dependencies, chooses where the driver runs, ships the application's files to the cluster and passes configuration to the application.[^submit] The `spark-shell`, `pyspark` and `spark-sql` shells and the [Spark Thrift Server](/wiki/Spark_Thrift_Server) start script accept the same options.[^submit][^thrift]
+
+`spark-submit` was introduced in Spark 1.0.0, whose release notes describe it as a new tool for submitting an application to any Spark cluster, including local, [Mesos](/wiki/Apache_Mesos_support_in_Spark) and YARN clusters, through a common process.[^r100]
+
+## How is spark-submit used?
+
+The general form is `spark-submit [options] <app jar | python file | R file> [app arguments]`.[^ssargs] For a Python application, the `.py` file takes the place of the JAR, and extra `.py`, `.zip` or `.egg` files go on the Python path with `--py-files`.[^submit]
+
+```bash
+# A PySpark job on YARN, driver inside the cluster
+./bin/spark-submit \
+  --master yarn \
+  --deploy-mode cluster \
+  --name nightly-etl \
+  --executor-memory 4g \
+  --num-executors 10 \
+  --py-files libs.zip \
+  --conf spark.sql.shuffle.partitions=400 \
+  etl_job.py --date 2026-11-23
+```
+
+Everything after the application file is passed to the application as its own arguments, so Spark options must come before it.[^submit]
+
+## What are the main arguments?
+
+The following options are listed by `spark-submit --help` in Spark 4.3.0.[^ssargs]
+
+| Option | Meaning | Default or scope |
+| --- | --- | --- |
+| `--master` | Master URL: `local[*]`, `spark://host:port`, `yarn` or `k8s://https://host:port` | `local[*]` |
+| `--deploy-mode` | Run the driver in the submitting process (`client`) or on a cluster node (`cluster`) | `client` |
+| `--class` | Main class of a Java or Scala application | Java/Scala only |
+| `--name` | Application name |  |
+| `--conf`, `-c` | Any Spark property as `key=value`; repeat the flag for each property |  |
+| `--properties-file`, `--load-spark-defaults` | Load properties from a file; also load `spark-defaults.conf` | see [Spark configuration precedence](/wiki/Spark_configuration_precedence) |
+| `--jars`, `--packages`, `--repositories`, `--exclude-packages` | JARs, or Maven coordinates resolved with transitive dependencies, for the driver and executor classpaths |  |
+| `--py-files`, `--files`, `--archives` | Python dependencies; files and archives placed in each executor's working directory |  |
+| `--driver-memory`, `--executor-memory` | Driver and executor memory | 1024 MiB and 1 GiB |
+| `--executor-cores` | Cores per executor | 1 on YARN and Kubernetes; all cores of the worker in standalone mode |
+| `--num-executors` | Executors for static allocation | 2; YARN and Kubernetes only |
+| `--total-executor-cores` | Total cores for the application | Standalone only |
+| `--queue` | YARN queue | `default`; YARN only |
+| `--supervise` | Restart the driver if it exits with a non-zero code | Standalone cluster mode only |
+| `--kill`, `--status` | Kill or query a submitted driver by submission ID | Standalone or Kubernetes cluster mode |
+| `--remote` | [Spark Connect](/wiki/Spark_Connect) server URL such as `sc://host:port`; cannot be combined with `--master` or `--deploy-mode` | Spark Connect only |
+| `--verbose` | Print debug output, including where each configuration value came from |  |
+
+The default driver memory comes from the constant `DEFAULT_DRIVER_MEM_MB`, 1024 in Spark 4.3.0.[^n1]
+
+## What is the difference between client and cluster deploy mode?
+
+In **client** mode, the driver runs inside the `spark-submit` process, and the application's input and output are attached to the console. The Spark documentation recommends it when submitting from a gateway machine close to the workers, and for interactive shells.[^submit] In **cluster** mode, the driver is launched on a node inside the cluster; the documentation recommends it when submitting from a machine far from the workers, such as a laptop, to reduce network latency between driver and executors.[^submit] On YARN, cluster mode runs the driver inside the YARN application master, and the client can exit after submission.[^yarn]
+
+The Spark 4.3.0 documentation states that the standalone cluster manager does not support cluster mode for Python applications.[^submit]
+
+## How are dependencies shipped?
+
+The application JAR and any JARs given with `--jars` are transferred to the cluster and put on the driver and executor classpaths. `--jars` takes a comma-separated list and does not expand directories.[^submit] Spark uses the URL scheme to decide how to distribute a file: `file:` paths are served by the driver's file server, `hdfs:`, `http:`, `https:` and `ftp:` are downloaded from the URI, and `local:` means the file already exists at that path on every node.[^submit]
+
+`--packages` takes Maven coordinates in the form `groupId:artifactId:version` and resolves their transitive dependencies from the local Maven repository, Maven Central and any repositories given with `--repositories`.[^ssargs] For example, a [Delta Lake](/wiki/Delta_Lake) or [Apache Iceberg](/wiki/Apache_Iceberg) runtime can be added this way at launch time instead of being bundled into the application JAR.
+
+## What are common mistakes?
+
+- **Options after the application file.** Arguments after the JAR or `.py` file go to the application, not to Spark.[^submit]
+- **Setting driver memory in code in client mode.** In client mode, `spark.driver.memory` set on a `SparkConf` inside the application has no effect, because the driver JVM is already running; use `--driver-memory` or the defaults file.[^config]
+- **Several properties in one `--conf`.** Each property needs its own `--conf` flag, and a value containing spaces must be quoted as `"key=value"`.[^submit]
+- **Local paths in cluster mode.** The application JAR URL must be visible from inside the cluster, for example an `hdfs://` path or a `file://` path present on every node.[^submit]
+- **Bundling Spark into the application JAR.** When building an assembly JAR, Spark and Hadoop should be `provided` dependencies, because the cluster supplies them at runtime.[^submit]
+- **`--properties-file` dropping the defaults.** Since Spark 4.0.0 the `--load-spark-defaults` flag is needed to keep `spark-defaults.conf` when a properties file is given.[^submit][^n2]
+- **Unused JAR copies on standalone workers.** Files and JARs are copied to each executor's working directory; YARN cleans them up automatically, while standalone workers need `spark.worker.cleanup.appDataTtl`.[^submit]
+
+## Is spark-submit still needed with Spark Connect?
+
+A [Spark Connect](/wiki/Spark_Connect) client does not need `spark-submit`: it connects to a running Spark Connect server with a connection string such as `sc://localhost:15002`.[^connect] `spark-submit` still launches classic applications and the servers themselves; `sbin/start-connect-server.sh` starts a Spark Connect server.[^standalone] `spark-submit` also has a `--remote` option for running an application as a Spark Connect client.[^ssargs] On Kubernetes, the [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark) submits applications from a `SparkApplication` resource instead of a manual `spark-submit` call.
+
+## See also
+
+- [Spark configuration precedence](/wiki/Spark_configuration_precedence)
+- [Spark on YARN](/wiki/Spark_on_YARN)
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager)
+- [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark)
+- [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))
+- [Executor](/wiki/Executor)
+
+## References
+
+[^submit]: [Submitting Applications (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/submitting-applications.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^thrift]: [Distributed SQL Engine (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-distributed-sql-engine.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r100]: [Spark Release 1.0.0](https://spark.apache.org/releases/spark-release-1-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ssargs]: [SparkSubmitArguments.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/SparkSubmitArguments.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [JavaUtils.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils-java/src/main/java/org/apache/spark/network/util/JavaUtils.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^yarn]: [Running Spark on YARN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-yarn.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [SPARK-48392: Load spark-defaults.conf when passing configurations to spark-submit through --properties-file](https://issues.apache.org/jira/browse/SPARK-48392). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^standalone]: [Spark Standalone Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-standalone.html). *Apache Software Foundation*. Retrieved 2026-11-23.

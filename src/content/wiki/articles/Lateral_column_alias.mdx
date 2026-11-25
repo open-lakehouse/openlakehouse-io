@@ -1,0 +1,91 @@
+---
+title: "Lateral column alias"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Query engines"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">LCA, reusable column alias, lateral alias reference</Field>
+  <Field name="field">SQL name resolution</Field>
+  <Field name="key_parts">Alias defined earlier in the same SELECT list; resolution after table columns</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (since 3.4.0), Databricks SQL, [DuckDB](/wiki/DuckDB), Snowflake</Field>
+  <Field name="related">[Window functions](/wiki/Window_functions)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-name-resolution.md, SQLConf.scala, error-conditions.json), the Spark 3.4.0 and 3.5.0 release notes, the Databricks name resolution reference, DuckDB 2.0 friendly SQL page, Snowflake SELECT reference, BigQuery query syntax reference and PostgreSQL 19 SELECT reference</Verified>
+
+A **lateral column alias** is a column alias defined in a `SELECT` list that later expressions in the same `SELECT` list can refer to, as in `SELECT price * qty AS total, total * 0.2 AS tax`; [Apache Spark](/wiki/Apache_Spark) supports it since version 3.4.0.[^r340][^nameres] It saves repeating an expression or wrapping the query in a subquery. Several engines, among them BigQuery and PostgreSQL, do not allow it,[^bq][^pg] so the same query can work in one engine and fail in another.
+
+## How does Spark resolve a lateral column alias?
+
+Spark SQL treats lateral column aliasing as one step of its name resolution order. Inside a `SELECT` list, Spark first tries to match an identifier to a column of the tables in the `FROM` clause; only if that fails does it match the leading identifier to a preceding alias in the same `SELECT` list.[^nameres] A real column with the same name therefore wins over an alias. Spark's documentation shows that `SELECT c1 AS a, a + c1 FROM VALUES(2, 3) AS T(c1, a)` returns `2, 5`, because `a` resolves to the table column (3), not to the alias.[^nameres]
+
+If an identifier matches more than one preceding alias, Spark raises `AMBIGUOUS_LATERAL_COLUMN_ALIAS`.[^nameres][^errors] Further parts of a dotted name after the alias are resolved as struct fields or map keys.[^nameres]
+
+The behaviour is controlled by `spark.sql.lateralColumnAlias.enableImplicitResolution`, an internal configuration added in 3.4.0 whose default is `true`.[^sqlconf]
+
+## History in Spark
+
+Spark 3.4.0 added lateral column alias references (SPARK-27561).[^r340] Spark 3.5.0 extended them to aggregate queries (SPARK-41631) and to queries with window functions (SPARK-42217).[^r350] Databricks documents the same rule for Databricks SQL and Databricks Runtime 12.2 LTS and above.[^dbx]
+
+## What are the limits in Spark?
+
+Spark 4.3 rejects some placements of a lateral alias with an `UNSUPPORTED_FEATURE` error. The error conditions name these cases:[^errors]
+- inside the arguments of an aggregate function (`LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC`);
+- inside a window expression (`LATERAL_COLUMN_ALIAS_IN_WINDOW`);
+- inside a generator expression such as `explode` (`LATERAL_COLUMN_ALIAS_IN_GENERATOR`);
+- through `GROUP BY` alias or `GROUP BY ALL` (`LATERAL_COLUMN_ALIAS_IN_GROUP_BY`);
+- in an aggregate query that has both window expressions and a `HAVING` clause (`LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING`).
+
+A lateral alias may refer to the result of an aggregate, as in the second example below; it may not be fed into one.
+
+## Example
+
+Spark SQL, using an alias in a later expression of the same `SELECT` list:
+
+```sql
+SELECT name,
+       salary * 12        AS annual,
+       annual * 0.1       AS bonus
+FROM employees;
+
+-- An alias of an aggregate result, reused in the same SELECT list
+SELECT dept,
+       SUM(salary)        AS total,
+       total / COUNT(*)   AS avg_salary
+FROM employees
+GROUP BY dept;
+```
+
+In engines without lateral aliases, the first query has to repeat `salary * 12` or compute `annual` in a subquery.
+
+## Which engines allow lateral column aliases?
+
+| Engine | Alias reusable in the same SELECT list? | Notes |
+| --- | --- | --- |
+| Apache Spark (3.4.0 and later) | Yes[^r340] | Table columns take precedence over aliases; not allowed inside aggregate, window or generator arguments[^nameres][^errors] |
+| Databricks SQL and Databricks Runtime | Yes, Databricks Runtime 12.2 LTS and above[^dbx] | Same rule as Spark: local column references take precedence[^dbx] |
+| DuckDB 2.0 | Yes[^duck] | Also allows aliases in `WHERE`, `GROUP BY` and `HAVING`, but not in a join's `ON` clause[^duck] |
+| Snowflake | Yes[^snow] | Aliases can be used in other column expressions and in `WHERE`, `GROUP BY` and joins; the documentation advises against aliases that share a name with a referenced column[^snow] |
+| BigQuery (GoogleSQL) | No[^bq] | `SELECT` list aliases are visible only to `GROUP BY`, `ORDER BY` and `HAVING`[^bq] |
+| PostgreSQL 19 | No; output names are documented only for `ORDER BY` and `GROUP BY`[^pg] | The documentation says an output column name cannot be used in `WHERE` or `HAVING`; the expression must be written out[^pg] |
+
+Because precedence rules differ, a query that relies on a lateral alias whose name also matches a table column can return different results across engines. Choosing alias names that do not collide with column names avoids this.[^nameres][^snow]
+
+## See also
+
+- [Window functions](/wiki/Window_functions)
+- [Apache Spark](/wiki/Apache_Spark)
+- [DuckDB](/wiki/DuckDB)
+
+## References
+
+[^r340]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^nameres]: [Name resolution (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-name-resolution.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^bq]: [Query syntax (GoogleSQL for BigQuery)](https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax). *Google Cloud*. Retrieved 2026-11-23.
+[^pg]: [SELECT (PostgreSQL 19)](https://www.postgresql.org/docs/current/sql-select.html). *PostgreSQL Global Development Group*. Retrieved 2026-11-23.
+[^errors]: [error-conditions.json (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/error-conditions.json). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dbx]: [Name resolution](https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-name-resolution). *Databricks*. Retrieved 2026-11-23.
+[^duck]: [Friendly SQL (DuckDB 2.0)](https://duckdb.org/docs/2.0/sql/dialect/friendly_sql). *DuckDB Foundation*. Retrieved 2026-11-23.
+[^snow]: [SELECT](https://docs.snowflake.com/en/sql-reference/sql/select). *Snowflake*. Retrieved 2026-11-23.

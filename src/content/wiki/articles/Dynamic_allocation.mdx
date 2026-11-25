@@ -1,0 +1,90 @@
+---
+title: "Dynamic allocation"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Dynamic resource allocation, `spark.dynamicAllocation`</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 1.2.0; shuffle tracking (no external shuffle service needed) in 3.0.0</Field>
+  <Field name="key_parts">Request policy (backlog timeouts, exponential ramp-up), remove policy (idle timeouts), shuffle data preservation</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) on standalone, YARN and Kubernetes</Field>
+  <Field name="related">[Executor](/wiki/Executor), [External shuffle service](/wiki/External_shuffle_service), [Shuffle](/wiki/Shuffle), [Caching and persistence](/wiki/Caching_and_persistence)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/job-scheduling.md, docs/configuration.md, docs/running-on-kubernetes.md) and SPARK-27963</Verified>
+
+**Dynamic allocation** is an [Apache Spark](/wiki/Apache_Spark) feature that adds [executors](/wiki/Executor) to an application when tasks are waiting and removes executors that sit idle, so that an application holds only the resources its current work needs. It is off by default (`spark.dynamicAllocation.enabled=false`) and works on the standalone, YARN and Kubernetes cluster managers.[^jobsched] Because removing an executor would also remove the [shuffle](/wiki/Shuffle) files it wrote, dynamic allocation needs a way to keep shuffle data available: an [external shuffle service](/wiki/External_shuffle_service), shuffle tracking, shuffle block migration or a shuffle storage plugin.[^jobsched]
+
+## How does dynamic allocation scale executors?
+
+**Adding executors.** When tasks have been pending for `spark.dynamicAllocation.schedulerBacklogTimeout` (default 1s), Spark requests more executors, and it requests again every `spark.dynamicAllocation.sustainedSchedulerBacklogTimeout` (default: the same value) while the backlog lasts. Each round asks for twice as many as the last: 1, then 2, 4, 8 and so on. The Spark docs compare this to TCP slow start: cautious at first, but able to ramp up quickly.[^jobsched][^config]
+
+**Removing executors.** An executor that has been idle for `spark.dynamicAllocation.executorIdleTimeout` (default 60s) is removed. Executors that hold cached data are kept by default, because `spark.dynamicAllocation.cachedExecutorIdleTimeout` is infinite.[^jobsched][^config]
+
+| Setting | Default |
+| --- | --- |
+| `spark.dynamicAllocation.enabled` | false |
+| `spark.dynamicAllocation.minExecutors` | 0 |
+| `spark.dynamicAllocation.maxExecutors` | infinity |
+| `spark.dynamicAllocation.initialExecutors` | `minExecutors` (or `spark.executor.instances` if larger) |
+| `spark.dynamicAllocation.executorAllocationRatio` | 1 (request enough executors for full parallelism) |
+| `spark.dynamicAllocation.schedulerBacklogTimeout` | 1s |
+| `spark.dynamicAllocation.executorIdleTimeout` | 60s |
+| `spark.dynamicAllocation.cachedExecutorIdleTimeout` | infinity |
+| `spark.dynamicAllocation.shuffleTracking.enabled` | true |
+| `spark.dynamicAllocation.shuffleTracking.timeout` | infinity |
+
+<small>Source: Spark 4.3.0 configuration reference.[^config]</small>
+
+## How is shuffle data kept when executors are removed?
+
+During a shuffle, each executor writes its map output to local disk and serves those files to other executors. If dynamic allocation removed that executor, the files would have to be recomputed.[^jobsched] Spark 4.3.0 accepts four ways to avoid this; one of them must be configured with dynamic allocation:[^jobsched][^config]
+
+| Approach | Setting | How it works |
+| --- | --- | --- |
+| Shuffle tracking | `spark.dynamicAllocation.shuffleTracking.enabled` (default true, since 3.0.0) | Spark keeps executors alive while they store shuffle data for active jobs, so no external service is needed[^config][^spark27963] |
+| [External shuffle service](/wiki/External_shuffle_service) | `spark.shuffle.service.enabled=true` | A long-running process on each node serves shuffle files after the executor that wrote them is gone[^jobsched] |
+| Decommissioning with shuffle migration | `spark.decommission.enabled` and `spark.storage.decommission.shuffleBlocks.enabled` | Before an executor is removed, its shuffle blocks are copied to other executors[^config] |
+| Shuffle storage plugin | `spark.shuffle.sort.io.plugin.class` (experimental) | A custom `ShuffleDataIO` stores shuffle data in reliable storage[^config] |
+
+Shuffle tracking is the simplest because it needs no extra service. Its trade-off is that an executor holding shuffle data is not released until the shuffle is garbage collected, unless `spark.dynamicAllocation.shuffleTracking.timeout` sets a limit.[^config]
+
+## How does dynamic allocation behave on Kubernetes?
+
+Spark on Kubernetes does not support the external shuffle service, so `spark.shuffle.service.enabled=true` cannot be used there.[^jobsched] Kubernetes deployments use shuffle tracking (on by default), decommissioning with shuffle block migration, or a shuffle storage plugin.[^jobsched] With `spark.decommission.enabled`, Spark decommissions an executor instead of killing it when dynamic allocation removes it; when block manager decommissioning (`spark.storage.decommission.enabled`) is also on, Spark tries to migrate the executor's RDD and shuffle blocks to other executors first.[^config] `spark.storage.decommission.fallbackStorage.path` can name a storage location, for example an S3 path, for blocks that cannot be moved to another executor; Spark does not clean it up.[^config]
+
+On Kubernetes, `spark.kubernetes.dynamicAllocation.deleteGracePeriod` (default 5s) is how long Spark waits for an executor pod to shut down before a forceful kill.[^k8s] Shuffle and spill files go to `emptyDir` volumes by default, which do not outlive the pod; persistent volume claims created on demand per executor (`claimName=OnDemand`) are one way to give executors larger local storage when they are created dynamically.[^k8s]
+
+## Caveats
+
+- **Standalone mode cores.** Without `spark.executor.cores`, each standalone executor takes all cores of a worker, and dynamic allocation can acquire many more executors than expected. The docs recommend setting cores explicitly (see SPARK-30299).[^jobsched]
+- **Cached data.** Executors with cached blocks are never removed by default. With `spark.shuffle.service.fetch.rdd.enabled`, executors that hold only disk-persisted RDD blocks can be released, and the blocks are served by the external shuffle service.[^jobsched]
+- **Local checkpoints.** The Spark source warns that local checkpointing is not safe with dynamic allocation, which removes executors together with their cached blocks. See [Checkpointing (Spark)](/wiki/Checkpointing_(Spark)).[^rdd]
+
+## Example
+
+```
+spark.dynamicAllocation.enabled                  true
+spark.dynamicAllocation.shuffleTracking.enabled  true
+spark.dynamicAllocation.minExecutors             2
+spark.dynamicAllocation.maxExecutors             50
+spark.dynamicAllocation.executorIdleTimeout      120s
+spark.executor.cores                             4
+```
+
+## See also
+
+- [Executor](/wiki/Executor)
+- [External shuffle service](/wiki/External_shuffle_service)
+- [Push-based shuffle](/wiki/Push-based_shuffle)
+- [Shuffle](/wiki/Shuffle)
+- [Caching and persistence](/wiki/Caching_and_persistence)
+
+## References
+
+[^jobsched]: [Job Scheduling: Dynamic Resource Allocation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html#dynamic-resource-allocation). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration: Dynamic Allocation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html#dynamic-allocation). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^spark27963]: [SPARK-27963: Allow dynamic allocation without an external shuffle service](https://issues.apache.org/jira/browse/SPARK-27963). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rdd]: [RDD.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/rdd/RDD.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

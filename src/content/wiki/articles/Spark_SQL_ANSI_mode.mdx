@@ -1,0 +1,97 @@
+---
+title: "Spark SQL ANSI mode"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">ANSI SQL mode, ANSI dialect</Field>
+  <Field name="field">SQL query engines</Field>
+  <Field name="key_parts">`spark.sql.ansi.enabled`, `spark.sql.storeAssignmentPolicy`, runtime errors on overflow and invalid casts, `try_*` functions</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark error classes](/wiki/Spark_error_classes), [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration), [Spark SQL scripting](/wiki/Spark_SQL_scripting)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-ansi-compliance.md, docs/sql-migration-guide.md, SQLConf.scala, error-conditions.json) and the Spark 4.0.0, 4.1.0 and 4.3.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **ANSI mode** is the Spark SQL dialect, controlled by `spark.sql.ansi.enabled`, in which invalid operations such as integer overflow, division by zero and malformed casts raise runtime errors instead of returning null or a wrapped value, and type coercion follows rules aligned with the ANSI SQL standard.[^ansi] ANSI mode has been the default since Spark 4.0.[^migration] With ANSI mode off, Spark SQL uses a Hive-compatible dialect that returns null for many invalid operations.[^ansi] The change matters most when moving workloads from Spark 3 to Spark 4.
+
+## What is ANSI mode in Spark SQL?
+
+Spark SQL has two settings that bring it closer to the SQL standard. `spark.sql.ansi.enabled` switches the dialect: with it on, Spark throws runtime exceptions on invalid operations and uses type coercion rules based on a data type precedence list. `spark.sql.storeAssignmentPolicy` separately controls implicit casts when rows are inserted into a table. Both settings exist since Spark 3.0.0; in Spark 4.3.0 their defaults are `true` and `ANSI`.[^ansi]
+
+The Spark documentation notes that some ANSI-mode behaviours do not come from the ANSI SQL standard itself but follow its style.[^ansi] ANSI mode is therefore a Spark dialect, not a certification of full standard compliance.
+
+## Is ANSI mode on by default in Spark 4?
+
+Yes. SPARK-44444, listed in the Spark 4.0.0 release notes, made ANSI mode the default.[^r400] The migration guide says that since Spark 4.0 `spark.sql.ansi.enabled` is on by default, and that the previous behaviour returns when either the configuration or the environment variable `SPARK_ANSI_SQL_MODE` is set to `false`.[^migration] In the v4.3.0 source the default is computed as true unless `SPARK_ANSI_SQL_MODE` equals `false`.[^sqlconf] The [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration) page covers the upgrade work around this change.
+
+Spark 4.1.0 added two related changes: views now always persist the ANSI setting in force when they were created (SPARK-53348), and ANSI mode became the default for the pandas API on Spark (SPARK-53295).[^r410] Spark 4.3.0 made `ceil` and `floor` throw overflow errors in ANSI mode (SPARK-58052).[^r430]
+
+## What does ANSI mode change?
+
+### Arithmetic overflow
+
+With ANSI mode on, Spark throws an arithmetic exception when a numeric or interval operation overflows. With it off, decimal overflow produces null and other numeric types wrap around as they do in Java or Scala, so `2147483647 + 1` returns `-2147483648`.[^ansi] In ANSI mode the same query fails with the error condition `ARITHMETIC_OVERFLOW`, whose SQLSTATE is `22003`; division by zero fails with `DIVIDE_BY_ZERO` (SQLSTATE `22012`).[^errjson]
+
+### Casts
+
+In ANSI mode an explicit `CAST` that cannot succeed raises an error: a string that does not parse as the target type, or a numeric value out of the target type's range. ANSI mode also forbids some conversions that the non-ANSI dialect allows: numeric to and from binary, date to and from boolean, timestamp to and from boolean, and date to numeric.[^ansi] `CAST('a' AS INT)` fails with `CAST_INVALID_INPUT` (SQLSTATE `22018`) and `CAST(2147483648L AS INT)` with `CAST_OVERFLOW` (SQLSTATE `22003`); with ANSI mode off both return a value (null and `-2147483648`).[^ansi][^errjson]
+
+### Table inserts
+
+Under the default `ANSI` store assignment policy, inserting a value of an incompatible type, such as a string into an `INT` column, fails at analysis time, and inserting an out-of-range number fails with `CAST_OVERFLOW_IN_TABLE_INSERT`. The `LEGACY` policy allows any valid cast, as Spark 2.x did, and the `STRICT` policy forbids any cast that could lose precision.[^ansi]
+
+### Functions and operators
+
+Several functions behave differently under ANSI mode. `element_at`, `elt` and the `array[index]` operator throw on an invalid index; `to_date`, `to_timestamp`, `unix_timestamp` and `make_date` throw when input cannot be parsed or the result is invalid.[^ansi]
+
+### Keywords
+
+ANSI mode does not by itself reserve SQL keywords. Spark uses the ANSI keyword parser, which forbids reserved keywords as identifiers, only when both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKeywords` are true, and the second defaults to false.[^ansi]
+
+## Summary of ANSI and non-ANSI behaviour
+
+| Expression | ANSI mode on (Spark 4 default) | ANSI mode off |
+| --- | --- | --- |
+| `2147483647 + 1` | Error `ARITHMETIC_OVERFLOW` | `-2147483648` |
+| `1 / 0` | Error `DIVIDE_BY_ZERO` | `NULL`[^n1] |
+| `CAST('a' AS INT)` | Error `CAST_INVALID_INPUT` | `NULL` |
+| `CAST(2147483648L AS INT)` | Error `CAST_OVERFLOW` | `-2147483648` |
+| `CAST(DATE'2020-01-01' AS INT)` | Analysis error | `NULL` |
+
+Sources: Spark ANSI compliance documentation and error condition list.[^ansi][^errjson]
+
+## How to tolerate bad data in ANSI mode
+
+Spark provides `try_*` variants that return `NULL` instead of raising an error. They include `try_cast`, `try_add`, `try_subtract`, `try_multiply`, `try_divide`, `try_mod`, `try_sum`, `try_avg`, `try_element_at`, `try_to_timestamp`, `try_to_date` and `try_parse_url`.[^ansi] Using these functions on the columns that may hold bad values keeps the rest of a query strict, which is narrower than turning ANSI mode off for a whole session.
+
+```sql
+-- Spark 4.3 default: spark.sql.ansi.enabled = true
+SELECT CAST('a' AS INT);             -- fails with CAST_INVALID_INPUT
+SELECT try_cast('a' AS INT);         -- NULL
+SELECT try_add(2147483647, 1);       -- NULL
+SELECT try_divide(10, 0);            -- NULL
+
+-- Restore the Spark 3 behaviour for one session only
+SET spark.sql.ansi.enabled = false;
+SELECT CAST('a' AS INT);             -- NULL
+```
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration)
+- [Spark error classes](/wiki/Spark_error_classes)
+- [Spark SQL scripting](/wiki/Spark_SQL_scripting)
+- [Variant type](/wiki/Variant_type)
+
+## References
+
+[^ansi]: [ANSI Compliance (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-ansi-compliance.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: SQL, Datasets and DataFrame (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^errjson]: [error-conditions.json (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/error-conditions.json). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: The non-ANSI divide behaves like `try_divide`, per a comment in [arithmetic.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/arithmetic.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

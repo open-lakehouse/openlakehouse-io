@@ -1,0 +1,106 @@
+---
+title: "Adaptive Query Execution"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">AQE, adaptive execution</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="introduced">Apache Spark 3.0.0 (SPARK-31412); on by default since 3.2.0 (SPARK-33679)</Field>
+  <Field name="key_parts">Query stages, runtime statistics, partition coalescing, skew join splitting, join strategy switching, local shuffle reader</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Catalyst optimizer](/wiki/Catalyst_optimizer), [Shuffle](/wiki/Shuffle), [Broadcast join](/wiki/Broadcast_join), [Sort-merge join](/wiki/Sort-merge_join), [Shuffle hash join](/wiki/Shuffle_hash_join), [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 3.0.0 release notes, SPARK-33679, the v4.3.0 tag of apache/spark (docs/sql-performance-tuning.md, SQLConf.scala, AdaptiveSparkPlanExec.scala, InsertAdaptiveSparkPlan.scala, OptimizeSkewedJoin.scala, ShuffledJoin.scala), SPARK-31412 and EXPLAIN output and job counts from a PySpark 4.3.0 run</Verified>
+
+**Adaptive Query Execution** (**AQE**) is the part of Spark SQL in [Apache Spark](/wiki/Apache_Spark) that re-optimizes a query while it runs, using statistics measured on completed [shuffle](/wiki/Shuffle) stages instead of estimates made before the query started.[^perf] Its three main features are coalescing small shuffle partitions, splitting skewed partitions in joins, and switching a planned [sort-merge join](/wiki/Sort-merge_join) to a [broadcast join](/wiki/Broadcast_join) or [shuffle hash join](/wiki/Shuffle_hash_join). AQE was introduced in Spark 3.0.0 and has been on by default since Spark 3.2.0, controlled by `spark.sql.adaptive.enabled`.[^r300][^jira33679]
+
+## How does AQE work?
+
+The [Catalyst optimizer](/wiki/Catalyst_optimizer) plans a query before it runs, from estimated sizes that may be missing or wrong. AQE splits the physical plan into **query stages** at exchange nodes. Each query stage materializes its output; when one completes, Spark re-optimizes and re-plans the rest of the query from the statistics of all materialized stages, then creates the next stages.[^aqeexec] Partition coalescing, for example, uses the map output statistics of a finished shuffle.[^perf]
+
+The effect is visible in `explain()`. Before an action, the physical plan starts with `AdaptiveSparkPlan isFinalPlan=false`. After the action, the same call prints a `Final Plan` with query stages, followed by the `Initial Plan`. This aggregation from PySpark 4.3.0 shows the final plan after AQE coalesced the 200 shuffle partitions:
+
+```
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   ResultQueryStage 1
+   +- *(2) HashAggregate(keys=[_groupingexpression#26L], functions=[count(1)])
+      +- AQEShuffleRead coalesced
+         +- ShuffleQueryStage 0
+            +- Exchange hashpartitioning(_groupingexpression#26L, 200), ENSURE_REQUIREMENTS
+               +- *(1) HashAggregate(keys=[_groupingexpression#26L], functions=[partial_count(1)])
+                  ...
+```
+
+In the same run, the reduce stage had 200 tasks with AQE off and 1 task with AQE on, and the single `collect()` ran as two jobs, one for the map-side query stage and one for the result. See [Job, stage and task](/wiki/Job,_stage_and_task).
+
+## Coalescing post-shuffle partitions
+
+A Spark SQL shuffle has `spark.sql.shuffle.partitions` partitions (default 200), which is too many for small data and too few for large data. With AQE, Spark merges contiguous small shuffle partitions after the map side has run. The Spark documentation recommends setting a large enough initial number with `spark.sql.adaptive.coalescePartitions.initialPartitionNum` and letting Spark pick the final number at run time.[^perf]
+
+| Setting | Default (4.3.0) | Meaning |
+| --- | --- | --- |
+| `spark.sql.adaptive.coalescePartitions.enabled` | true | Turn coalescing on or off |
+| `spark.sql.adaptive.advisoryPartitionSizeInBytes` | 64 MB | Target partition size when coalescing or splitting |
+| `spark.sql.adaptive.coalescePartitions.parallelismFirst` | true | Ignore the target size and only respect the minimum size, to keep parallelism; the docs recommend false on a busy cluster |
+| `spark.sql.adaptive.coalescePartitions.minPartitionSize` | 1 MB | Smallest partition after coalescing |
+| `spark.sql.adaptive.coalescePartitions.initialPartitionNum` | (none; uses `spark.sql.shuffle.partitions`) | Number of shuffle partitions before coalescing |
+
+Source: Spark 4.3.0 performance tuning guide.[^perf]
+
+## Skew join handling
+
+Data skew means a few partitions hold far more data than the rest, so their tasks run much longer. With `spark.sql.adaptive.skewJoin.enabled` (default true), AQE splits a skewed partition into smaller ones and replicates the matching partition of the other side, so the pieces run as parallel tasks.[^perf][^skew]
+
+A partition counts as skewed when it is larger than both `spark.sql.adaptive.skewJoin.skewedPartitionFactor` (default 5.0) times the median partition size and `spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes` (default 256 MB).[^perf] A join that AQE has split shows `(skew=true)` after its name in the plan, for example `SortMergeJoin(skew=true)`.[^shuffled]
+
+## Join strategy switching
+
+AQE can replace the join strategy chosen at planning time once it knows the real sizes:[^perf]
+
+- **Sort-merge join to broadcast hash join.** If the runtime size of a join side is below `spark.sql.adaptive.autoBroadcastJoinThreshold` (default: the value of `spark.sql.autoBroadcastJoinThreshold`, 10 MB), AQE switches to a [broadcast join](/wiki/Broadcast_join). The documentation notes that this is less efficient than planning a broadcast join from the start, but still avoids sorting both sides; with `spark.sql.adaptive.localShuffleReader.enabled` (default true), the already written shuffle files are read locally to save network traffic.
+- **Sort-merge join to shuffled hash join.** If every post-shuffle partition is smaller than `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`, AQE uses a [shuffle hash join](/wiki/Shuffle_hash_join) regardless of `spark.sql.join.preferSortMergeJoin`. The default threshold is 0, so this conversion is off unless the threshold is raised to at least the advisory partition size.
+
+## What can AQE not fix?
+
+AQE only changes what it can measure, and only at stage boundaries. The Spark 4.3.0 documentation and source give these limits:
+
+- **No shuffle, no adaptation.** AQE is applied only to queries that contain or may need exchanges, or that contain subqueries. A query that is a single scan and filter gets no AQE plan.[^insert]
+- **Decisions made before the first stage stay.** The first stages run on the initial plan, so a scan that reads too much, or a bad join order chosen up front, is not undone. Better table statistics and the [cost-based optimizer](/wiki/Cost-based_optimizer_(Spark)) act earlier.
+- **Late broadcast is second best.** A sort-merge join converted to a broadcast join has already shuffled the large side; the documentation calls the conversion less efficient than a broadcast join planned at the start.[^perf]
+- **Skew handling is limited to joins and rebalances.** The skew join rule splits partitions only on the sides that a join type allows: the left side for inner, cross, left outer, left semi and left anti joins, and the right side for inner, cross and right outer joins. A full outer join cannot be split on either side.[^skew] Skewed aggregations are not split; `spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled` handles skew only in `REBALANCE` repartitioning.[^perf]
+- **Stateful streaming is excluded.** In Spark 4.3.0, AQE is not applied to stateful streaming queries; stateless streaming queries use it when `spark.sql.adaptive.streaming.stateless.enabled` is true (the default, since 4.1.0).[^insert][^sqlconf]
+
+## Example
+
+AQE is on by default, so most code needs no settings. These lines make the coalescing target explicit and raise the initial partition count for a large shuffle:
+
+```python
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.parallelismFirst", "false")
+spark.conf.set("spark.sql.adaptive.advisoryPartitionSizeInBytes", "128m")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.initialPartitionNum", "2000")
+```
+
+## See also
+
+- [Catalyst optimizer](/wiki/Catalyst_optimizer)
+- [Shuffle](/wiki/Shuffle)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Sort-merge join](/wiki/Sort-merge_join)
+- [Shuffle hash join](/wiki/Shuffle_hash_join)
+- [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))
+- [Job, stage and task](/wiki/Job,_stage_and_task)
+
+## References
+
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r300]: [Spark Release 3.0.0](https://spark.apache.org/releases/spark-release-3-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira33679]: [SPARK-33679: Enable spark.sql.adaptive.enabled true by default](https://issues.apache.org/jira/browse/SPARK-33679). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^aqeexec]: [AdaptiveSparkPlanExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/AdaptiveSparkPlanExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^skew]: [OptimizeSkewedJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/OptimizeSkewedJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^shuffled]: [ShuffledJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/joins/ShuffledJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^insert]: [InsertAdaptiveSparkPlan.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/InsertAdaptiveSparkPlan.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

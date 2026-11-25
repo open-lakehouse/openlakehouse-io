@@ -1,0 +1,110 @@
+---
+title: "DataFrame"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Data frame, Spark DataFrame</Field>
+  <Field name="field">Data processing APIs</Field>
+  <Field name="introduced">Spark 1.3.0 (DataFrame API in Apache Spark)</Field>
+  <Field name="key_parts">Named, typed columns (a schema); rows; a logical plan in Spark</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (PySpark, Scala, Java, R), pandas, Polars</Field>
+  <Field name="related">[Dataset (Spark)](/wiki/Dataset_(Spark)), [RDD](/wiki/RDD), [Spark Connect](/wiki/Spark_Connect), [Apache Arrow](/wiki/Apache_Arrow), [User-defined function (Spark)](/wiki/User-defined_function_(Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-programming-guide.md, docs/sql-migration-guide.md, Dataset.scala, python/docs/source/tutorial/sql/arrow_pandas.rst, the PySpark upgrade guide), the Spark 1.3.0, 2.0.0 and 3.2.0 release notes, the pandas 3.1.1 documentation, the Polars user guide and PyPI</Verified>
+
+A **DataFrame** is a table-like data structure made of named columns, each with a data type, and rows. In [Apache Spark](/wiki/Apache_Spark), a DataFrame is a distributed collection of rows organized into named columns, conceptually equivalent to a table in a relational database, and it is the main API of Spark SQL in Python, Scala, Java and R.[^guide] The same word names the in-memory, single-process tables of pandas and Polars, which share the tabular shape but differ in where the data lives and when work is done. This page explains the Spark DataFrame and compares it with those two.
+
+## What is a DataFrame in Apache Spark?
+
+A Spark DataFrame is a [Dataset](/wiki/Dataset_(Spark)) organized into named columns. In Scala, `DataFrame` is a type alias of `Dataset[Row]`; in Java it is written `Dataset<Row>`; Python and R have only the DataFrame.[^guide] DataFrames can be built from files, tables, external databases or existing [RDDs](/wiki/RDD).[^guide]
+
+A Spark DataFrame does not hold its data in the driver. Internally it represents a logical plan that describes how to produce the data. Transformations such as `select`, `filter` and `groupBy` return new DataFrames, and nothing runs until an action such as `count`, `show` or a write is called. Then Spark's optimizer turns the logical plan into a physical plan that runs in parallel on [executors](/wiki/Executor); `explain()` shows both plans.[^dataset]
+
+With [Spark Connect](/wiki/Spark_Connect), a PySpark or Scala DataFrame lives in a thin client: the client sends unresolved logical plans to the Spark server over gRPC and receives results as Apache Arrow batches.[^connect]
+
+```python
+from pyspark.sql import SparkSession, functions as F
+
+spark = SparkSession.builder.getOrCreate()
+
+orders = spark.read.parquet("s3://bucket/orders/")      # no data is read yet
+daily = (orders
+         .filter(F.col("status") == "shipped")
+         .groupBy("order_date")
+         .agg(F.sum("amount").alias("revenue")))         # still only a plan
+
+daily.explain()   # prints the physical plan
+daily.show(5)     # action: Spark runs the job on the executors
+```
+
+The same query in Spark SQL:
+
+```sql
+SELECT order_date, SUM(amount) AS revenue
+FROM parquet.`s3://bucket/orders/`
+WHERE status = 'shipped'
+GROUP BY order_date;
+```
+
+## How do Spark DataFrames work with table formats?
+
+In an open lakehouse, Spark DataFrames are the usual way to read and write tables in [Delta Lake](/wiki/Delta_Lake), [Apache Iceberg](/wiki/Apache_Iceberg) and [Apache Parquet](/wiki/Apache_Parquet) files. For example, the Delta Lake quick start writes a DataFrame with `data.write.format("delta").save(path)` and reads it back with `spark.read.format("delta").load(path)`.[^n1]
+
+## Spark DataFrame vs pandas vs Polars
+
+|  | Apache Spark DataFrame | pandas DataFrame | Polars DataFrame |
+| --- | --- | --- | --- |
+| Where the data lives | Partitions spread across executors in a cluster; the DataFrame object is a plan[^dataset] | In memory; pandas is designed for in-memory analytics[^pdscale] | In memory on one machine[^plhome] |
+| Evaluation | Lazy: transformations build a plan, actions run it[^dataset] | Eager[^plpandas] | Eager `DataFrame` and lazy `LazyFrame`; in many cases the eager API calls the lazy engine[^pllazy] |
+| Query optimizer | Spark's query optimizer turns the logical plan into a physical plan[^dataset] | None (operations run as called)[^plpandas] | Query planner with predicate and projection pushdown in lazy mode[^pllazy] |
+| Parallelism | Tasks across many executors and machines[^guide] | Not built in; the pandas docs point to other libraries for parallel and distributed work[^pdscale] | Multi-threaded across the CPU cores of one machine[^plhome] |
+| Row index | No row labels | Labeled row and column axes[^pdapi] | None; rows are addressed by integer position[^plpandas] |
+| Memory format | A binary internal format produced by encoders[^dataset]; Arrow for data exchange with Python[^arrow] | NumPy arrays by default; columns can be backed by PyArrow[^pdarrow][^plpandas] | Arrow memory specification, with its own compute implementation[^plhome][^plpandas] |
+| Languages | Python, Scala, Java, R, SQL[^guide] | Python | Core in Rust; Python, R and NodeJS APIs[^plhome] |
+| Latest version (checked 2026-11-23) | PySpark 4.3.0[^pypi] | pandas 3.1.1[^n2] | Polars 2.1.0[^n3] |
+
+## How do you move data between Spark, pandas and Arrow?
+
+`DataFrame.toPandas()` collects a Spark DataFrame to the driver as a pandas DataFrame, and `SparkSession.createDataFrame()` accepts a pandas DataFrame. Both use Apache Arrow when `spark.sql.execution.arrow.pyspark.enabled` is true, and since Spark 4.2 it is true by default.[^arrow][^n4] Since Spark 4.0, `DataFrame.toArrow()` returns a PyArrow Table and `createDataFrame()` accepts one; a Polars DataFrame can be exchanged through Arrow this way.[^arrow][^plhome]
+
+Both `toPandas()` and `toArrow()` bring every row to the driver, so the Spark documentation advises using them only on a small subset of the data.[^arrow]
+
+The pandas API on Spark (`pyspark.pandas`), added in Spark 3.2.0, offers a pandas-like API whose operations run on Spark DataFrames.[^n5]
+
+## History
+
+Spark 1.3.0 added the DataFrame API, described in the release notes as an evolution of the RDD API with named fields and schema information, for Python, Scala and Java.[^n6] It replaced `SchemaRDD`.[^migration] Spark 2.0.0 unified DataFrame and Dataset in Scala and Java, making DataFrame a type alias for `Dataset[Row]`.[^n7]
+
+## See also
+
+- [Dataset (Spark)](/wiki/Dataset_(Spark))
+- [Encoder (Spark)](/wiki/Encoder_(Spark))
+- [RDD](/wiki/RDD)
+- [Spark Connect](/wiki/Spark_Connect)
+- [User-defined function (Spark)](/wiki/User-defined_function_(Spark))
+- [Apache Arrow](/wiki/Apache_Arrow)
+- [DuckDB](/wiki/DuckDB)
+
+## References
+
+[^guide]: [Spark SQL, DataFrames and Datasets Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dataset]: [Dataset.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Dataset.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Quickstart](https://docs.delta.io/quick-start/). *Delta Lake*. Retrieved 2026-11-23.
+[^pdscale]: [Scaling to large datasets (pandas 3.1.1)](https://pandas.pydata.org/docs/user_guide/scale.html). *pandas*. Retrieved 2026-11-23.
+[^plhome]: [Polars user guide](https://docs.pola.rs/). *Polars*. Retrieved 2026-11-23.
+[^plpandas]: [Coming from Pandas](https://docs.pola.rs/user-guide/migration/pandas/). *Polars*. Retrieved 2026-11-23.
+[^pllazy]: [Lazy API](https://docs.pola.rs/user-guide/concepts/lazy-api/). *Polars*. Retrieved 2026-11-23.
+[^pdapi]: [pandas.DataFrame (pandas 3.1.1)](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html). *pandas*. Retrieved 2026-11-23.
+[^arrow]: [Apache Arrow in PySpark (arrow_pandas.rst at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/tutorial/sql/arrow_pandas.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pdarrow]: [PyArrow Functionality (pandas 3.1.1)](https://pandas.pydata.org/docs/user_guide/pyarrow.html). *pandas*. Retrieved 2026-11-23.
+[^pypi]: [pyspark](https://pypi.org/project/pyspark/). *PyPI*. Retrieved 2026-11-23.
+[^n2]: [pandas](https://pypi.org/project/pandas/). *PyPI*. Retrieved 2026-11-23.
+[^n3]: [polars](https://pypi.org/project/polars/). *PyPI*. Retrieved 2026-11-23.
+[^n4]: [Upgrading PySpark (pyspark_upgrade.rst at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/migration_guide/pyspark_upgrade.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [Spark Release 3.2.0](https://spark.apache.org/releases/spark-release-3-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n6]: [Spark Release 1.3.0](https://spark.apache.org/releases/spark-release-1-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: SQL, Datasets and DataFrame (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n7]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.

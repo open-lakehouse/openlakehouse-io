@@ -1,0 +1,116 @@
+---
+title: "Higher-order functions (Spark SQL)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Lambda functions, HOFs</Field>
+  <Field name="field">Query languages, nested data processing</Field>
+  <Field name="introduced">Apache Spark 2.4.0 (SQL); 3.1.0 (PySpark functions)</Field>
+  <Field name="key_parts">Lambda expressions (`x -> expr`), array functions (`transform`, `filter`, `aggregate`, `exists`, `forall`, `zip_with`), map functions (`transform_keys`, `transform_values`, `map_filter`, `map_zip_with`)</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark SQL](/wiki/Spark_SQL), [Delta Lake](/wiki/Delta_Lake), [Parameterized queries (Spark SQL)](/wiki/Parameterized_queries_(Spark_SQL))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (higherOrderFunctions.scala, FunctionRegistry.scala, python/pyspark/sql/functions/builtin.py, error-conditions.json, the PySpark Arrow guide) and the Spark 2.4.0, 3.1.1, 4.0.0 and 4.3.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) SQL, a **higher-order function** is a built-in function that takes a lambda function as an argument and applies it to the elements of an array or the entries of a map, such as `transform`, `filter` and `aggregate`.[^hof] Higher-order functions let a query work on nested collections in place, without exploding them into rows and grouping them back, and without a user-defined function. Spark 2.4.0 introduced them in SQL, and Spark 3.1 added them to the PySpark functions API.[^r240][^r311]
+
+## What is a lambda function in Spark SQL?
+
+A Spark SQL lambda function is written as parameters, an arrow and a body: `x -> x + 1` for one parameter, or `(acc, x) -> acc + x` for several. Spark allows a lambda only as an argument of a higher-order function; using one elsewhere raises an error that says a lambda function should only be used in a higher order function.[^errors] In the Spark source, the built-in higher-order functions are documented in the function group `lambda_funcs`.[^hof]
+
+Subqueries are not allowed inside higher-order functions. Spark 4.0.0 blocked them for correctness (SPARK-47509), and the error message asks the user to remove all subquery expressions from higher-order functions.[^r400][^errors]
+
+## Which higher-order functions does Spark SQL have?
+
+The following table lists the built-in higher-order functions registered in Spark 4.3, with the version given in each function's documentation:[^hof][^registry]
+
+| Function | Works on | Lambda | What it returns | Since |
+| --- | --- | --- | --- | --- |
+| `transform(arr, f)` | Array | `x -> ...` or `(x, i) -> ...` (i is the index) | A new array with `f` applied to each element | 2.4.0 |
+| `filter(arr, f)` | Array | `x -> bool` or `(x, i) -> bool` | The elements for which `f` is true; the index argument is available since 3.0.0 | 2.4.0 |
+| `aggregate(arr, start, merge [, finish])` | Array | `(acc, x) -> ...`, optional `acc -> ...` | One value, folded from `start` over all elements | 2.4.0 |
+| `reduce(arr, start, merge [, finish])` | Array | As `aggregate` | Alias of `aggregate`, registered since 3.4.0 | 3.4.0 |
+| `exists(arr, f)` | Array | `x -> bool` | True if `f` holds for at least one element | 2.4.0 |
+| `forall(arr, f)` | Array | `x -> bool` | True if `f` holds for every element | 3.0.0 |
+| `zip_with(a, b, f)` | Two arrays | `(x, y) -> ...` | An element-wise merge; the shorter array is padded with nulls | 2.4.0 |
+| `array_sort(arr, f)` | Array | `(left, right) -> int` | The array sorted with a comparator; the comparator form exists since 3.0.0 | 2.4.0 |
+| `transform_keys(m, f)` | Map | `(k, v) -> newKey` | A map with new keys and unchanged values | 3.0.0 |
+| `transform_values(m, f)` | Map | `(k, v) -> newValue` | A map with unchanged keys and new values | 3.0.0 |
+| `map_filter(m, f)` | Map | `(k, v) -> bool` | The entries for which `f` is true | 3.0.0 |
+| `map_zip_with(m1, m2, f)` | Two maps | `(k, v1, v2) -> ...` | A merged map; a value is NULL when its key is missing from one map | 3.0.0 |
+
+Null handling follows three-valued logic. For example, `exists(array(1, null, 3), x -> x % 2 == 0)` returns NULL, while `forall(array(1, null, 3), x -> x % 2 == 0)` returns false, because the element 1 already fails the predicate.[^hof]
+
+## How do transform, filter and aggregate work?
+
+The following Spark SQL query applies three array functions and one map function to a single row:[^hof]
+
+```sql
+SELECT
+  transform(amounts, x -> x * 2)             AS doubled,      -- [20,50,80]
+  filter(amounts, x -> x > 15)               AS large,        -- [25,40]
+  aggregate(amounts, 0, (acc, x) -> acc + x) AS total,        -- 75
+  exists(amounts, x -> x > 30)               AS any_over_30,  -- true
+  transform_values(tags, (k, v) -> v * 10)   AS tags_x10      -- {"a":10,"b":20}
+FROM VALUES (array(10, 25, 40), map('a', 1, 'b', 2)) AS t(amounts, tags);
+```
+
+`aggregate` starts from the initial state, applies `merge` to the state and each element in order, and then applies `finish` to the final state; without `finish`, the identity function is used.[^hof] The result type of `merge` must match the type of the start value. If it does not, Spark fails the query with a `DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE` error that names the type required by the start value.[^hof] This is a common mistake when the start value is the integer literal `0` and the elements are `BIGINT`, `DOUBLE` or `DECIMAL`; the fix is to cast the start value, for example `CAST(0 AS BIGINT)`.
+
+## How are higher-order functions used from PySpark?
+
+PySpark exposes the same functions in `pyspark.sql.functions`, where the lambda is a Python function that takes and returns `Column` objects. The functions were added in PySpark 3.1.0 and support [Spark Connect](/wiki/Spark_Connect) since 3.4.0.[^builtin] The Python function is not run per element. PySpark calls it once with placeholder columns to build a Spark expression, so the body may use `Column` methods, functions from `pyspark.sql.functions` and Scala user-defined functions, but not Python user-defined functions (SPARK-27052).[^builtin]
+
+```python
+from pyspark.sql import functions as F
+
+df = spark.createDataFrame([(1, [10, 25, 40])], ["id", "amounts"])  # array<bigint>
+
+df.select(
+    F.transform("amounts", lambda x: x * 2).alias("doubled"),
+    F.filter("amounts", lambda x, i: (x > 15) & (i > 0)).alias("large_after_first"),
+    # The start value is cast to bigint to match the element type.
+    F.aggregate("amounts", F.lit(0).cast("bigint"), lambda acc, x: acc + x).alias("total"),
+).show()
+```
+
+PySpark also provides `reduce`, added in 3.5.0, with the same arguments as `aggregate`.[^builtin]
+
+## Higher-order functions vs explode and user-defined functions
+
+Before Spark 2.4.0, the usual ways to compute over an array column were to explode it into rows and aggregate them back, or to write a user-defined function (UDF). Spark 2.4.0 added higher-order functions to make complex data types easier to process (SPARK-23899).[^r240]
+
+|  | Higher-order function | `explode` then `GROUP BY` | Python UDF |
+| --- | --- | --- | --- |
+| Stays within one row | Yes | No; one row per element, then a regrouping step | Yes |
+| Runs in the JVM as a Catalyst expression | Yes[^hof] | Yes | No; data is transferred between the JVM and Python worker processes[^arrow][^config] |
+| Element order and index | Available (`(x, i) -> ...` in `transform` and `filter`)[^hof] | `posexplode` returns the position with each element[^n1] | Available |
+
+Spark 4.3.0 added code generation for array higher-order functions (SPARK-37019) and fixed wrong results from semantic equality checks of higher-order functions that capture lambda variables (SPARK-60508).[^r430]
+
+## Use in an open lakehouse
+
+Tables in [Delta Lake](/wiki/Delta_Lake) and [Apache Iceberg](/wiki/Apache_Iceberg) often store nested arrays, maps and structs, for example line items in an order or attributes in an event. Higher-order functions let Spark SQL clean, filter and summarize these nested values in a single `SELECT` or in a `MERGE` source query, without changing the table's row granularity.
+
+## See also
+
+- [Spark SQL](/wiki/Spark_SQL)
+- [Parameterized queries (Spark SQL)](/wiki/Parameterized_queries_(Spark_SQL))
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^hof]: [higherOrderFunctions.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/higherOrderFunctions.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^r240]: [Spark Release 2.4.0](https://spark.apache.org/releases/spark-release-2-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r311]: [Spark Release 3.1.1](https://spark.apache.org/releases/spark-release-3-1-1.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^errors]: [error-conditions.json (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/error-conditions.json). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^registry]: [FunctionRegistry.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/FunctionRegistry.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^builtin]: [builtin.py (pyspark.sql.functions, tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^arrow]: [Apache Arrow in PySpark (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/tutorial/sql/arrow_pandas.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [generators.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/generators.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.

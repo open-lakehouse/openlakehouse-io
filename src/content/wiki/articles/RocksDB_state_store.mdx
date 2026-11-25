@@ -1,0 +1,103 @@
+---
+title: "RocksDB state store"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">`RocksDBStateStoreProvider`</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="introduced">Apache Spark 3.2</Field>
+  <Field name="key_parts">One RocksDB instance per operator partition, local disk, uploaded SST files and `.zip` version files, optional changelog checkpointing, optional bounded memory</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark); a separate provider on Databricks</Field>
+  <Field name="related">[State store](/wiki/State_store), [Streaming checkpoint](/wiki/Streaming_checkpoint), [transformWithState](/wiki/TransformWithState)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (RocksDB state store implementation, memory management, changelog checkpointing), `SQLConf.scala`, `RocksDB.scala`, `RocksDBFileManager.scala` and `pom.xml` at tag v4.3.0 of apache/spark, SPARK-43421, and the Databricks RocksDB state store page</Verified>
+
+The **RocksDB state store** is a [state store](/wiki/State_store) implementation for [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming) that keeps the state of stateful operators in RocksDB, an embedded key-value database, in native memory and on the executor's local disk, and uploads its files to the [streaming checkpoint](/wiki/Streaming_checkpoint) for fault tolerance. It was added in Spark 3.2 for queries with large state, such as millions of keys, where the default HDFS-backed state store causes long JVM garbage collection pauses.[^ss-rocks] It is the only built-in provider that supports [transformWithState](/wiki/TransformWithState).
+
+## How is the RocksDB state store enabled?
+
+The provider is chosen with `spark.sql.streaming.stateStore.providerClass`. In Apache Spark, set it to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider` before a query first starts; the provider cannot be changed between restarts from the same checkpoint.[^ss-rocks][^sqlconf]
+
+```python
+spark.conf.set(
+    "spark.sql.streaming.stateStore.providerClass",
+    "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
+)
+spark.conf.set(
+    "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled", "true"
+)
+```
+
+On Databricks, RocksDB is the default state store provider in Databricks Runtime 17.3 LTS and above. Older runtimes enable it with the provider class `com.databricks.sql.streaming.state.RocksDBStateStoreProvider`.[^db]
+
+Spark 4.3.0 is built against version 9.8.4 of the `rocksdbjni` library.[^pom] `spark.sql.streaming.stateStore.rocksdb.formatVersion` (default 5) is stored in the checkpoint when a query starts and used for its whole lifetime.[^sqlconf]
+
+## How does it checkpoint state?
+
+By default the RocksDB state store uses **incremental snapshot checkpointing**. At each commit it uploads the RocksDB manifest files and the SST data files that are new since the previous version.[^ss-cl] In the checkpoint, SST and log files get unique names in shared directories, and each version is described by a `''version''.zip` file with the metadata that maps local file names to the uploaded files. Unlike the HDFS-backed store, which has to replay earlier `.delta` files, each `.zip` is a complete description of one version.[^rocksfm]
+
+### What is changelog checkpointing?
+
+With **changelog checkpointing**, each commit uploads only the changes made to the state since the last checkpoint, in a `.changelog` file, instead of a snapshot. Snapshots are still written periodically in the background, to bound recovery time and allow old changelogs to be removed. The Spark guide states that this avoids the cost of capturing and uploading snapshots and reduces streaming query latency.[^ss-cl][^rocksfm]
+
+Changelog checkpointing was added in Spark 3.5.0 (SPARK-43421).[^jira] In Apache Spark it is off by default and is turned on with `spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled=true`. It is compatible in both directions with snapshot checkpointing: an existing query can switch to changelog checkpointing, or back, on restart without discarding its state.[^ss-cl] Snapshots are created after `spark.sql.streaming.stateStore.minDeltasForSnapshot` (default 10) changelog versions.[^rocksdbsrc][^sqlconf]
+
+On Databricks, changelog checkpointing is available in Databricks Runtime 13.3 LTS and above and enabled by default in 17.3 LTS and above; Databricks recommends it for all stateful Structured Streaming queries.[^db]
+
+## How is RocksDB memory controlled?
+
+RocksDB allocates memory for memtables (write buffers), the block cache and filter and index blocks. Left unbounded, the instances on one executor can together use enough memory to cause out-of-memory errors.[^ss-mem]
+
+Setting `spark.sql.streaming.stateStore.rocksdb.boundedMemoryUsage=true` caps the total memory of all RocksDB instances on a node at `maxMemoryUsageMB` (default 500), through RocksDB's write buffer manager. The cap is a soft limit: usage can briefly exceed it. Per-instance limits are set with `writeBufferSizeMB` and `maxWriteBufferNumber`, which by default use RocksDB's own defaults.[^ss-mem]
+
+## Configuration
+
+All keys start with `spark.sql.streaming.stateStore.rocksdb.`. Defaults are those of Spark 4.3.0.[^ss-rocks]
+
+| Key suffix | Default | Meaning |
+| --- | --- | --- |
+| `changelogCheckpointing.enabled` | `false` | Upload changelogs instead of snapshots at commit |
+| `compactOnCommit` | `false` | Run a range compaction at each commit |
+| `blockSizeKB` | 4 | Approximate user data per block in a block-based SST table |
+| `blockCacheSizeMB` | 8 | Block cache capacity |
+| `lockAcquireTimeoutMs` | 60000 | Wait for the instance lock when loading |
+| `maxOpenFiles` | -1 | Open file limit; -1 keeps all files open |
+| `resetStatsOnLoad` | `true` | Reset RocksDB statistics on load |
+| `trackTotalNumberOfRows` | `true` | Track total rows in state; costs an extra lookup per write |
+| `writeBufferSizeMB` | -1 | Maximum memtable size; -1 uses the RocksDB default |
+| `maxWriteBufferNumber` | -1 | Maximum number of memtables; -1 uses the RocksDB default |
+| `boundedMemoryUsage` | `false` | Bound total RocksDB memory per node |
+| `maxMemoryUsageMB` | 500 | Total memory limit per node when bounded |
+| `writeBufferCacheRatio` | 0.5 | Share of the bound used for write buffers |
+| `highPriorityPoolRatio` | 0.1 | Share of the bound used for high-priority blocks |
+| `allowFAllocate` | `true` | Let RocksDB pre-allocate disk space with fallocate |
+| `compression` | `lz4` | RocksDB compression type |
+
+Turning off `trackTotalNumberOfRows` can improve write performance; the reported number of rows in state is then 0. It can be changed when the query restarts.[^ss-rocks]
+
+## Comparison with Flink's RocksDB backend
+
+[Apache Flink](/wiki/Apache_Flink) also has an embedded RocksDB state backend, `EmbeddedRocksDBStateBackend`. It stores state as serialized bytes, always takes asynchronous snapshots, and is the only Flink backend that offers incremental checkpoints.[^flink-sb] Flink's default is the heap-based `HashMapStateBackend`, as Spark's default is the heap-based HDFS-backed state store.[^flink-sb]
+
+## See also
+
+- [State store](/wiki/State_store)
+- [Streaming checkpoint](/wiki/Streaming_checkpoint)
+- [Stateful stream processing](/wiki/Stateful_stream_processing)
+- [transformWithState](/wiki/TransformWithState)
+- [Structured Streaming](/wiki/Structured_Streaming)
+
+## References
+
+[^ss-rocks]: [Structured Streaming: RocksDB state store implementation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#rocksdb-state-store-implementation). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^db]: [Configure RocksDB state store on Databricks](https://docs.databricks.com/aws/en/structured-streaming/rocksdb-state-store). *Databricks*. Retrieved 2026-11-23.
+[^pom]: [pom.xml (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/pom.xml). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-cl]: [Structured Streaming: RocksDB State Store Changelog Checkpointing (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#rocksdb-state-store-changelog-checkpointing). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rocksfm]: [RocksDBFileManager.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/RocksDBFileManager.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira]: [SPARK-43421: Implement changelog checkpointing for RocksDB state store](https://issues.apache.org/jira/browse/SPARK-43421). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^rocksdbsrc]: [RocksDB.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/RocksDB.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-mem]: [Structured Streaming: RocksDB State Store Memory Management (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#rocksdb-state-store-memory-management). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-sb]: [State Backends (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/ops/state/state_backends/). *Apache Software Foundation*. Retrieved 2026-11-23.

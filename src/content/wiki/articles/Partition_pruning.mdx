@@ -1,0 +1,92 @@
+---
+title: "Partition pruning"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Partition elimination, partition filtering</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="key_parts">Partition columns or transforms, partition filters, catalog or table metadata, runtime filters</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hive](/wiki/Apache_Hive), [Trino](/wiki/Trino)</Field>
+  <Field name="related">[Partition](/wiki/Partition), [Dynamic partition pruning](/wiki/Dynamic_partition_pruning), [Predicate pushdown](/wiki/Predicate_pushdown), [Column pruning](/wiki/Column_pruning), [Bucketing](/wiki/Bucketing)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SQLConf.scala, FileSourceStrategy.scala, DataSourceScanExec.scala, FileScan.scala, PartitionPruning.scala, SupportsRuntimeFiltering.java, SupportsRuntimeV2Filtering.java), Spark JIRA SPARK-11150 and SPARK-35779, the Apache Iceberg 1.12.0 spec and Spark source, and the Delta Lake protocol at v4.4.1</Verified>
+
+**Partition pruning** is a query optimization in which an engine uses the filters of a query to skip whole partitions of a table, so that the files in partitions that cannot match are never listed or read. In [Apache Spark](/wiki/Apache_Spark) it comes in two forms: **static partition pruning**, where the filter on a partition column is known when the query is planned, and **[dynamic partition pruning](/wiki/Dynamic_partition_pruning)**, where the filter values are only known at run time, usually from the other side of a join. Table formats such as [Apache Iceberg](/wiki/Apache_Iceberg) and [Delta Lake](/wiki/Delta_Lake) do the pruning from their metadata instead of from directory names.
+
+## What does partition pruning skip?
+
+Partition pruning works at the coarsest level of data skipping. It removes whole [table partitions](/wiki/Partition) before any file is opened, while [predicate pushdown](/wiki/Predicate_pushdown) into the file format skips row groups and pages inside the files that remain. For built-in file sources, Spark sorts the filters of a scan into partition filters, which prune directories; bucket filters, which prune bucket files; data filters, which are pushed to the file reader; and filters that must be evaluated again after the scan.[^fss]
+
+## Static partition pruning
+
+Static partition pruning applies when a query filters a partition column with a value known at planning time:
+
+```sql
+-- sales is partitioned by sale_date
+SELECT store_id, SUM(amount)
+FROM sales
+WHERE sale_date >= DATE'2026-11-01'
+GROUP BY store_id;
+```
+
+For a Hive-style table, each partition is a directory such as `sale_date=2026-11-01/`, and Spark lists only the directories whose values satisfy the filter. For tables stored in a Hive metastore, `spark.sql.hive.metastorePartitionPruning` (default true, since 1.5.0) pushes partition predicates into the metastore, so that Spark fetches only the matching partition metadata.[^sqlconf]
+
+Spark uses a filter for partition pruning when it is deterministic and refers only to partition columns; an expression over a partition column, such as `year(sale_date) = 2026`, still qualifies.[^fss] A filter on a different column does not, even when it is related: `WHERE sale_ts >= TIMESTAMP '2026-11-01 00:00:00'` on a table partitioned by a separate `sale_date` column prunes nothing, because Spark does not know how the two columns relate. Iceberg's hidden partitioning addresses this case (see below).
+
+## Dynamic partition pruning
+
+<Hatnote>Main article: [Dynamic partition pruning](/wiki/Dynamic_partition_pruning)</Hatnote>
+
+Dynamic partition pruning (DPP) prunes partitions using values that Spark learns while the query runs. In a join of a partitioned fact table with a filtered dimension table, Spark uses the join keys that survive the dimension filter as a partition filter on the fact table. DPP was added in Spark 3.0.0 (SPARK-11150) and is on by default through `spark.sql.optimizer.dynamicPartitionPruning.enabled`.[^sqlconf][^n1]
+
+Data Source V2 connectors take part in runtime pruning through `SupportsRuntimeFiltering` (since Spark 3.2.0) and `SupportsRuntimeV2Filtering` (since 3.4.0), which let a scan drop planned input partitions using predicates Spark infers during execution.[^rtf][^n2]
+
+## Static vs dynamic partition pruning
+
+|  | Static partition pruning | Dynamic partition pruning |
+| --- | --- | --- |
+| When the filter is known | At planning time, from a literal or constant expression | At run time, from the result of another part of the query |
+| Typical query | `WHERE sale_date = '2026-11-01'` | `JOIN dim_date d ON f.sale_date = d.date WHERE d.is_holiday` |
+| Shown in Spark plans as | A plain predicate in `PartitionFilters` | `dynamicpruningexpression(...)` in `PartitionFilters`, fed by a subquery or a reused broadcast |
+| Setting | Always on for partition columns | `spark.sql.optimizer.dynamicPartitionPruning.enabled` (default true)[^sqlconf] |
+
+## What to look for in a Spark plan
+
+`EXPLAIN FORMATTED` prints the metadata of each scan. For a built-in file source, the scan node lists `PartitionFilters`, `PushedFilters`, `DataFilters` and `ReadSchema`.[^scanexec][^n3]
+- **Static pruning worked** if the partition predicate appears in `PartitionFilters`, for example `PartitionFilters: [isnotnull(sale_date#12), (sale_date#12 >= 2026-11-01)]`.
+- **Static pruning did not happen** if `PartitionFilters` is empty and the predicate shows up only in `DataFilters` or in a `Filter` above the scan. Common causes are a filter on a column that is not a partition column, a non-deterministic filter, or a table that Spark does not see as partitioned.
+- **Dynamic pruning was planned** if `PartitionFilters` contains `dynamicpruningexpression(...)`. Spark represents a planned dynamic filter with the `DynamicPruningExpression` marker.[^n4]
+
+After the query runs, the scan node in the Spark UI's SQL tab shows the metrics `number of files read` and, for partitioned tables, `number of partitions read`, which measure pruning directly.[^scanexec][^n5]
+
+## Partition pruning in table formats
+
+**[Apache Iceberg](/wiki/Apache_Iceberg)** prunes from metadata rather than directory names. Each data file records the partition values it belongs to, and partitions are derived from source columns by transforms such as `day`, `bucket[N]` or `truncate[W]`.[^icebergspec] A filter on the source column, such as `WHERE sale_ts >= TIMESTAMP '2026-11-01 00:00:00'` on a table partitioned by `day(sale_ts)`, therefore prunes partitions without the query naming a partition column; this is called hidden partitioning. Iceberg's Spark batch scan also implements `SupportsRuntimeV2Filtering`, so it takes part in dynamic partition pruning.[^n6]
+
+**[Delta Lake](/wiki/Delta_Lake)** records the partition values of each data file in the `partitionValues` field of its `add` action in the transaction log, so a reader prunes partitions by filtering the log instead of listing directories.[^deltaprotocol] The same `add` actions can carry per-file column statistics, which Delta uses to skip files inside a partition.[^deltaprotocol]
+
+## See also
+
+- [Partition](/wiki/Partition)
+- [Dynamic partition pruning](/wiki/Dynamic_partition_pruning)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Column pruning](/wiki/Column_pruning)
+- [Bucketing](/wiki/Bucketing)
+- [Runtime filter](/wiki/Runtime_filter)
+
+## References
+
+[^fss]: [FileSourceStrategy.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FileSourceStrategy.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-11150: Dynamic partition pruning](https://issues.apache.org/jira/browse/SPARK-11150). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rtf]: [SupportsRuntimeV2Filtering.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsRuntimeV2Filtering.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [SPARK-35779: Support dynamic filtering for v2 tables](https://issues.apache.org/jira/browse/SPARK-35779). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scanexec]: [DataSourceScanExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/DataSourceScanExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [FileScan.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/FileScan.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [DynamicPruning.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/DynamicPruning.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icebergspec]: [Iceberg Table Spec (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n6]: [SparkRuntimeFilterableScan.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/spark/v4.1/spark/src/main/java/org/apache/iceberg/spark/source/SparkRuntimeFilterableScan.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^deltaprotocol]: [Delta Transaction Log Protocol (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md). *Delta Lake*. Retrieved 2026-11-23.

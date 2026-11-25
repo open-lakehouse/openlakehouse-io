@@ -1,0 +1,96 @@
+---
+title: "Dynamic partition pruning"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">DPP, runtime partition pruning</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="key_parts">Partitioned fact table, filtered dimension table, equi-join key on a partition column, broadcast reuse or a pruning subquery</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (since 3.0.0), [Apache Iceberg](/wiki/Apache_Iceberg) and other Data Source V2 connectors through runtime filtering</Field>
+  <Field name="related">[Partition pruning](/wiki/Partition_pruning), [Runtime filter](/wiki/Runtime_filter), [Broadcast join](/wiki/Broadcast_join), [Predicate pushdown](/wiki/Predicate_pushdown), [Star schema](/wiki/Star_schema)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (PartitionPruning.scala, PlanDynamicPruningFilters.scala, CleanupDynamicPruningFilters.scala, DynamicPruning.scala, joins.scala, predicates.scala, SQLConf.scala, SupportsRuntimeV2Filtering.java), Spark JIRA SPARK-11150, and the Apache Iceberg 1.12.0 Spark source</Verified>
+
+**Dynamic partition pruning** (DPP) is a query optimization in [Apache Spark](/wiki/Apache_Spark) that skips partitions of a table using filter values that are only known while the query runs, typically the join keys that survive a filter on the other side of a join. It targets star-schema queries, where a large fact table partitioned by a key is joined to a small, filtered dimension table. DPP was added in Spark 3.0.0 (SPARK-11150) and is on by default.[^jira][^sqlconf]
+
+## Why is dynamic partition pruning needed?
+
+Static [partition pruning](/wiki/Partition_pruning) needs the filter on the partitioned table itself. In a star-schema query the filter is on the dimension table, and the fact table is constrained only through the join:
+
+```sql
+-- sales is partitioned by date_key; dim_date is small
+SELECT d.calendar_month, SUM(s.amount)
+FROM sales s
+JOIN dim_date d ON s.date_key = d.date_key
+WHERE d.is_holiday = true
+GROUP BY d.calendar_month;
+```
+
+Without DPP, Spark reads every partition of `sales` and discards non-holiday rows at the join. With DPP, Spark first evaluates the filtered `dim_date`, collects its `date_key` values, and scans only the `sales` partitions with those keys.
+
+## How does dynamic partition pruning work in Apache Spark?
+
+DPP is an optimizer rule, `PartitionPruning`. When a join has an equality condition between a partition column on one side and a column on the other side, the rule inserts a `DynamicPruningSubquery` filter on the partitioned side. The subquery holds the filtering side of the join, and Spark decides during physical planning how to run it.[^rule]
+1. If the join is planned as a [broadcast hash join](/wiki/Broadcast_join), Spark reuses the broadcast of the filtering side as the pruning filter, so the dimension table is read only once.
+1. Otherwise, if the estimated benefit outweighs the cost of running the filtering side twice, Spark keeps a separate subquery.
+1. Otherwise, Spark drops the pruning filter.[^rule][^n1]
+
+With the defaults, step 2 does not happen. `spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly` is true, so DPP applies only when a broadcast exchange can be reused.[^sqlconf] In practice DPP depends on the dimension side being small enough to broadcast.
+
+The benefit estimate compares the size of the partitioned side after pruning with the size of the filtering side. It uses column statistics when they exist (`spark.sql.optimizer.dynamicPartitionPruning.useStats`, default true) and otherwise a fallback filter ratio (`spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio`, default 0.5).[^rule][^sqlconf]
+
+## When does dynamic partition pruning apply?
+
+The rule at Spark 4.3.0 inserts a pruning filter only when all of the following are true:[^rule]
+- The join condition contains an equality (`=`) between the two sides.
+- The key on the pruned side traces back to a partition column of a file source or Hive table, or to an attribute that a Data Source V2 scan accepts for runtime filtering.
+- The join type allows pruning that side. Inner and left semi joins can prune either side; a left outer join can prune only its right side, and a right outer join only its left side.[^joins]
+- The filtering side is not a streaming plan, and it contains a predicate that is likely to be selective (a comparison, `IN`, `LIKE`, a string predicate and similar) or a small input that is already materialized.[^rule][^n2]
+
+## When does dynamic partition pruning not apply?
+
+Common reasons a star join gets no DPP:
+- **The fact table is not partitioned on the join key.** DPP prunes partitions, not files or row groups. Joins on non-partition columns can use a [runtime filter](/wiki/Runtime_filter) instead.
+- **The dimension side has no selective filter.** Without a filter, every key survives, so there is nothing to prune.
+- **The dimension side is not broadcast.** With `reuseBroadcastOnly` at its default (true), a sort-merge join gets no DPP.[^sqlconf]
+- **The join type is wrong for the side.** For example, the preserved side of an outer join (the left side of a left outer join) cannot be pruned.[^joins]
+- **The filtering side is non-deterministic.** If the filtering plan is non-deterministic, Spark replaces the dynamic predicate with `true` before physical planning.[^rule]
+- **DPP is turned off** with `spark.sql.optimizer.dynamicPartitionPruning.enabled=false`.[^sqlconf]
+
+## What does dynamic partition pruning look like in a plan?
+
+In the physical plan, the scan of the partitioned table lists the dynamic filter in its `PartitionFilters`, wrapped in `dynamicpruningexpression(...)`. With broadcast reuse, the filter refers to a `SubqueryBroadcast` node that reads the broadcast built for the join, and the reuse rule turns the duplicate broadcast exchange into a `ReusedExchange` node.[^n3][^n4][^n5] After the query runs, the scan's `number of partitions read` metric in the Spark UI's SQL tab shows how many partitions were read.[^n6]
+
+## Dynamic partition pruning with table formats
+
+Data Source V2 tables take part in DPP through the `SupportsRuntimeV2Filtering` interface (since Spark 3.4.0), which lets a scan drop input partitions using the runtime predicate.[^n7] [Apache Iceberg](/wiki/Apache_Iceberg)'s Spark batch scan implements it, so DPP prunes Iceberg partitions, including hidden partitions derived from a source column.[^n8]
+
+## Dynamic partition pruning vs runtime filter
+
+DPP and the Spark [runtime filter](/wiki/Runtime_filter) both push information from one side of a join to the other at run time. DPP removes whole partitions at the scan and needs a partition column as the join key. The runtime filter, added in Spark 3.3.0, inserts a bloom filter on any join key to reduce the rows that go into a shuffle, and Spark does not add one where DPP already applies.[^sqlconf][^n9]
+
+## See also
+
+- [Partition pruning](/wiki/Partition_pruning)
+- [Runtime filter](/wiki/Runtime_filter)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Partition](/wiki/Partition)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+
+## References
+
+[^jira]: [SPARK-11150: Dynamic partition pruning](https://issues.apache.org/jira/browse/SPARK-11150). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rule]: [PartitionPruning.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/dynamicpruning/PartitionPruning.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [PlanDynamicPruningFilters.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/dynamicpruning/PlanDynamicPruningFilters.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^joins]: [joins.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/joins.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [predicates.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/predicates.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [ReuseExchangeAndSubquery.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/reuse/ReuseExchangeAndSubquery.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [DynamicPruning.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/DynamicPruning.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [SubqueryBroadcastExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SubqueryBroadcastExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n6]: [DataSourceScanExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/DataSourceScanExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n7]: [SupportsRuntimeV2Filtering.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsRuntimeV2Filtering.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n8]: [SparkRuntimeFilterableScan.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/spark/v4.1/spark/src/main/java/org/apache/iceberg/spark/source/SparkRuntimeFilterableScan.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n9]: [InjectRuntimeFilter.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/InjectRuntimeFilter.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

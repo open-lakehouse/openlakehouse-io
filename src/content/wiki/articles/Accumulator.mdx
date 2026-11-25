@@ -1,0 +1,98 @@
+---
+title: "Accumulator"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark accumulator, `AccumulatorV2`</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Add-only updates from tasks, driver-only reads, merge of per-task updates, named accumulators in the UI</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Broadcast variable](/wiki/Broadcast_variable), [Speculative execution](/wiki/Speculative_execution), [Spark Connect](/wiki/Spark_Connect), [RDD](/wiki/RDD)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/rdd-programming-guide.md, docs/web-ui.md, docs/spark-connect-overview.md, core util/AccumulatorV2.scala, sql metric/SQLMetrics.scala, python/pyspark/sql/observation.py, python/pyspark/sql/dataframe.py)</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), an **accumulator** is a shared variable that tasks can only add to, through an associative and commutative operation, and whose total only the driver can read. Accumulators are used for counters and sums across a job, such as counting bad records while parsing.[^rddguide] Spark guarantees that each task's update is applied once only for updates made inside actions; updates made in transformations can be counted more than once.[^rddguide] Accumulators are part of the `SparkContext` API, which [Spark Connect](/wiki/Spark_Connect) clients do not have.[^connect]
+
+## How accumulators work
+
+Tasks running on the cluster add to an accumulator with `add` (or `+=`) but cannot read it. Only the driver reads the value, with `value`.[^rddguide] Each task keeps its own local copy; when the task finishes, Spark merges the task's updates into the driver's accumulator. If the merge fails, Spark ignores the failure and still marks the task successful, so a faulty accumulator can be wrong even when the job succeeds.[^rddguide]
+
+Spark has built-in long and double accumulators (`SparkContext.longAccumulator()` and `doubleAccumulator()` in Scala and Java, `SparkContext.accumulator()` in Python). Custom types subclass `AccumulatorV2` in Scala and Java, or `AccumulatorParam` in Python, with `zero` and `addInPlace`.[^rddguide] The Spark guide names `reset`, `add` and `merge` as examples of the methods an `AccumulatorV2` subclass has to override, and points to the API documentation for the rest; in Spark 4.3.0 the abstract methods are `isZero`, `copy`, `reset`, `add`, `merge` and `value`.[^rddguide][^accv2src] A named accumulator appears in the Spark UI for each stage that modifies it, with per-task values in the tasks table; the docs note that this is not yet supported in Python.[^rddguide][^webui]
+
+Spark uses the same mechanism internally. The metrics in the SQL tab, such as rows output or spill size, are implemented as `SQLMetric`, a subclass of `AccumulatorV2`.[^sqlmetrics]
+
+## Example
+
+```python
+bad = spark.sparkContext.accumulator(0)
+
+def check(line):
+    if not line.strip():
+        bad.add(1)
+
+lines = spark.sparkContext.textFile("s3a://bucket/raw/events.txt")
+lines.foreach(check)       # foreach is an action: each task's update is applied once
+print(bad.value)
+```
+
+## Why can accumulators in transformations double count?
+
+The Spark docs give two rules.[^rddguide]
+
+- **Inside actions** such as `foreach`, Spark guarantees that each task's update to an accumulator is applied only once; restarted tasks do not update the value again.
+- **Inside transformations** such as `map` or `filter`, each task's update may be applied more than once if tasks or stages are re-executed.
+
+Several things re-execute the work of a transformation:
+
+- **Recomputation.** A DataFrame or RDD that is not cached is recomputed by every action that uses it, so an accumulator in a `map` counts once per action.
+- **Retries and stage recomputation.** A failed task is retried, and a lost [shuffle](/wiki/Shuffle) output makes Spark rerun the stage that produced it.
+- **[Speculative execution](/wiki/Speculative_execution).** With `spark.speculation` enabled, Spark launches a second copy of a slow task.[^config]
+
+Accumulators also follow lazy evaluation. An update inside `map()` does not happen until an action computes the RDD, so reading the value before any action returns the initial value.[^rddguide]
+
+```python
+seen = spark.sparkContext.accumulator(0)
+mapped = lines.map(lambda l: (seen.add(1), l)[1])
+
+seen.value      # 0: no action has run yet
+mapped.count()
+mapped.count()  # not cached, so map runs again
+seen.value      # twice the number of lines
+```
+
+## What replaces accumulators in DataFrame code and Spark Connect?
+
+Spark Connect has no `SparkContext`, so `SparkContext.accumulator` is not available to Connect clients.[^connect] For DataFrames, `DataFrame.observe()` with an `Observation` computes named aggregate metrics, such as `count` or `max`, on the data that flows through the DataFrame during an action, and reports them when the action ends.[^observation] `Observation` was added to PySpark in 3.3.0, and `observe()` supports Spark Connect since 3.5.0.[^observation][^pydf]
+
+```python
+from pyspark.sql import Observation
+from pyspark.sql import functions as F
+
+obs = Observation("quality")
+clean = raw.observe(obs, F.count(F.lit(1)).alias("rows"),
+                    F.sum(F.when(F.col("id").isNull(), 1).otherwise(0)).alias("null_ids"))
+clean.write.mode("append").saveAsTable("main.bronze.events")
+print(obs.get)   # {'rows': ..., 'null_ids': ...}
+```
+
+An `Observation` collects its metrics during the first action only; later actions do not change the result. The class does not support streaming DataFrames.[^observation]
+
+## See also
+
+- [Broadcast variable](/wiki/Broadcast_variable)
+- [Speculative execution](/wiki/Speculative_execution)
+- [Spark Connect](/wiki/Spark_Connect)
+- [RDD](/wiki/RDD)
+
+## References
+
+[^rddguide]: [RDD Programming Guide: Accumulators (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#accumulators). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^accv2src]: [AccumulatorV2.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/util/AccumulatorV2.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlmetrics]: [SQLMetrics.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/metric/SQLMetrics.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^observation]: [observation.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/observation.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pydf]: [dataframe.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.

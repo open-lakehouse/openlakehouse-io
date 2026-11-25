@@ -1,0 +1,91 @@
+---
+title: "Spark error classes"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Error conditions, error states, SQLSTATE codes</Field>
+  <Field name="field">SQL query engines</Field>
+  <Field name="key_parts">Error condition name, sub-condition, SQLSTATE (class and sub-class), message template with parameters</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark SQL ANSI mode](/wiki/Spark_SQL_ANSI_mode), [Spark SQL scripting](/wiki/Spark_SQL_scripting), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (common/utils/src/main/resources/error/, SparkThrowable.java, python/pyspark/errors/exceptions/base.py, docs/sql-error-conditions.md, SQLConf.scala), SPARK-46810 and the Spark 4.0.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **error classes** (now documented as **error conditions**) are the structured identifiers that Spark attaches to user-facing errors: a stable name such as `DIVIDE_BY_ZERO`, an optional sub-condition, a five-character SQLSTATE code and a message template with named parameters.[^readme] They let programs and people identify an error without parsing its message text, which can change between releases. The Spark documentation lists them on the "Error Conditions" page, ordered by SQLSTATE.[^docs]
+
+## Error class or error condition?
+
+Spark uses the terms of the SQL standard, in which an "error class" is only the first two characters of a SQLSTATE. Spark's contributor guide defines a hierarchy of three levels: the error state (SQLSTATE), the error condition, and the error sub-condition. The SQLSTATE in turn has two parts, a class (for example `42`) and a sub-class (for example `K01`).[^readme]
+
+Spark historically called a name like `DATATYPE_MISSING_SIZE` an "error class" as well, which clashed with the standard meaning. SPARK-46810, "Clarify error class terminology", fixed in Spark 4.0.0, settled on "error condition" for these names in user-facing documentation.[^jira46810] The guide notes that the code still calls the field `errorClass` in many places, so the same string is an "error condition" in the docs and an "error class" in the code.[^readme]
+
+The public APIs followed the rename. In Spark 4.3.0 the Java and Scala interface `SparkThrowable` exposes `getCondition()` and marks `getErrorClass()` as deprecated.[^throwable] In PySpark, SPARK-50915 added `PySparkException.getCondition()` and deprecated `getErrorClass()` as of 4.0.0.[^r400][^pybase]
+
+## How are Spark errors structured?
+
+Spark defines its errors in three JSON files in the source tree: `error-conditions.json` (the conditions, their messages and SQLSTATEs), `error-states.json` (the SQLSTATE values) and `error-classes.json` (the two-character SQLSTATE classes).[^readme] An error condition is unique, stays the same across releases, and has a message template whose parameters are written in angle brackets, such as `<relationName>`.[^readme]
+
+Some conditions have sub-conditions that add detail. For example `UNRESOLVED_COLUMN` (SQLSTATE `42703`) has the sub-conditions `WITH_SUGGESTION` and `WITHOUT_SUGGESTION`, and the full name is written `UNRESOLVED_COLUMN.WITH_SUGGESTION`.[^errjson]
+
+Errors that have not yet been given a proper name use a legacy condition with the prefix `_LEGACY_ERROR_TEMP_` and a number. The contributor guide asks that no new uncategorized errors be added and that existing ones be converted.[^readme]
+
+## What is a SQLSTATE in Spark?
+
+A SQLSTATE is a five-character code that identifies an error category across SQL engines; the first two characters are the class and the last three the sub-class.[^readme] Spark's `error-states.json` records, for each state, its description, whether it comes from the SQL standard and which other systems use it. For example `22003` ("numeric value out of range") comes from SQL/Foundation, while `42P01` ("undefined table") originates in PostgreSQL.[^states] Spark 4.0.0 made a SQLSTATE mandatory for error conditions (SPARK-45581) and exposed it in error messages (SPARK-45595).[^r400]
+
+| Error condition | SQLSTATE | Typical cause |
+| --- | --- | --- |
+| `DIVIDE_BY_ZERO` | `22012` | Division by zero in [ANSI mode](/wiki/Spark_SQL_ANSI_mode) |
+| `ARITHMETIC_OVERFLOW` | `22003` | Numeric overflow in ANSI mode |
+| `CAST_INVALID_INPUT` | `22018` | A string that cannot be cast to the target type |
+| `TABLE_OR_VIEW_NOT_FOUND` | `42P01` | A table or view name that does not resolve |
+| `UNRESOLVED_COLUMN` | `42703` | A column, variable or parameter name that does not resolve |
+
+Source: `error-conditions.json` at v4.3.0.[^errjson]
+
+## How to search Spark error conditions
+
+The "Error Conditions" page of the Spark documentation is generated from `error-conditions.json` and lists every condition with its SQLSTATE and message, sorted by SQLSTATE and then by name.[^docs][^n1] Searching that page, or the JSON file at the matching release tag, for the condition name shown in brackets at the start of an error message (for example `[CAST_INVALID_INPUT]`) gives the message template and SQLSTATE for that release.
+
+Programs can read the same fields from the exception. Every Spark exception that implements `SparkThrowable` provides `getCondition()`, `getSqlState()` and `getMessageParameters()`.[^throwable] PySpark exceptions provide methods of the same names.[^pybase]
+
+```python
+from pyspark.errors import PySparkException
+
+try:
+    spark.sql("SELECT 1 / 0").collect()   # ANSI mode is on by default in Spark 4
+except PySparkException as e:
+    print(e.getCondition())          # DIVIDE_BY_ZERO
+    print(e.getSqlState())           # 22012
+    print(e.getMessageParameters())  # e.g. {'config': '"spark.sql.ansi.enabled"'}
+```
+
+Branching on `getCondition()` or on the SQLSTATE class is more robust than matching message text. The contributor guide shows a check of the form `getSqlState.startsWith("42")` to catch all syntax and analysis errors.[^readme] In [Spark SQL scripting](/wiki/Spark_SQL_scripting), condition handlers can name an error condition such as `DIVIDE_BY_ZERO` or a SQLSTATE directly.[^scripting]
+
+## How are error messages formatted?
+
+`spark.sql.error.messageFormat` sets how the Thrift Server and the SQL command-line interface print errors. The default, `PRETTY`, prints the error condition, message and query context and shows stack traces only for internal errors (SQLSTATE `XX***`); `DEBUG` always adds stack traces; `MINIMAL` and `STANDARD` produce JSON, with `STANDARD` adding a `message` field.[^sqlconf]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark SQL ANSI mode](/wiki/Spark_SQL_ANSI_mode)
+- [Spark SQL scripting](/wiki/Spark_SQL_scripting)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration)
+
+## References
+
+[^readme]: [Guidelines for Throwing User-Facing Errors (common/utils/src/main/resources/error/README.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^docs]: [Error Conditions (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-error-conditions.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira46810]: [SPARK-46810: Clarify error class terminology](https://issues.apache.org/jira/browse/SPARK-46810). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^throwable]: [SparkThrowable.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/java/org/apache/spark/SparkThrowable.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pybase]: [pyspark/errors/exceptions/base.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/errors/exceptions/base.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^errjson]: [error-conditions.json (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/error-conditions.json). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^states]: [error-states.json (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/error-states.json). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [docs/_plugins/build-error-docs.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/_plugins/build-error-docs.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scripting]: [SQL Scripting (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-scripting.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

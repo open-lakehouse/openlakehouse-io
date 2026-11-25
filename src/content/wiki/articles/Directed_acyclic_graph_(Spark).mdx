@@ -1,0 +1,85 @@
+---
+title: "Directed acyclic graph (Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">DAG, Spark DAG, RDD lineage graph</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">RDD lineage, narrow and shuffle dependencies, DAG scheduler, stages, task scheduler</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Job, stage and task](/wiki/Job,_stage_and_task), [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations), [RDD](/wiki/RDD), [Lazy evaluation](/wiki/Lazy_evaluation), [Shuffle](/wiki/Shuffle)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (core DAGScheduler.scala, docs/rdd-programming-guide.md, docs/web-ui.md, python/pyspark/core/rdd.py, python/pyspark/sql/dataframe.py, WholeStageCodegenExec.scala), the SIGMOD 2015 Spark SQL paper, the Airflow 3.4.0 documentation and a PySpark 4.3.0 run</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), the **directed acyclic graph** (**DAG**) of a job is the graph of datasets and the operations that connect them; Spark's DAG scheduler cuts this graph into stages at [shuffle](/wiki/Shuffle) boundaries and runs the stages in dependency order.[^dag] "Directed" means each edge points from an input dataset to the dataset computed from it, and "acyclic" means no dataset depends on itself. The same graph, read backwards from a result, is the **lineage** that Spark uses to recompute lost data.
+
+## What does the DAG scheduler do?
+
+The DAGScheduler is the high-level scheduling layer in the [driver](/wiki/Driver_(Apache_Spark)). For each job, the Spark 4.3.0 source describes it as computing a DAG of stages, tracking which RDDs and stage outputs are already materialized, finding a minimal schedule, and submitting each stage as a TaskSet to the lower-level task scheduler.[^dag]
+
+The DAG scheduler has four further duties, all listed in its source:[^dag]
+
+- **Stage boundaries.** It breaks the RDD graph at shuffle boundaries. Operations with narrow dependencies, like `map` and `filter`, are pipelined into one set of tasks in a stage; a shuffle dependency needs a map stage that writes output files and a later stage that reads them after a barrier.
+- **Reuse.** It remembers which RDDs are cached and which shuffle map stages have already produced output, so it does not recompute them.
+- **Placement.** It computes preferred locations for each task from cached data, shuffle data or the input's own locations, and passes them to the task scheduler.
+- **Recovery.** When shuffle output files are lost, it resubmits the stages that produced them. Failures inside a stage that are not caused by lost shuffle files are retried by the task scheduler.
+
+The result of these steps is visible in the Spark web UI. A job's detail page draws its DAG, with vertices for the RDDs or DataFrames and edges for the operations, and each stage detail page draws the stage's part of the graph.[^webui]
+
+## Where are the stage boundaries?
+
+A stage boundary is placed at every shuffle dependency, and nowhere else. Within one stage, every task applies the same chain of operations to a different partition. In the end, every stage has only shuffle dependencies on other stages.[^dag]
+
+For DataFrame and SQL queries, the shuffle dependencies come from `Exchange` operators in the physical plan. The plan below (from a PySpark 4.3.0 run with [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) and broadcast joins turned off; plan IDs removed) has two `Exchange` nodes feeding a sort-merge join, so the job has three stages: one for each input side and one for the join.
+
+```
+*(5) Project [k#9L]
++- *(5) SortMergeJoin [k#9L], [k#11L], Inner
+   :- *(2) Sort [k#9L ASC NULLS FIRST], false, 0
+   :  +- Exchange hashpartitioning(k#9L, 200), ENSURE_REQUIREMENTS
+   :     +- *(1) Project [id#8L AS k#9L]
+   :        +- *(1) Range (0, 1000000, step=1, splits=2)
+   +- *(4) Sort [k#11L ASC NULLS FIRST], false, 0
+      +- Exchange hashpartitioning(k#11L, 200), ENSURE_REQUIREMENTS
+         +- *(3) Project [id#10L AS k#11L]
+            +- *(3) Range (0, 100, step=1, splits=2)
+```
+
+Which operators create a shuffle is covered in [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations).
+
+## What is lineage?
+
+Lineage is the record of the transformations that produced a dataset. Spark's cache is fault tolerant because of it: if a partition of a persisted RDD is lost, Spark recomputes it with the transformations that originally created it.[^rddguide] The 2015 Spark SQL paper describes RDDs the same way: the system recovers lost data using the lineage graph, by rerunning operations such as a filter to rebuild missing partitions.[^paper]
+
+Shuffle files support the same recovery. Spark keeps them until the RDDs that use them are no longer referenced, so that the map side does not have to run again if the lineage is recomputed.[^rddguide]
+
+Lineage can be printed. `RDD.toDebugString()` returns a description of an RDD and its recursive dependencies.[^rddpy] For DataFrames, `explain()` plays the same role (see [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan)).
+
+A long lineage has a cost: the plan grows with each step, and recomputing it after a failure repeats every step. `DataFrame.checkpoint()` truncates the logical plan by saving the data to the checkpoint directory; the PySpark reference recommends it for iterative algorithms, where the plan may grow exponentially. It works with Spark Connect since 4.0.0.[^pydf]
+
+## What the Spark DAG is not
+
+- **Not an orchestration DAG.** In [Apache Airflow](/wiki/Apache_Airflow), a Dag models a whole workflow: its schedule, its tasks (for example submitting a Spark job) and the dependencies between them.[^airflow] A Spark DAG lives inside one Spark job: the driver builds it for an action and schedules its stages.[^dag]
+- **Not the query plan itself.** For DataFrame and SQL code, the [Catalyst optimizer](/wiki/Catalyst_optimizer) first produces logical and physical plans, which are trees of operators.[^paper] Each physical operator executes as an RDD of rows (in the Spark 4.3.0 source, `doExecute()` returns an `RDD[InternalRow]`), and the DAG scheduler works on that RDD graph.[^wscg]
+
+## See also
+
+- [Job, stage and task](/wiki/Job,_stage_and_task)
+- [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations)
+- [Lazy evaluation](/wiki/Lazy_evaluation)
+- [RDD](/wiki/RDD)
+- [Shuffle](/wiki/Shuffle)
+- [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan)
+
+## References
+
+[^dag]: [DAGScheduler.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rddguide]: [RDD Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^paper]: [Spark SQL: Relational Data Processing in Spark (SIGMOD 2015)](https://people.csail.mit.edu/matei/papers/2015/sigmod_spark_sql.pdf). *Armbrust et al., Databricks, MIT CSAIL and AMPLab UC Berkeley*. Retrieved 2026-11-23.
+[^rddpy]: [rdd.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/core/rdd.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pydf]: [dataframe.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^airflow]: [What is Airflow? (Airflow 3.4.0 documentation)](https://airflow.apache.org/docs/apache-airflow/3.4.0/index.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^wscg]: [WholeStageCodegenExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/WholeStageCodegenExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

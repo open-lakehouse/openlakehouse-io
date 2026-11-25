@@ -1,0 +1,107 @@
+---
+title: "Apache DataFusion Comet"
+categories: ["Query engines", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="also_known_as">Comet</Field>
+  <Field name="developer">Apache Software Foundation (sub-project of Apache DataFusion); originally developed at Apple</Field>
+  <Field name="initial_release">0.1.0 (July 2024); 1.0.0 on 2026-08-07</Field>
+  <Field name="latest_release">1.2.0</Field>
+  <Field name="latest_release_date">2026-11-03</Field>
+  <Field name="written_in">Rust, Scala, Java</Field>
+  <Field name="type">Native execution plugin for Apache Spark</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[datafusion.apache.org/comet](https://datafusion.apache.org/comet)</Field>
+  <Field name="repo">[github.com/apache/datafusion-comet](https://github.com/apache/datafusion-comet)</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Apache Gluten](/wiki/Apache_Gluten), [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)), [Apache Iceberg](/wiki/Apache_Iceberg), [Project Tungsten](/wiki/Project_Tungsten)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the GitHub releases and tags of apache/datafusion-comet (1.0.0, 1.1.0, 1.2.0), README.md and the user guide at the 1.2.0 tag (installation, Spark version compatibility, configs, operators, Iceberg, Delta Lake, memory tuning), the Comet versus Gluten comparison page, the top-level project proposal page and issue #6793, and the Apache Arrow blog post of 2024-03-06 announcing the donation</Verified>
+
+**Apache DataFusion Comet** (usually just **Comet**) is an open source plugin for [Apache Spark](/wiki/Apache_Spark) that replaces supported Spark SQL operators and expressions with implementations that process Apache Arrow columnar data, most of them native Rust code built on the Apache DataFusion query engine.[^readme] Spark still parses, optimizes and schedules the query, and existing Spark SQL, DataFrame and PySpark code runs without changes.[^readme] Comet is a sub-project of Apache DataFusion and one of the [native execution engines](/wiki/Native_execution_engine_(Spark)) available for Spark.[^tlp]
+
+## What is Apache DataFusion Comet?
+
+Apache DataFusion Comet is a Spark plugin that translates a Spark physical plan into a serialized form and passes it to native code for execution. Comet uses its own Protocol Buffers format for the plan, and execution is delegated to Apache DataFusion, a query engine written in Rust.[^cmp] Unlike [Apache Gluten](/wiki/Apache_Gluten), which supports several native backends, Comet is built for one engine and does not plan to support others.[^cmp]
+
+Apache DataFusion Comet keeps data in Arrow columnar format through operators, expressions, shuffle and broadcast. Inside that pipeline, operators and expressions run either as Rust code through DataFusion or as JVM code that works directly on Arrow batches.[^readme]
+
+## History and status
+
+Apache DataFusion Comet was originally implemented at Apple. The Apache Arrow project management committee announced the donation of Comet to Apache Arrow on 2024-03-06; at that time DataFusion was itself part of Arrow.[^donation] When DataFusion became a top-level ASF project in April 2024, Comet became a sub-project of Apache DataFusion.[^tlp]
+
+Apache DataFusion Comet published its first release, 0.1.0, in July 2024. Version 1.0.0 followed on 2026-08-07 and 1.1.0 on 2026-10-06.[^tlp] The latest release is 1.2.0, published on GitHub on 2026-11-03.[^rel120]
+
+The Comet community is preparing to make Comet a separate top-level ASF project named "Apache Comet". As of 2026-11-23 this is a proposal: the tracking issue is open, the board resolution has not been adopted, and the plan lists the 2026-12-16 ASF board meeting as the target.[^tlp][^epic]
+
+## Which Spark versions does Comet support?
+
+Apache DataFusion Comet 1.2.0 supports Apache Spark 3.4, 3.5, 4.0, 4.1 and 4.2. The installation guide lists the tested patch versions 3.4.3, 3.5.9, 4.0.4, 4.1.3 and 4.2.0.[^install] Spark 4.3 is not on the list. Comet requires JDK 17 or later; JDK 11 support ended with the 1.1.0 release. Spark 3.4 support has been deprecated since 1.0.0 and is planned for removal.[^install]
+
+The installation guide also notes that Comet may not fully work with proprietary forks of Apache Spark, such as the Spark versions offered by cloud service providers.[^install]
+
+## How does Comet work with Apache Spark?
+
+Apache DataFusion Comet is added to the Spark class path as a JAR built for a given Spark and Scala version, and enabled through Spark's plugin interface. A typical configuration from the project README:[^readme]
+
+```bash
+$SPARK_HOME/bin/spark-shell \
+    --jars $COMET_JAR \
+    --conf spark.driver.extraClassPath=$COMET_JAR \
+    --conf spark.executor.extraClassPath=$COMET_JAR \
+    --conf spark.plugins=org.apache.spark.CometPlugin \
+    --conf spark.shuffle.manager=org.apache.spark.sql.comet.execution.shuffle.CometShuffleManager \
+    --conf spark.comet.explain.fallback.enabled=true \
+    --conf spark.memory.offHeap.enabled=true \
+    --conf spark.memory.offHeap.size=4g \
+    --conf spark.executor.memoryOverhead=2g
+```
+
+Apache DataFusion Comet has two main switches. `spark.comet.enabled` (default true) turns the extension on, and `spark.comet.exec.enabled` (default true) turns on native execution; both must be on for operators to run natively.[^configs]
+
+Comet shuffle is controlled by `spark.comet.shuffle.enabled`, which requires `spark.shuffle.manager` to be set to `CometShuffleManager` or, for Apache Celeborn, `CometCelebornShuffleManager`. Shuffle data is written as Arrow IPC and compressed with lz4 by default (`spark.comet.shuffle.compression.codec`, which also accepts zstd and snappy).[^configs] The native shuffle supports hash and range partitioning, with a JVM path for partition key types that the native code does not handle.[^readme]
+
+Apache DataFusion Comet shares Spark's off-heap memory pool, sized by `spark.memory.offHeap.size`, as a budget for its reservations. Native memory that the pools do not track has to fit in `spark.executor.memoryOverhead`.[^memory] The default pool type, set by `spark.comet.exec.memoryPool`, is `fair_unified`.[^configs]
+
+## What runs natively and what falls back?
+
+Apache DataFusion Comet runs whole subtrees of native operators together. If a query stage contains an operator that Comet does not support, that stage falls back to regular Spark execution, and the operator reference states that results are unaffected.[^ops] Each supported operator can be turned off with `spark.comet.exec.OPERATOR.enabled=false`, for example `spark.comet.exec.sort.enabled=false`.[^ops]
+
+Natively supported work in Comet 1.2.0 includes Parquet scans, projections and filters, hash aggregates, hash, sort-merge and broadcast joins, and shuffle, plus hundreds of Spark expressions in the math, string, date and time, array, map, JSON, hash and predicate categories.[^readme] Structured Streaming operators, Cartesian joins, pickled (non-Arrow) Python UDFs and typed Dataset operators such as `map` and `groupByKey` fall back to Spark and are not on the roadmap.[^ops]
+
+Apache DataFusion Comet can report why a stage did not run natively. `spark.comet.explain.fallback.enabled` (default false) logs the reasons, and the extended explain format `spark.comet.explain.format` (default `verbose`) annotates the plan with fallback reasons and a summary of how much of it was accelerated.[^configs]
+
+## Does Comet support Apache Iceberg and Delta Lake?
+
+Apache DataFusion Comet has a native [Apache Iceberg](/wiki/Apache_Iceberg) reader that scans data and delete files in Rust and is enabled by default; `spark.comet.scan.icebergNative.enabled=false` turns it off. The guide says it was tested with Iceberg 1.5, 1.8, 1.9, 1.10 and 1.11 and with Hadoop, Hive and REST catalogs ([Iceberg REST catalog](/wiki/Iceberg_REST_catalog)). Native Iceberg writes are off by default and enabled with `spark.comet.write.iceberg.enabled=true`. HDFS-backed tables fall back to Spark.[^iceberg]
+
+Support for [Delta Lake](/wiki/Delta_Lake) in Comet is experimental. It covers DSv1 Delta table scans through Comet's native Parquet scan, needs a separate `comet-contrib-delta-spark` JAR next to `delta-spark`, and is off by default (`spark.comet.scan.delta.enabled`).[^delta]
+
+## Comet vs Gluten
+
+Apache DataFusion Comet and [Apache Gluten](/wiki/Apache_Gluten) have similar architectures: both are Spark plugins that serialize the physical plan and execute it natively. Gluten serializes plans as Substrait and supports several engines ([Velox](/wiki/Velox) and ClickHouse in Gluten 1.7.0), while Comet uses its own Protocol Buffers format and only DataFusion. The comparison page, maintained by the Comet community and described there as likely biased, names the implementation language (Rust for DataFusion, C++ for Velox) as the main practical difference, for example for teams that write native UDFs.[^cmp] See [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)) for a wider comparison.
+
+## See also
+
+- [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))
+- [Apache Gluten](/wiki/Apache_Gluten)
+- [Velox](/wiki/Velox)
+- [GPU acceleration in Spark](/wiki/GPU_acceleration_in_Spark)
+- [Project Tungsten](/wiki/Project_Tungsten)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+
+## References
+
+[^readme]: [Apache DataFusion Comet README (1.2.0)](https://github.com/apache/datafusion-comet/blob/1.2.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tlp]: [Proposal to Establish Apache Comet as a Top-Level Project](https://datafusion.apache.org/comet/about/top_level_project_proposal.html). *Apache DataFusion Comet*. Retrieved 2026-11-23.
+[^cmp]: [Comparison of Comet and Gluten](https://github.com/apache/datafusion-comet/blob/1.2.0/docs/source/about/gluten_comparison.md). *Apache DataFusion Comet*. Retrieved 2026-11-23.
+[^donation]: [Announcing Apache Arrow DataFusion Comet](https://arrow.apache.org/blog/2024/03/06/comet-donation/). *Apache Arrow*, 2024-03-06. Retrieved 2026-11-23.
+[^rel120]: [Release 1.2.0](https://github.com/apache/datafusion-comet/releases/tag/1.2.0). *Apache Software Foundation (GitHub)*. Retrieved 2026-11-23.
+[^epic]: [\[EPIC\] Promote Comet to a top level Apache project (#6793)](https://github.com/apache/datafusion-comet/issues/6793). *Apache Software Foundation (GitHub)*. Retrieved 2026-11-23.
+[^install]: [Installing DataFusion Comet (1.2.0)](https://github.com/apache/datafusion-comet/blob/1.2.0/docs/source/user-guide/latest/installation.md). *Apache DataFusion Comet*. Retrieved 2026-11-23.
+[^configs]: [Comet Configuration Settings (1.2.0)](https://github.com/apache/datafusion-comet/blob/1.2.0/docs/source/user-guide/latest/configs.md). *Apache DataFusion Comet*. Retrieved 2026-11-23.
+[^memory]: [Comet Memory Tuning (1.2.0)](https://github.com/apache/datafusion-comet/blob/1.2.0/docs/source/user-guide/latest/tuning/memory.md). *Apache DataFusion Comet*. Retrieved 2026-11-23.
+[^ops]: [Spark Operator Support (1.2.0)](https://github.com/apache/datafusion-comet/blob/1.2.0/docs/source/user-guide/latest/operators.md). *Apache DataFusion Comet*. Retrieved 2026-11-23.
+[^iceberg]: [Apache Iceberg (Comet 1.2.0 user guide)](https://github.com/apache/datafusion-comet/blob/1.2.0/docs/source/user-guide/latest/iceberg.md). *Apache DataFusion Comet*. Retrieved 2026-11-23.
+[^delta]: [Delta Lake (experimental) (Comet 1.2.0 user guide)](https://github.com/apache/datafusion-comet/blob/1.2.0/docs/source/user-guide/latest/delta.md). *Apache DataFusion Comet*. Retrieved 2026-11-23.

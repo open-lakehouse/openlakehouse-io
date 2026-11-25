@@ -1,0 +1,103 @@
+---
+title: "Apache Uniffle"
+categories: ["Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) (originally Tencent)</Field>
+  <Field name="latest_release">0.10.0</Field>
+  <Field name="latest_release_date">2025-09-25</Field>
+  <Field name="written_in">Java (server and clients), Go (Kubernetes operator)</Field>
+  <Field name="type">[Remote shuffle service](/wiki/Remote_shuffle_service)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[uniffle.apache.org](https://uniffle.apache.org)</Field>
+  <Field name="repo">[github.com/apache/uniffle](https://github.com/apache/uniffle)</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Apache Celeborn](/wiki/Apache_Celeborn), [Shuffle](/wiki/Shuffle)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v0.10.0 tag of apache/uniffle (README.md, pom.xml, docs/server_guide.md, docs/operator/README.md, patch/spark), the Uniffle download page, the Uniffle incubation status page and proposal, and the v0.7.0 tag of apache/celeborn</Verified>
+
+**Apache Uniffle** is an open source [remote shuffle service](/wiki/Remote_shuffle_service) for distributed computing engines: a cluster of coordinators and shuffle servers that receives the [shuffle](/wiki/Shuffle) data of [Apache Spark](/wiki/Apache_Spark), Hadoop MapReduce and Apache Tez jobs, stores it in memory, on local disk or in remote storage such as HDFS, and serves it to the tasks that read it.[^readme] The project describes the change as moving shuffle from a "local file pull-like style" to a "remote block push-like style". Uniffle is a top-level project of the Apache Software Foundation.
+
+## History
+
+Uniffle was started at Tencent in 2020 under the name "Firestorm" and open sourced on GitHub in 2021.[^proposal] It entered the Apache Incubator on 2022-06-06, released 0.6.0 as its first incubating release in October 2022, and graduated to a top-level project on 2025-02-19.[^incubator]
+
+The latest release is 0.10.0, published on 2025-09-25.[^download]
+
+## Architecture
+
+A Uniffle cluster has three parts:[^readme]
+- A **coordinator** cluster, which collects the status of shuffle servers and assigns them to jobs.
+- A **shuffle server** cluster, which receives shuffle data, merges it and writes it to storage.
+- Optional **remote storage**, such as HDFS.
+
+Shuffle servers can store data as memory plus local files, memory plus remote storage, or memory plus local files plus remote storage. The server setting `rss.storage.type` takes the values `MEMORY_LOCALFILE`, `MEMORY_HDFS` and `MEMORY_LOCALFILE_HDFS`, and the README recommends the last one for production.[^readme][^server]
+
+Stored shuffle data uses two files per partition: a data file that holds all the blocks for the partition, and an index file with metadata for each block.[^readme]
+
+## How does a shuffle work with Uniffle?
+
+With Uniffle, the Spark driver asks a coordinator which shuffle servers to use. Each map task buffers its records, requests memory from a shuffle server, and sends the data; the server caches it in memory and flushes it to storage. After writing, the task reports all its block IDs to the shuffle server so that readers can check that they received every block, and it records its task attempt ID in the map status so that speculative execution works. Reduce tasks then read from shuffle servers, remote storage or both, depending on the storage type.[^readme]
+
+## Which engines does Uniffle support?
+
+The 0.10.0 README lists:[^readme]
+- **[Apache Spark](/wiki/Apache_Spark)** 2.3, 2.4 and 3.0 through 3.5. The release's Maven build profiles go up to Spark 3.5.[^pom]
+- **Hadoop MapReduce**, built against Hadoop 2.8.5 and 3.2.1.
+- **Apache Tez**.
+
+## How do you use Uniffle with Apache Spark?
+
+A Spark application uses Uniffle by adding the client jar and replacing the shuffle manager:[^readme]
+
+```properties
+spark.serializer             org.apache.spark.serializer.KryoSerializer
+spark.shuffle.manager        org.apache.spark.shuffle.RssShuffleManager
+spark.rss.coordinator.quorum <coordinatorIp1>:19999,<coordinatorIp2>:19999
+```
+
+Dynamic allocation needs extra setup. For Spark 3.5 and later, setting `spark.shuffle.sort.io.plugin.class=org.apache.spark.shuffle.RssShuffleDataIo` lets Spark release executors without the external shuffle service. For older versions, Uniffle ships patches for Spark 2.3.4, 2.4.6, 3.0.1, 3.1.2, 3.2.1, 3.3.1 and 3.4.1 that must be applied before rebuilding Spark.[^readme] The `spark.shuffle.sort.io.plugin.class` hook is Spark's shuffle storage API, available since Spark 3.0.0.[^n1]
+
+## How is Uniffle deployed?
+
+Uniffle is deployed as its own cluster, separate from the compute engine. Coordinators and shuffle servers are configured through `conf/rss-env.sh`, `coordinator.conf` and `server.conf`, and a coordinator can hand default client settings to jobs through a dynamic client configuration file.[^readme] On [Kubernetes](/wiki/Kubernetes), the Uniffle operator manages Uniffle clusters; its API is in beta (`v1alpha1`) at 0.10.0.[^operator] The project also ships a web dashboard.[^n2]
+
+## Uniffle compared with Apache Celeborn
+
+<Hatnote>Main article: [Remote shuffle service](/wiki/Remote_shuffle_service)</Hatnote>
+
+[Apache Celeborn](/wiki/Apache_Celeborn) is the other remote shuffle service at the ASF. The two share the same basic design: map output is pushed to dedicated servers, and the engine connects through `spark.shuffle.manager`. The table shows where they differ in their latest releases.
+
+|  | Apache Celeborn 0.7.0 | Apache Uniffle 0.10.0 |
+| --- | --- | --- |
+| Control plane | Masters, with state replicated through Raft[^celebornreadme] | Coordinator cluster[^readme] |
+| Spark versions | 3.0 to 4.2[^celebornreadme] | 2.3 to 3.5[^readme] |
+| Other engines | Flink 1.18 to 2.3 (batch), MapReduce 3, Tez (experimental)[^celebornreadme] | MapReduce, Tez[^readme] |
+| Kubernetes | Helm chart[^n3] | Operator (beta)[^operator] |
+| Origin | Alibaba, 2020[^n4] | Tencent, 2020[^proposal] |
+| Top-level project since | 2024-03-21[^n5] | 2025-02-19[^incubator] |
+
+## See also
+
+- [Remote shuffle service](/wiki/Remote_shuffle_service)
+- [Apache Celeborn](/wiki/Apache_Celeborn)
+- [Shuffle](/wiki/Shuffle)
+- [Executor](/wiki/Executor)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^readme]: [Apache Uniffle README (v0.10.0)](https://github.com/apache/uniffle/blob/v0.10.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^proposal]: [Uniffle Proposal](https://cwiki.apache.org/confluence/display/INCUBATOR/UniffleProposal). *Apache Incubator*. Retrieved 2026-11-23.
+[^incubator]: [Uniffle Project Incubation Status](https://incubator.apache.org/projects/uniffle.html). *Apache Incubator*. Retrieved 2026-11-23.
+[^download]: [Download](https://uniffle.apache.org/download). *Apache Uniffle*. Retrieved 2026-11-23.
+[^server]: [Uniffle Shuffle Server Guide (v0.10.0)](https://github.com/apache/uniffle/blob/v0.10.0/docs/server_guide.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pom]: [pom.xml (Uniffle v0.10.0)](https://github.com/apache/uniffle/blob/v0.10.0/pom.xml). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [config/package.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^operator]: [Uniffle Operator (v0.10.0)](https://github.com/apache/uniffle/blob/v0.10.0/docs/operator/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [Dashboard Guide (v0.10.0)](https://github.com/apache/uniffle/blob/v0.10.0/docs/dashboard_guide.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^celebornreadme]: [Apache Celeborn README (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [Deploy Celeborn on Kubernetes (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/docs/deploy_on_k8s.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [Celeborn Proposal](https://cwiki.apache.org/confluence/display/INCUBATOR/CelebornProposal). *Apache Incubator*. Retrieved 2026-11-23.
+[^n5]: [Celeborn Project Incubation Status](https://incubator.apache.org/projects/celeborn.html). *Apache Incubator*. Retrieved 2026-11-23.

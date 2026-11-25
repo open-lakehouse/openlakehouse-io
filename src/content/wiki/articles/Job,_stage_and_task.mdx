@@ -1,0 +1,91 @@
+---
+title: "Job, stage and task"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark job, Spark stage, Spark task</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Action, job, `ShuffleMapStage`, `ResultStage`, task, stage attempt</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Directed acyclic graph (Spark)](/wiki/Directed_acyclic_graph_(Spark)), [Shuffle](/wiki/Shuffle), [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations), [Executor](/wiki/Executor), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/cluster-overview.md, docs/web-ui.md, docs/configuration.md, docs/sql-performance-tuning.md, core DAGScheduler.scala), a PySpark 4.3.0 run with SparkStatusTracker, and the Trino 484 concepts page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **job** is the parallel computation that one action (such as `collect` or `save`) starts; Spark divides each job into **stages** at [shuffle](/wiki/Shuffle) boundaries, and each stage into **tasks**, one per [partition](/wiki/Partition), which run on [executors](/wiki/Executor).[^cluster][^dag] These three terms are the units in which the Spark web UI, the driver logs and the scheduler describe work. Knowing how they map to code explains why one line of PySpark can show up as several jobs and hundreds of tasks.
+
+## What are a job, a stage and a task?
+
+| Term | Definition in Spark | Created when | Seen in the UI as |
+| --- | --- | --- | --- |
+| Job | A parallel computation of many tasks, spawned in response to an action[^cluster] | An action runs; the DAG scheduler receives it through `submitJob`[^dag] | A row in the Jobs tab |
+| Stage | A set of tasks that compute the same function on different partitions of the same data; stages are separated at shuffle boundaries[^dag] | The DAG scheduler cuts the job's graph at each shuffle dependency[^dag] | A row in the Stages tab, and a box in the job's DAG visualization[^webui] |
+| Task | A unit of work sent to one executor[^cluster], which processes one partition | A stage is submitted as a TaskSet with one task per partition to compute[^dag] | A row in the task table of the stage detail page[^webui] |
+
+Spark has two kinds of stage. A **ShuffleMapStage** writes map output files for a shuffle, and a **ResultStage** is the final stage that runs the action.[^dag] A stage can be shared by several jobs if they reuse the same data.
+
+## How does one action become jobs, stages and tasks?
+
+The [driver](/wiki/Driver_(Apache_Spark)) builds the plan, and the action hands it to the DAG scheduler as a job. Operations with narrow dependencies, such as `map` and `filter`, are pipelined together into one set of tasks per stage; operations with shuffle dependencies need one stage to write map output files and another to read them after a barrier.[^dag] See [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations).
+
+The number of tasks in a stage is the number of partitions it computes. A stage that reads files has one task per input partition, and file partitions hold at most `spark.sql.files.maxPartitionBytes` (default 128 MB) each; a stage after a shuffle has one task per shuffle partition, which for DataFrame and SQL queries is `spark.sql.shuffle.partitions` (default 200) unless [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) changes it.[^perf] An executor runs at most `spark.executor.cores` divided by `spark.task.cpus` tasks at once, so the tasks of a large stage queue for free slots.[^config]
+
+## Example
+
+This PySpark aggregation needs one shuffle, because rows with the same key must meet in one task:
+
+```python
+df = spark.range(1_000_000)
+df.groupBy((df.id % 10).alias("m")).count().collect()
+```
+
+Run with `local[2]` on PySpark 4.3.0 and read back through `SparkContext.statusTracker()`, the same action produced these units:
+
+| Setting | Jobs | Stages and tasks |
+| --- | --- | --- |
+| `spark.sql.adaptive.enabled=false` | 1 job | Stage 0: 2 tasks (read the range and write shuffle files); stage 1: 200 tasks (read the shuffle and finish the count) |
+| `spark.sql.adaptive.enabled=true` (default) | 2 jobs | Job 1: one stage of 2 tasks (the map side). Job 2: a reference to the same map stage, whose shuffle output already existed, and a result stage of 1 task, after AQE coalesced the 200 shuffle partitions into one |
+
+The second row shows why job counts in the UI do not always match actions. AQE re-optimizes the plan during execution from runtime statistics,[^perf] and in this run it started the map side as its own job before planning the final stage. The DAG scheduler remembers which shuffle map stages have already produced output files and does not redo them;[^dag] the web UI lists such stages under "skipped".[^webui]
+
+## Reading the Spark UI with these terms
+
+The Spark web UI follows the same hierarchy:[^webui]
+
+- The **Jobs** tab lists each job with its description, duration, a stage summary and a task progress bar. A job's detail page shows the DAG visualization and the job's stages grouped as active, pending, completed, skipped and failed.
+- The **Stages** tab lists all stages. Each stage shows input and output bytes, **shuffle read** (bytes read from earlier stages) and **shuffle write** (bytes written for later stages).
+- A **stage detail** page shows summary metrics over all tasks (duration, GC time, scheduler delay, peak execution memory, shuffle read fetch wait time, shuffle spill to memory and disk) and a table with one row per task.
+- The **SQL / DataFrame** tab has a detail page per query that lists the jobs and stages associated with it and shows its parsed, analyzed and optimized logical plans and physical plan. The stage DAG groups nodes by operation scope, such as `WholeStageCodegen` and `Exchange`, and annotates code generation IDs, so a stage can be traced back to operators in the [physical plan](/wiki/Logical_plan_and_physical_plan).
+
+## Failures and retries
+
+A task that fails is retried by the task scheduler; `spark.task.maxFailures` (default 4) is the number of continuous failures of one particular task before Spark gives up on the job, so the default allows three retries.[^config] If a task fails because shuffle output from an earlier stage was lost, for example because an executor died, the DAG scheduler resubmits the earlier stage. Each run of a stage is called an attempt.[^dag]
+
+## Spark terms compared with Trino
+
+[Trino](/wiki/Trino) uses the words "stage" and "task" for related but different things.
+
+|  | Apache Spark | Trino |
+| --- | --- | --- |
+| Stage | A set of tasks that actually run on executors, between two shuffle boundaries[^dag] | A model of part of the distributed query plan used by the coordinator; stages themselves do not run on workers[^trino] |
+| Task | One unit of work on one partition, sent to one executor[^cluster] | The implementation of a stage on a worker; tasks operate on splits[^trino] |
+| Job | The work started by one action | No equivalent term; the unit is the query |
+
+## See also
+
+- [Directed acyclic graph (Spark)](/wiki/Directed_acyclic_graph_(Spark))
+- [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations)
+- [Shuffle](/wiki/Shuffle)
+- [Executor](/wiki/Executor)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Lazy evaluation](/wiki/Lazy_evaluation)
+
+## References
+
+[^cluster]: [Cluster Mode Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/cluster-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dag]: [DAGScheduler.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trino]: [Trino concepts (Trino 484)](https://trino.io/docs/current/overview/concepts.html). *Trino Software Foundation*. Retrieved 2026-11-23.

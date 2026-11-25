@@ -1,0 +1,111 @@
+---
+title: "Window functions"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Query engines"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Analytic functions, OVER clause</Field>
+  <Field name="field">SQL query processing</Field>
+  <Field name="key_parts">Partitioning, ordering, window frame (ROWS or RANGE), ranking, offset and aggregate functions</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), PostgreSQL, [Trino](/wiki/Trino), [DuckDB](/wiki/DuckDB), Snowflake</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Partition](/wiki/Partition), [Lateral column alias](/wiki/Lateral_column_alias)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-syntax-qry-select-window.md, docs/sql-ref-syntax-qry-select-qualify.md, docs/sql-ref-syntax-qry-select.md, SqlBaseParser.g4, python/pyspark/sql/window.py, WindowExecBase.scala, sql-tests/inputs/window.sql), the Spark 4.2.0 release notes, PostgreSQL 19 documentation, Trino 484 documentation, DuckDB 2.0 documentation and Snowflake documentation</Verified>
+
+A **window function** is a SQL function that computes a value for each row from a group of related rows, called the window, without collapsing those rows into one as `GROUP BY` does; in [Apache Spark](/wiki/Apache_Spark) it is written as a function followed by an `OVER` clause that names the partitioning, the ordering and an optional frame.[^sparkwin] Window functions are used for rankings, running totals, moving averages and comparisons with the previous or next row. SQL engines that support them differ in frame types, null handling and the filtering clause `QUALIFY`, which the comparison table below sets out.
+
+## How does a window function work?
+
+The `OVER` clause has three parts. `PARTITION BY` splits rows into independent groups; `ORDER BY` orders rows inside each group; and the frame clause picks which rows around the current row the function sees. In Spark SQL the frame is written `{ RANGE | ROWS } { frame_start | BETWEEN frame_start AND frame_end }`, with bounds `UNBOUNDED PRECEDING`, `offset PRECEDING`, `CURRENT ROW`, `offset FOLLOWING` or `UNBOUNDED FOLLOWING`; an omitted `frame_end` means `CURRENT ROW`.[^sparkwin]
+
+A `ROWS` frame counts physical rows. A `RANGE` frame uses value distance on the ordering column, so rows with equal ordering values (peers) are in or out of the frame together. Spark accepts numeric, date and interval offsets in `RANGE` frames, for example `RANGE BETWEEN CURRENT ROW AND INTERVAL 23 DAYS 4 HOURS FOLLOWING`.[^wintests]
+
+## What is the default frame?
+
+In Spark, when a window has no ordering, the frame is the whole partition (`ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`). When ordering is defined, the default is a growing frame, `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`.[^pywin] This is why `last_value(x) OVER (ORDER BY t)` returns the current row's value (or that of its last peer) unless the frame is extended to `UNBOUNDED FOLLOWING`.
+
+## Which kinds of window functions are there?
+
+Spark groups window functions into three kinds.[^sparkwin]
+- **Ranking functions:** `ROW_NUMBER`, `RANK`, `DENSE_RANK`, `PERCENT_RANK`, `NTILE`.
+- **Analytic (offset and value) functions:** `LAG`, `LEAD`, `NTH_VALUE`, `FIRST_VALUE`, `LAST_VALUE`, `CUME_DIST`.
+- **Aggregate functions** used with `OVER`, such as `SUM`, `AVG`, `MIN`, `MAX` and `COUNT`.
+
+`LAG`, `LEAD`, `NTH_VALUE`, `FIRST_VALUE` and `LAST_VALUE` accept `IGNORE NULLS` in Spark; the default is `RESPECT NULLS`.[^sparkwin] `RANK` leaves gaps after ties and `DENSE_RANK` does not.[^sparkwin]
+
+## How do you filter on a window function?
+
+Spark SQL has a `QUALIFY` clause that filters rows after window functions are evaluated, either by referring to a window function's alias in the `SELECT` list or by writing the window function in the condition itself; it was added in Spark 4.2.0 (SPARK-31561).[^qualify][^r420] Without `QUALIFY`, the same result needs a subquery or common table expression with a `WHERE` on the computed column. A named window can be declared once with the `WINDOW` clause and reused.[^select]
+
+## Example
+
+PySpark, with a rank, the previous salary and a three-row moving average per department:[^pywin]
+
+```python
+from pyspark.sql import Window, functions as F
+
+w = Window.partitionBy("dept").orderBy("salary")
+
+df.select(
+    "name", "dept", "salary",
+    F.rank().over(w).alias("rank"),
+    F.lag("salary").over(w).alias("prev_salary"),
+    F.avg("salary").over(w.rowsBetween(-1, 1)).alias("moving_avg"),
+).show()
+```
+
+Spark SQL, keeping the highest-paid employee of each department with `QUALIFY`:[^qualify]
+
+```sql
+SELECT name, dept, salary
+FROM employees
+QUALIFY ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) = 1;
+```
+
+## How do window functions run in Spark?
+
+Spark's physical window operator requires its input to be clustered by the `PARTITION BY` columns and sorted by the partition and `ORDER BY` columns, so the planner usually adds a [shuffle](/wiki/Shuffle) and a sort before it. A window with no `PARTITION BY` requires all rows in one partition, and Spark logs a warning that this "can cause serious performance degradation".[^winexec]
+
+## Engine differences
+
+| Feature | Apache Spark 4.3 | PostgreSQL 19 | Trino 484 | DuckDB 2.0 | Snowflake |
+| --- | --- | --- | --- | --- | --- |
+| Frame types | `ROWS`, `RANGE`[^sparkwin] | `ROWS`, `RANGE`, `GROUPS`[^pgexpr] | `ROWS`, `RANGE`, `GROUPS`[^trinomr] | `ROWS`, `RANGE`, `GROUPS`[^duck] | `ROWS`, `RANGE`[^snowwin] |
+| Frame exclusion (`EXCLUDE`) | Not in the frame grammar[^grammar] | Yes[^pgexpr] | Yes[^trinoselect] | Yes[^duck] | Not documented[^snowwin] |
+| Default frame with `ORDER BY` | `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`[^pywin] | Same[^pgexpr] | Same[^trinoselect] | Same[^duck] | Same for aggregates; `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` for `FIRST_VALUE`, `LAST_VALUE`, `NTH_VALUE`[^snowwin] |
+| `IGNORE NULLS` on offset and value functions | Yes[^sparkwin] | Yes[^pgfunc] | Yes[^trinowin] | Yes[^duck] | Yes (for example `LAG`)[^n1] |
+| `QUALIFY` | Yes, since 4.2.0[^r420] | Not documented[^pgselect] | Not documented[^trinoselect] | Yes[^duck] | Yes[^n2] |
+| Named `WINDOW` clause | Yes[^select] | Yes[^pgselect] | Yes[^trinowin] | Yes[^duck] | Not documented[^snowwin] |
+
+"Not documented" means the cited documentation page for that engine does not describe the feature.
+
+## See also
+
+- [Lateral column alias](/wiki/Lateral_column_alias)
+- [Shuffle](/wiki/Shuffle)
+- [Partition](/wiki/Partition)
+- [Apache Spark](/wiki/Apache_Spark)
+- [DuckDB](/wiki/DuckDB)
+- [Trino](/wiki/Trino)
+
+## References
+
+[^sparkwin]: [Window Functions (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-window.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^wintests]: [sql-tests/inputs/window.sql (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-tests/inputs/window.sql). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pywin]: [window.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/window.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^qualify]: [QUALIFY Clause (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-qualify.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^select]: [SELECT (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^winexec]: [WindowExecBase.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/window/WindowExecBase.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pgexpr]: [Value Expressions: Window Function Calls (PostgreSQL 19)](https://www.postgresql.org/docs/current/sql-expressions.html). *PostgreSQL Global Development Group*. Retrieved 2026-11-23.
+[^trinomr]: [Row pattern recognition in window structures (Trino 484)](https://trino.io/docs/current/sql/pattern-recognition-in-window.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^duck]: [Window Functions (DuckDB 2.0)](https://duckdb.org/docs/2.0/sql/functions/window_functions). *DuckDB Foundation*. Retrieved 2026-11-23.
+[^snowwin]: [Window function syntax and usage](https://docs.snowflake.com/en/sql-reference/functions-window-syntax). *Snowflake*. Retrieved 2026-11-23.
+[^grammar]: [SqlBaseParser.g4 (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trinoselect]: [SELECT (Trino 484)](https://trino.io/docs/current/sql/select.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^pgfunc]: [Window Functions (PostgreSQL 19)](https://www.postgresql.org/docs/current/functions-window.html). *PostgreSQL Global Development Group*. Retrieved 2026-11-23.
+[^trinowin]: [Window functions (Trino 484)](https://trino.io/docs/current/functions/window.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [LAG](https://docs.snowflake.com/en/sql-reference/functions/lag). *Snowflake*. Retrieved 2026-11-23.
+[^pgselect]: [SELECT (PostgreSQL 19)](https://www.postgresql.org/docs/current/sql-select.html). *PostgreSQL Global Development Group*. Retrieved 2026-11-23.
+[^n2]: [QUALIFY](https://docs.snowflake.com/en/sql-reference/constructs/qualify). *Snowflake*. Retrieved 2026-11-23.

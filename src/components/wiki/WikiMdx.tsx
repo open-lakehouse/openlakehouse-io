@@ -26,12 +26,18 @@ const LABELS: Record<string, string> = {
   introduced: "Introduced",
   key_parts: "Key parts",
   implementations: "Open source implementations",
-  // both
+  // person
+  known_for: "Known for",
+  role: "Role",
+  affiliations: "Affiliations",
+  projects: "Projects",
+  nationality: "Nationality",
+  // all
   related: "Related",
 };
 
-/** Summary box floated beside the lead. `type` is "software" or "concept"; `name` defaults to the page title. */
-export const Infobox = ({ name, children }: { type?: "software" | "concept"; name?: string; children: ReactNode }) => {
+/** Summary box floated beside the lead. `type` is "software", "concept" or "person"; `name` defaults to the page title. */
+export const Infobox = ({ name, children }: { type?: "software" | "concept" | "person"; name?: string; children: ReactNode }) => {
   const page = useContext(WikiPageContext);
   return (
     <table className="olw-infobox">

@@ -1,0 +1,119 @@
+---
+title: "Spark SQL scripting"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">SQL Scripting, procedural SQL in Spark</Field>
+  <Field name="field">SQL query engines</Field>
+  <Field name="key_parts">Compound statement (`BEGIN ... END`), local variables, `IF`, `CASE`, `WHILE`, `REPEAT`, `LOOP`, `FOR`, `LEAVE`, `ITERATE`, condition handlers, cursors</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark error classes](/wiki/Spark_error_classes), [Spark SQL ANSI mode](/wiki/Spark_SQL_ANSI_mode), [SQL pipe syntax](/wiki/SQL_pipe_syntax)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-scripting.md, docs/control-flow/\*.md, SqlBaseParser.g4, AstBuilder.scala, SQLConf.scala, classic SparkSession.scala), SPARK-48338, SPARK-54499 and the Spark 4.1.0 and 4.2.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **SQL scripting** is the procedural extension of Spark SQL that runs a block of statements written between `BEGIN` and `END`, with local variables, loops, conditional logic and error handlers, as a single request. The Spark documentation describes the syntax as based on the SQL/PSM standard.[^doc] SQL scripting lets ETL and analysis logic that used to need Python or Scala driver code stay entirely in SQL; the umbrella ticket also names it as a step toward stored procedures and data warehouse migrations.[^jira48338]
+
+## Is SQL scripting enabled by default?
+
+Yes, since Spark 4.1.0. The Spark 4.1.0 release notes state that SQL Scripting is generally available (GA) and enabled by default (SPARK-54499).[^r410][^jira54499] The switch is `spark.sql.scripting.enabled`, a configuration added in Spark 4.0.0 whose default in Spark 4.3.0 is `true`. Its description in the 4.3.0 source still calls the feature "under development", a wording older than the GA decision.[^sqlconf]
+
+Two parts of SQL scripting stay behind internal flags in Spark 4.3.0, both off by default. `CONTINUE` handlers need `spark.sql.scripting.continueHandlerEnabled` (added in 4.1.0), and cursors (`DECLARE CURSOR`, `OPEN`, `FETCH`, `CLOSE`) need `spark.sql.scripting.cursorEnabled` (added in 4.2.0). Without them the parser rejects these statements.[^sqlconf][^astbuilder] The release notes list `CONTINUE HANDLER` support under 4.1.0 (SPARK-53621) and cursor support under 4.2.0 (SPARK-54759).[^r410][^r420]
+
+## What does Spark SQL scripting support?
+
+Every SQL script is a compound statement: `BEGIN`, an optional declaration section, a body of statements separated by semicolons, and `END`.[^doc] The declaration section can declare local variables (with an optional `DEFAULT`), named conditions, cursors and condition handlers.[^compound]
+
+The body of a Spark SQL script can contain:[^doc]
+- control flow: `IF`, `CASE`, `WHILE`, `REPEAT`, `LOOP`, `FOR` loops over query results, and `LEAVE` and `ITERATE` to exit or continue a labelled loop;
+- DDL such as `CREATE`, `ALTER` and `DROP`, and DML such as `INSERT`;
+- queries, whose result sets are returned to the caller;
+- `SET` for local and session variables, and `EXECUTE IMMEDIATE`;
+- nested compound statements, each with its own scope for variables, cursors, conditions and handlers.
+
+Compound statements are not atomic. The only supported mode is `NOT ATOMIC`: when a statement fails, earlier statements in the block are not rolled back.[^compound]
+
+## How does error handling work in SQL scripts?
+
+A condition handler catches errors raised inside its compound statement. A handler can name a Spark error condition such as `DIVIDE_BY_ZERO`, a user-declared condition, one or more SQLSTATE values, `SQLEXCEPTION` (any SQLSTATE except the `XX` and `02` classes) or `NOT FOUND` (the `02` class).[^doc] When several handlers apply, Spark uses the one in the innermost compound statement and, among those, the most specific: a named condition beats a SQLSTATE, which beats a generic handler.[^doc] The error names and SQLSTATEs are the ones described in [Spark error classes](/wiki/Spark_error_classes).
+
+An `EXIT` handler runs its action and then leaves the compound statement that declared it. A `CONTINUE` handler runs its action and resumes with the statement after the one that failed.[^doc] A user-declared condition without an explicit SQLSTATE gets `45000`.[^compound]
+
+## Example
+
+The following script, adapted from the Spark compound statement reference, catches a division by zero with an `EXIT` handler. It runs with the Spark 4.3.0 defaults, because `EXIT` handlers do not need an extra flag.[^compound]
+
+```sql
+BEGIN
+  DECLARE a INT DEFAULT 1;
+  DECLARE b INT DEFAULT 5;
+  DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+    div0: BEGIN
+      VALUES (15);
+    END div0;
+  SET a = 10;
+  SET a = b / 0;      -- raises DIVIDE_BY_ZERO under ANSI mode
+  VALUES (a);         -- not reached
+END;
+-- returns 15
+```
+
+A `FOR` loop iterates over the rows of a query:[^for]
+
+```sql
+BEGIN
+  DECLARE total INT DEFAULT 0;
+  sumOdd: FOR r AS SELECT num FROM range(1, 20) AS t(num) DO
+    IF r.num > 10 THEN
+      LEAVE sumOdd;
+    ELSEIF r.num % 2 = 0 THEN
+      ITERATE sumOdd;
+    END IF;
+    SET total = total + r.num;
+  END FOR sumOdd;
+  VALUES (total);     -- 25
+END;
+```
+
+The Spark documentation notes that such loops can often be replaced by a single relational query, which is usually more efficient; here `SELECT sum(num) FROM range(1, 10) AS t(num) WHERE num % 2 = 1`.[^for]
+
+## How to run a SQL script from PySpark or Scala
+
+A script is passed as one string to `spark.sql()`; the parser returns a compound body instead of a single query, and the returned DataFrame holds the result set of the last query the script ran.[^e2e] Named parameter markers can be passed in, but positional parameters are rejected for SQL scripts, and a script cannot be run through `EXECUTE IMMEDIATE`.[^session] The documentation describes two ways to pass data in and out of a script: session variables and parameter markers.[^doc]
+
+```python
+df = spark.sql("""
+BEGIN
+  DECLARE n INT DEFAULT 0;
+  SET n = :iterations;
+  WHILE n > 0 DO
+    SET n = n - 1;
+  END WHILE;
+  VALUES (n);
+END
+""", args={"iterations": 3})
+df.show()   # one row: 0
+```
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark error classes](/wiki/Spark_error_classes)
+- [Spark SQL ANSI mode](/wiki/Spark_SQL_ANSI_mode)
+- [SQL pipe syntax](/wiki/SQL_pipe_syntax)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+
+## References
+
+[^doc]: [SQL Scripting (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-scripting.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira48338]: [SPARK-48338: Sql Scripting support for Spark SQL](https://issues.apache.org/jira/browse/SPARK-48338). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira54499]: [SPARK-54499: Enable SQL Scripting by default for Spark 4.1 release](https://issues.apache.org/jira/browse/SPARK-54499). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^astbuilder]: [AstBuilder.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/parser/AstBuilder.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^compound]: [Compound Statement (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/control-flow/compound-stmt.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^for]: [FOR Statement (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/control-flow/for-stmt.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^e2e]: [SqlScriptingE2eSuite.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/scala/org/apache/spark/sql/scripting/SqlScriptingE2eSuite.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^session]: [classic/SparkSession.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/classic/SparkSession.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

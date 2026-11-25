@@ -1,0 +1,122 @@
+---
+title: "Spark resource profiles"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Stage-level scheduling, ResourceProfile, accelerator-aware scheduling</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 3.1 (stage-level scheduling); Apache Spark 3.0 (GPU and custom resource scheduling)</Field>
+  <Field name="key_parts">`ResourceProfile`, `ResourceProfileBuilder`, `ExecutorResourceRequests`, `TaskResourceRequests`, `RDD.withResources`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Executor](/wiki/Executor), [GPU acceleration in Spark](/wiki/GPU_acceleration_in_Spark), [Shuffle](/wiki/Shuffle)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/configuration.md, docs/running-on-yarn.md, docs/running-on-kubernetes.md, docs/spark-standalone.md, python/pyspark/resource/, python/pyspark/core/rdd.py, python/pyspark/sql/dataframe.py), Apache JIRA SPARK-24615, SPARK-27495, SPARK-29150, SPARK-39853, SPARK-45495 and SPARK-46812, and the Spark 3.0.0, 3.1.1 and 4.0.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **resource profile** (`ResourceProfile`) is a set of executor and task resource requirements, such as cores, memory and GPUs, that Spark applies to one stage of a job instead of to the whole application.[^conf] The feature is called **stage-level scheduling** and was added in Spark 3.1.[^r311] It builds on the accelerator-aware scheduling of Spark 3.0, which lets an application request GPUs and other custom resources for its [executors](/wiki/Executor) and tasks.[^r300]
+
+## What problem do resource profiles solve?
+
+Without resource profiles, a Spark application asks for one kind of executor at startup and keeps it for every stage. The Spark documentation gives the case of an ETL stage that needs only CPUs followed by a machine learning stage that needs GPUs: with stage-level scheduling, the application can request GPU executors only when the ML stage runs, instead of holding idle GPUs during the ETL stage.[^conf]
+
+## How does GPU scheduling work in Apache Spark?
+
+Spark 3.0 added accelerator-aware scheduling under the SPARK-24615 proposal, part of Project Hydrogen.[^r300][^jira24615] A resource is identified by a name such as `gpu`, and Spark schedules its individual addresses (for example GPU indexes) to tasks. The cluster manager must support and be configured for the resource; the feature is not available in local mode.[^conf]
+
+The Spark GPU settings, all added in Spark 3.0.0, are:[^conf]
+- `spark.executor.resource.gpu.amount` (default 0): GPUs per executor.
+- `spark.executor.resource.gpu.discoveryScript` (no default): a script the executor runs at startup; it prints a JSON object with the resource name and an array of addresses. It is required on YARN and Kubernetes.
+- `spark.executor.resource.gpu.vendor` (no default): Kubernetes only; the device plugin vendor and domain, for example `nvidia.com` or `amd.com`.
+- `spark.task.resource.gpu.amount` (default 1): GPUs per task. Fractional values up to 0.5 let several tasks share one GPU; 0.25 means four tasks per GPU.
+- `spark.driver.resource.gpu.amount` and `spark.driver.resource.gpu.discoveryScript`: the same for the driver.
+
+The Spark source tree ships a sample GPU discovery script, `examples/src/main/scripts/getGpusResources.sh`.[^script] Inside a task, `TaskContext.get().resources()` returns the addresses Spark assigned; Spark does not use the GPU itself, so the user code or the ML library must use those addresses.[^conf]
+
+## How is a resource profile built?
+
+A resource profile is built from two request objects. `ExecutorResourceRequests` sets executor cores, memory, memory overhead, PySpark memory, off-heap memory and custom resources; `TaskResourceRequests` sets the CPUs and custom resources each task needs. `ResourceProfileBuilder.require()` adds both, and `build` returns the `ResourceProfile`.[^pyreq][^pyprof] The same classes exist in Scala and Java in the `org.apache.spark.resource` package.[^conf]
+
+`RDD.withResources(profile)` attaches a profile to an RDD, and the stage that computes that RDD uses it. The RDD API for stage-level scheduling was tracked as SPARK-29150 and released in Spark 3.1; the PySpark `withResources`, `ResourceProfile` and `ResourceProfileBuilder` APIs are marked "new in version 3.1.0" and "evolving".[^jira29150][^pyrdd][^pyprof]
+
+## Example in PySpark
+
+The example asks for executors with 4 cores, 8 GiB of memory and one GPU for one stage, and lets four tasks share each GPU. It assumes dynamic allocation and a GPU discovery script on the executor image.
+
+```python
+from pyspark.resource import (
+    ExecutorResourceRequests,
+    TaskResourceRequests,
+    ResourceProfileBuilder,
+)
+
+ereqs = (ExecutorResourceRequests()
+         .cores(4)
+         .memory("8g")
+         .resource("gpu", 1, "/opt/spark/examples/src/main/scripts/getGpusResources.sh"))
+treqs = TaskResourceRequests().cpus(1).resource("gpu", 0.25)
+gpu_profile = ResourceProfileBuilder().require(ereqs).require(treqs).build
+
+rdd = spark.sparkContext.parallelize(range(1000), 8)
+result = rdd.withResources(gpu_profile).mapPartitions(lambda it: [sum(it)]).collect()
+```
+
+In PySpark, `build` is a property, not a method.[^pyprof]
+
+## Which cluster managers support stage-level scheduling?
+
+In Spark 4.3, stage-level scheduling works on YARN, Kubernetes and Spark standalone.[^conf] Spark 3.1 shipped it with Kubernetes support listed as a separate item (SPARK-33288) under the SPARK-27495 umbrella.[^r311][^jira27495]
+
+| Cluster manager | With dynamic allocation | Without dynamic allocation |
+| --- | --- | --- |
+| YARN | New executors per profile; each profile id becomes a YARN container priority[^yarn] | Task requirements only, on the startup executors[^yarn] |
+| Kubernetes | New executors per profile; requires `spark.dynamicAllocation.shuffleTracking.enabled`[^k8s] | Task requirements only (SPARK-45495, Spark 3.5.1 and 4.0.0)[^k8s][^jira45495] |
+| Standalone | New executors per profile; only executor memory, cores and custom resources take effect[^standalone] | Task requirements only (SPARK-39853, Spark 3.4.0)[^standalone][^jira39853] |
+
+## Why does stage-level scheduling need dynamic allocation?
+
+A profile that changes executor resources needs new executors, and Spark gets them through dynamic allocation. With dynamic allocation on, Spark acquires new executors for each profile, and a task runs only on an executor created with exactly its profile; unused executors time out under the normal dynamic allocation rules. With dynamic allocation off, tasks with different task requirements share the executors of the default profile (`DEFAULT_RESOURCE_PROFILE`).[^conf]
+
+On Kubernetes, shuffle tracking keeps executors that hold shuffle data, so executors from an earlier profile may not time out. The Spark documentation warns that this can use more cluster resources and, if the cluster runs out, the application can hang; `spark.dynamicAllocation.shuffleTracking.timeout` limits this at the cost of possible recomputation.[^k8s]
+
+## What happens when two profiles meet in one stage?
+
+By default Spark allows one profile per stage and throws an exception if RDDs with different profiles are combined into the same stage. Setting `spark.scheduler.resource.profileMergeConflicts` (default false, since 3.1.0) to true makes Spark merge them into a new profile that takes the maximum of each resource.[^conf]
+
+## Can DataFrames use resource profiles?
+
+The Spark 4.3 configuration guide still describes stage-level scheduling as available "only for the RDD API in Scala, Java, and Python".[^conf] One exception exists in PySpark: since Spark 4.0.0, `DataFrame.mapInPandas` and `DataFrame.mapInArrow` take an optional `profile` argument with a `ResourceProfile` (SPARK-46812).[^pydf][^jira46812][^r400] Other DataFrame and Spark SQL operators run with the application's default profile.
+
+## What a resource profile is not
+
+A Spark resource profile is not a Kubernetes pod resource request or a YARN container size, although Spark translates it into one. On YARN, Spark converts `gpu` and `fpga` to the built-in types `yarn.io/gpu` and `yarn.io/fpga`.[^yarn] On Kubernetes, resources from a pod template apply only to the default profile and are not copied into custom profiles.[^k8s] A resource profile also does not make Spark SQL operators run on a GPU; that is the role of plugins such as the RAPIDS Accelerator, described in [GPU acceleration in Spark](/wiki/GPU_acceleration_in_Spark).
+
+## See also
+
+- [Executor](/wiki/Executor)
+- [GPU acceleration in Spark](/wiki/GPU_acceleration_in_Spark)
+- [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))
+- [Shuffle](/wiki/Shuffle)
+- [RDD](/wiki/RDD)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^conf]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r311]: [Spark Release 3.1.1](https://spark.apache.org/releases/spark-release-3-1-1.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r300]: [Spark Release 3.0.0](https://spark.apache.org/releases/spark-release-3-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira24615]: [SPARK-24615: SPIP: Accelerator-aware task scheduling for Spark](https://issues.apache.org/jira/browse/SPARK-24615). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^script]: [getGpusResources.sh (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/examples/src/main/scripts/getGpusResources.sh). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pyreq]: [pyspark/resource/requests.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/resource/requests.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pyprof]: [pyspark/resource/profile.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/resource/profile.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira29150]: [SPARK-29150: Update RDD API for Stage level scheduling](https://issues.apache.org/jira/browse/SPARK-29150). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pyrdd]: [pyspark.RDD.withResources (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/reference/api/pyspark.RDD.withResources.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira27495]: [SPARK-27495: SPIP: Support Stage level resource configuration and scheduling](https://issues.apache.org/jira/browse/SPARK-27495). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^yarn]: [Running Spark on YARN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-yarn.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira45495]: [SPARK-45495: Support stage level task resource profile for k8s cluster when dynamic allocation disabled](https://issues.apache.org/jira/browse/SPARK-45495). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^standalone]: [Spark Standalone Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-standalone.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira39853]: [SPARK-39853: Support stage level schedule for standalone cluster when dynamic allocation is disabled](https://issues.apache.org/jira/browse/SPARK-39853). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pydf]: [pyspark/sql/dataframe.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira46812]: [SPARK-46812: Make mapInPandas / mapInArrow support ResourceProfile (Stage-Level scheduling)](https://issues.apache.org/jira/browse/SPARK-46812). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,87 @@
+---
+title: "State store"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">State store provider</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Versioned key-value store per operator and partition, state store provider class, checkpointed files, maintenance task</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming): `HDFSBackedStateStoreProvider` (default) and `RocksDBStateStoreProvider`</Field>
+  <Field name="related">[RocksDB state store](/wiki/RocksDB_state_store), [Streaming checkpoint](/wiki/Streaming_checkpoint), [Stateful stream processing](/wiki/Stateful_stream_processing), [Watermark](/wiki/Watermark)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (State Store section) and miscellaneous notes, `SQLConf.scala`, `HDFSBackedStateStoreProvider.scala` and `RocksDBFileManager.scala` at tag v4.3.0 of apache/spark, the state data source guide, SPARK-45511, the Databricks RocksDB state store page, and the Apache Flink 2.3 "State Backends" page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), a **state store** is the versioned key-value store in which stateful operators keep the data they carry from one micro-batch to the next, such as running aggregates, deduplication keys, buffered join rows and user state. Each stateful operator has one state store per shuffle partition, running on an executor, and every batch produces a new version that is saved to the [streaming checkpoint](/wiki/Streaming_checkpoint) so the state survives failures.[^ss-store] Spark ships two implementations, the HDFS-backed state store and the [RocksDB state store](/wiki/RocksDB_state_store), and the choice between them mostly decides how much state a query can hold without memory problems.
+
+## Which operators use the state store?
+
+Streaming aggregations, streaming deduplication with `dropDuplicates`, stream-stream joins and the arbitrary stateful operators (`mapGroupsWithState`, `flatMapGroupsWithState` and [transformWithState](/wiki/TransformWithState)) all keep state in the state store.[^ss-store] Stateless operations, including [stream-static joins](/wiki/Stream-static_join), do not.[^ss-join] See [Stateful stream processing](/wiki/Stateful_stream_processing).
+
+## How does the state store work?
+
+A state store is a versioned key-value store with reads and writes. Updates are applied in sets, transactionally, and each set increments the store's version; a retried task can therefore re-run its updates against the correct earlier version.[^ss-store] The version of a store matches the batch id of the query.
+
+The state store provider is set with `spark.sql.streaming.stateStore.providerClass`. Its default is `org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider`, and it cannot be changed between restarts from the same checkpoint location.[^sqlconf][^misc] Users can also write their own provider by extending the `StateStoreProvider` interface.[^ss-store]
+
+State is partitioned by hashing the grouping key, which is why `spark.sql.shuffle.partitions` cannot change for a query that already has a checkpoint.[^misc]
+
+Spark tries to run each state store on the same executor in every batch, using the preferred-location feature of RDDs, because loading a store on a new executor means reading its checkpointed files. The preference is not a guarantee; raising `spark.locality.wait` makes it more likely to hold. A background maintenance task, run every `spark.sql.streaming.stateStore.maintenanceInterval` (default 60 seconds), runs background maintenance in every loaded provider and unloads providers that are no longer active on an executor.[^ss-store][^sqlconf]
+
+## HDFS-backed vs RocksDB state store
+
+The **HDFS-backed state store** keeps all of its data in an in-memory map in the executor JVM and saves it to files in an HDFS-compatible file system.[^ss-store] Each batch writes a `''version''.delta` file with that batch's changes, and Spark consolidates deltas into a `''version''.snapshot` file after `spark.sql.streaming.stateStore.minDeltasForSnapshot` (default 10) delta files.[^hdfs][^sqlconf]
+
+The **RocksDB state store**, added in Spark 3.2, keeps state in RocksDB in native memory and on local disk instead of the JVM heap, and uploads its files to the checkpoint location. The Spark guide recommends it for queries with millions of keys in state, where the HDFS-backed store causes long JVM garbage collection pauses and uneven micro-batch times.[^ss-store] It is the only provider that supports [transformWithState](/wiki/TransformWithState). See [RocksDB state store](/wiki/RocksDB_state_store).
+
+|  | HDFS-backed state store | RocksDB state store |
+| --- | --- | --- |
+| Provider class | `HDFSBackedStateStoreProvider` (default in Apache Spark)[^sqlconf] | `RocksDBStateStoreProvider`[^ss-store] |
+| Where live state is held | In-memory map on the executor JVM heap[^ss-store] | RocksDB, in native memory and on local disk[^ss-store] |
+| Checkpoint files | `.delta` per batch, `.snapshot` after consolidation[^hdfs] | A `''version''.zip` per version plus shared SST files; optionally changelog files[^rocksfm] |
+| State size limit in practice | Executor heap; large state causes GC pauses[^ss-store] | Local disk and the configured memory bound[^ss-store] |
+| transformWithState | Not supported | Supported |
+
+On Databricks, RocksDB is the default state store provider in Databricks Runtime 17.3 LTS and above.[^db-rocks]
+
+## How big does state get?
+
+State size is driven by the number of distinct keys each operator keeps and how long it keeps them. A [watermark](/wiki/Watermark) bounds it for windowed aggregations, deduplication and stream-stream joins; without one, aggregation and deduplication state grows for as long as new keys arrive.[^ss-dedup] Each operator reports state metrics in the query progress, including the number of rows in state (`numTotalStateRows`), updated and removed rows.[^ss-store]
+
+The **state data source** reads the state of a checkpoint as a batch DataFrame, which helps to inspect state size and contents. It is experimental and, as of Spark 4.0, read-only.[^ss-store][^jira45511]
+
+```python
+spark.conf.set(
+    "spark.sql.streaming.stateStore.providerClass",
+    "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider",
+)  # set before the query first starts; fixed for its checkpoint
+
+state = spark.read.format("statestore").load("/checkpoints/page_counts")
+state.groupBy("partition_id").count().show()
+```
+
+## Comparison with Flink state backends
+
+[Apache Flink](/wiki/Apache_Flink) calls the same component a **state backend**. Without other configuration it uses the `HashMapStateBackend`, which holds state as objects on the Java heap, much like Spark's HDFS-backed store. The `EmbeddedRocksDBStateBackend` keeps state as serialized bytes in RocksDB and is the only Flink backend that offers incremental checkpoints; the `ForStStateBackend` is experimental.[^flink-sb]
+
+## See also
+
+- [RocksDB state store](/wiki/RocksDB_state_store)
+- [Stateful stream processing](/wiki/Stateful_stream_processing)
+- [Streaming checkpoint](/wiki/Streaming_checkpoint)
+- [transformWithState](/wiki/TransformWithState)
+- [Watermark](/wiki/Watermark)
+
+## References
+
+[^ss-store]: [Structured Streaming: State Store (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#state-store). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-join]: [Structured Streaming: Stream-static Joins (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#stream-static-joins). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^misc]: [Structured Streaming: Miscellaneous Notes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/additional-information.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^hdfs]: [HDFSBackedStateStoreProvider.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/HDFSBackedStateStoreProvider.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rocksfm]: [RocksDBFileManager.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/RocksDBFileManager.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^db-rocks]: [Configure RocksDB state store on Databricks](https://docs.databricks.com/aws/en/structured-streaming/rocksdb-state-store). *Databricks*. Retrieved 2026-11-23.
+[^ss-dedup]: [Structured Streaming: Streaming Deduplication (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#streaming-deduplication). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira45511]: [SPARK-45511: SPIP: State Data Source - Reader](https://issues.apache.org/jira/browse/SPARK-45511). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^flink-sb]: [State Backends (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/ops/state/state_backends/). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,95 @@
+---
+title: "Windowing (stream processing)"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Time windows, windowed aggregation</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Window type (tumbling, sliding or hopping, session), window size, slide, gap, time column, [watermark](/wiki/Watermark)</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) (`window`, `session_window`), [Apache Flink](/wiki/Apache_Flink) (window assigners, windowing TVFs), Kafka Streams (`TimeWindows`, `SlidingWindows`, `SessionWindows`)</Field>
+  <Field name="related">[Session window](/wiki/Session_window), [Event time and processing time](/wiki/Event_time_and_processing_time), [Watermark](/wiki/Watermark)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide and `python/pyspark/sql/functions/builtin.py` at tag v4.3.0 of apache/spark, the Apache Flink 2.3 DataStream "Windows" and SQL "Windowing TVF" pages, and the Kafka Streams 4.4 DSL developer guide</Verified>
+
+In [stream processing](/wiki/Stream_processing), **windowing** is dividing an unbounded stream into finite groups of records, usually by time, so that aggregations such as counts and averages can be computed and emitted for each group. The three common window types are **tumbling** (fixed size, no overlap), **sliding** or **hopping** (fixed size, overlapping) and **session** windows (variable size, closed by a gap of inactivity). In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), a window is a grouping key built with the `window` or `session_window` function over an [event-time](/wiki/Event_time_and_processing_time) column, and a [watermark](/wiki/Watermark) decides when a window is complete.[^ss-apis]
+
+## What window types exist?
+
+Structured Streaming supports three types of time windows: tumbling, sliding and session.[^ss-types]
+
+- A **tumbling window** is one of a series of fixed-size, non-overlapping, contiguous time intervals. Each record belongs to exactly one window.[^ss-types]
+- A **sliding window** also has a fixed size, but a new window starts every *slide* interval. When the slide is shorter than the size, windows overlap and one record belongs to several windows.[^ss-types]
+- A **session window** has no fixed size. It starts with a record and grows while further records arrive within a gap duration; it closes when no record arrives within the gap. See [Session window](/wiki/Session_window).[^ss-types]
+
+Spark's guide uses the example of counting words in 10-minute windows that slide every 5 minutes: a word received at 12:07 is counted in both the 12:00 to 12:10 window and the 12:05 to 12:15 window.[^ss-apis]
+
+## How does windowing work in Structured Streaming?
+
+The `window(timeColumn, windowDuration, slideDuration=None, startTime=None)` function, available since Spark 2.0.0, assigns each row to one or more windows. Without `slideDuration`, the windows are tumbling; the slide must be less than or equal to the window size.[^builtin]
+
+Window starts are inclusive and ends are exclusive, so 12:05 falls in `[12:05, 12:10)` and not in `[12:00, 12:05)`. Windows are aligned to 1970-01-01 00:00:00 UTC; `startTime` shifts them, for example to hourly windows that start 15 minutes past the hour. Durations are fixed lengths of time, not calendar units, and windows measured in months are not supported. The result is a struct column named `window` with `start` and `end` fields.[^builtin]
+
+Because a window is just a grouping key, a windowed aggregation is written as `groupBy(window(...), ...)`, and the same query runs on a batch DataFrame and on a stream.[^ss-apis] The `window_time` function, added in Spark 3.4.0, returns a timestamp for a window column, which lets one windowed aggregation feed another, for example 5-minute windows rolled up into 1-hour windows.[^builtin][^ss-apis]
+
+On a stream, a windowed aggregation keeps state for every open window. A watermark on the same event-time column lets Spark drop the state of windows that the watermark has passed; in append [output mode](/wiki/Output_mode), each window is emitted once, after that point.[^ss-late]
+
+### Example
+
+```python
+from pyspark.sql import functions as F
+
+events = spark.readStream.table("main.web.page_views")   # columns: ts, page
+
+tumbling = (events.withWatermark("ts", "10 minutes")
+            .groupBy(F.window("ts", "5 minutes"), "page")
+            .count())
+
+sliding = (events.withWatermark("ts", "10 minutes")
+           .groupBy(F.window("ts", "10 minutes", "5 minutes"), "page")
+           .count())
+
+sessions = (events.withWatermark("ts", "10 minutes")
+            .groupBy(F.session_window("ts", "30 minutes"), "page")
+            .count())
+```
+
+The same queries in Spark SQL use `window(ts, '5 minutes')` and `session_window(ts, '30 minutes')` in the `GROUP BY` clause.
+
+## Windowing in other engines
+
+[Apache Flink](/wiki/Apache_Flink)'s DataStream API defines windows with a **window assigner**. It ships assigners for tumbling, sliding, session and **global** windows; a global window puts all records of a key into one window and computes nothing unless a custom trigger is set. Tumbling and sliding assigners take an optional offset, similar to Spark's `startTime`.[^flink-win]
+
+Flink SQL uses windowing table-valued functions (TVFs): `TUMBLE`, `HOP`, `CUMULATE` and `SESSION`. Each adds `window_start`, `window_end` and `window_time` columns, where `window_time` equals `window_end` minus 1 millisecond. The session TVF is supported only in streaming mode. Windowing TVFs replace the older grouped window functions.[^flink-tvf]
+
+Kafka Streams names its window types differently. It has hopping, tumbling, sliding and session windows; hopping and tumbling windows are aligned to the epoch, with an inclusive lower bound and an exclusive upper bound. A Kafka Streams **sliding window** is not the same as a Spark sliding window: it is aligned to record timestamps, both bounds are inclusive, and it is used for joins (`JoinWindows`) and for `SlidingWindows` aggregations. The Kafka documentation notes that what other tools call sliding windows, Kafka Streams calls hopping windows.[^kstreams]
+
+## Comparison
+
+| Window type | Spark Structured Streaming | Apache Flink DataStream | Apache Flink SQL | Kafka Streams |
+| --- | --- | --- | --- | --- |
+| Fixed, non-overlapping | `window(ts, size)`[^builtin] | `TumblingEventTimeWindows`, `TumblingProcessingTimeWindows`[^flink-win] | `TUMBLE`[^flink-tvf] | Tumbling time window[^kstreams] |
+| Fixed, overlapping | `window(ts, size, slide)` (sliding)[^builtin] | Sliding window assigners[^flink-win] | `HOP`[^flink-tvf] | Hopping time window[^kstreams] |
+| Gap-based | `session_window(ts, gap)`, static or per-row gap[^builtin] | Session window assigners, static gap or `SessionWindowTimeGapExtractor`[^flink-win] | `SESSION`, streaming only, static gap[^flink-tvf] | Session window[^kstreams] |
+| Other types | None built in | Global windows with a custom trigger[^flink-win] | `CUMULATE`[^flink-tvf] | Sliding windows based on record time differences[^kstreams] |
+| Window bounds | Start inclusive, end exclusive, aligned to the Unix epoch with an optional `startTime`[^builtin] | Aligned to the epoch, optional offset[^flink-win] | `window_start`, `window_end`, `window_time` columns[^flink-tvf] | Hopping and tumbling aligned to the epoch; sliding aligned to records[^kstreams] |
+
+## See also
+
+- [Session window](/wiki/Session_window)
+- [Watermark](/wiki/Watermark)
+- [Event time and processing time](/wiki/Event_time_and_processing_time)
+- [Output mode](/wiki/Output_mode)
+- [Stateful stream processing](/wiki/Stateful_stream_processing)
+- [Stream processing](/wiki/Stream_processing)
+
+## References
+
+[^ss-apis]: [Structured Streaming: Window Operations on Event Time (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#window-operations-on-event-time). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-types]: [Structured Streaming: Types of time windows (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#types-of-time-windows). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^builtin]: [python/pyspark/sql/functions/builtin.py (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-late]: [Structured Streaming: Handling Late Data and Watermarking (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#handling-late-data-and-watermarking). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-win]: [Windows (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/dev/datastream/operators/windows/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-tvf]: [Windowing table-valued functions (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/sql/reference/queries/window-tvf/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^kstreams]: [Kafka Streams DSL (Apache Kafka 4.4)](https://kafka.apache.org/44/streams/developer-guide/dsl-api/). *Apache Software Foundation*. Retrieved 2026-11-23.

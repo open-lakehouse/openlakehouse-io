@@ -1,0 +1,86 @@
+---
+title: "Column pruning"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Projection pushdown, projection pruning, schema pruning (for nested fields)</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="key_parts">Optimizer rule that removes unused columns, a connector that accepts a required schema, a columnar file format</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Apache Parquet](/wiki/Apache_Parquet), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Trino](/wiki/Trino), [DuckDB](/wiki/DuckDB)</Field>
+  <Field name="related">[Predicate pushdown](/wiki/Predicate_pushdown), [Partition pruning](/wiki/Partition_pruning), [Aggregate pushdown](/wiki/Aggregate_pushdown), [Apache Parquet](/wiki/Apache_Parquet)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (Optimizer.scala, SchemaPruning.scala, SupportsPushDownRequiredColumns.java, DataSourceScanExec.scala, FileScan.scala, SQLConf.scala), Spark JIRA SPARK-4502, the Apache Parquet file format docs, and the Apache Iceberg 1.12.0 spec and Spark source</Verified>
+
+**Column pruning** is a query optimization in which an engine reads only the columns that a query uses, and drops every other column as early as possible in the plan, ideally before the data leaves storage. When the pruning reaches the data source, it is also called **projection pushdown**. In [Apache Spark](/wiki/Apache_Spark), column pruning combines an optimizer rule, a connector interface and the columnar layout of formats such as [Apache Parquet](/wiki/Apache_Parquet); **nested column pruning** extends it to individual fields inside struct columns.
+
+## Why does column pruning matter?
+
+In a columnar file format, each column is stored separately, so a reader can skip the bytes of the columns it does not need. Apache Parquet stores the values of each column of a row group together in a column chunk, so a query that selects a few columns of a wide table reads only the chunks of those columns in each row group.[^parquet] Column pruning is the step that tells the reader which columns those are.
+
+Column pruning also reduces the work after the scan. Fewer columns mean smaller rows in memory, in [shuffle](/wiki/Shuffle) files and in broadcasts.
+
+## How does column pruning work in Apache Spark?
+
+Column pruning in Spark happens in two places.
+
+The optimizer rule `ColumnPruning` "attempts to eliminate the reading of unneeded columns from the query plan." It walks the logical plan and inserts or narrows projections, so each operator receives only the columns that operators above it need.[^optimizer]
+
+The pruned column list then reaches the data source. A Data Source V2 connector accepts it by implementing `SupportsPushDownRequiredColumns` (since Spark 3.0.0), whose `pruneColumns(StructType requiredSchema)` method receives the schema the query needs. The interface allows partial pruning: a source may prune top-level columns but not nested fields.[^sprc] Built-in file sources receive the required schema directly and pass it to the Parquet or ORC reader.
+
+```python
+df = spark.read.parquet("/data/events")          # a wide table
+(df.filter("event_type = 'click'")
+   .select("user_id", "event_ts")
+   .explain("formatted"))
+# The scan's ReadSchema lists only user_id, event_ts and event_type.
+```
+
+## What is nested column pruning?
+
+Nested column pruning (also called schema pruning) reads only the struct fields a query uses, instead of the whole struct column. For a column `customer struct<id: bigint, name: string, address: struct<...>>`, the query `SELECT customer.id FROM orders` reads only `customer.id` from the file.
+
+In Spark, nested pruning for file scans is done by the `SchemaPruning` rule, which applies to Parquet and ORC and is controlled by `spark.sql.optimizer.nestedSchemaPruning.enabled` (default true, since 2.4.1).[^schemapruning][^sqlconf] The feature was introduced through SPARK-4502, "Spark SQL reads unneccesary nested fields from Parquet", fixed in Spark 2.4.0.[^n1]
+
+Two related settings prune nested fields in other parts of the plan; neither prunes the physical scan:[^sqlconf]
+- `spark.sql.optimizer.expression.nestedPruning.enabled` (default true, since 3.0.0) prunes nested fields from expressions inside operators.
+- `spark.sql.optimizer.serializer.nestedSchemaPruning.enabled` (default true, since 3.0.0) prunes nested fields from object serializers.
+
+## How can you check that columns were pruned?
+
+Each scan in `EXPLAIN FORMATTED` output shows a `ReadSchema` entry with the schema the scan actually reads, including the pruned nested fields.[^scanexec][^n2] For `SELECT customer.id FROM orders`, a pruned scan shows `ReadSchema: struct<customer:struct<id:bigint>>`, and an unpruned scan shows the full struct. After the query runs, the scan's `size of files read` metric in the Spark UI reports the bytes read.[^scanexec]
+
+## What stops column pruning?
+
+- **Row-oriented formats.** CSV and JSON files store whole rows, so the reader must still parse every row even when it returns fewer columns.
+- **Operators that need all columns**, such as `SELECT *`, `df.collect()` on the full DataFrame, or a UDF that takes the whole row as input.
+- **Nested pruning limits.** Nested pruning is limited to Parquet and ORC file scans, and to Data Source V2 sources that prune nested fields in `pruneColumns`.[^schemapruning][^sprc]
+
+## Column pruning in table formats
+
+**[Apache Iceberg](/wiki/Apache_Iceberg)** projects columns by field ID, not by name: "Columns in Iceberg data files are selected by field id", so pruning stays correct after columns are renamed or reordered.[^icebergspec] Iceberg's Spark scan builder implements `SupportsPushDownRequiredColumns`.[^n3]
+
+**[Delta Lake](/wiki/Delta_Lake)** data files are Parquet files, and the Delta protocol defines how Delta data types map to Parquet types, so a Delta scan in Spark reads through the Parquet reader and benefits from the same column pruning.[^n4]
+
+## See also
+
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Partition pruning](/wiki/Partition_pruning)
+- [Aggregate pushdown](/wiki/Aggregate_pushdown)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Data Source V2](/wiki/Data_Source_V2)
+
+## References
+
+[^parquet]: [File Format](https://parquet.apache.org/docs/file-format/). *Apache Parquet*. Retrieved 2026-11-23.
+[^optimizer]: [Optimizer.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/Optimizer.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sprc]: [SupportsPushDownRequiredColumns.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownRequiredColumns.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^schemapruning]: [SchemaPruning.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/SchemaPruning.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-4502: Spark SQL reads unneccesary nested fields from Parquet](https://issues.apache.org/jira/browse/SPARK-4502). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scanexec]: [DataSourceScanExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/DataSourceScanExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [FileScan.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/FileScan.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icebergspec]: [Iceberg Table Spec (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [SparkScanBuilder.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/spark/v4.1/spark/src/main/java/org/apache/iceberg/spark/source/SparkScanBuilder.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [Delta Transaction Log Protocol (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md). *Delta Lake*. Retrieved 2026-11-23.

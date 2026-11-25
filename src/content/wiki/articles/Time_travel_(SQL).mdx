@@ -1,0 +1,106 @@
+---
+title: "Time travel (SQL)"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Table formats"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">AS OF query, temporal query, snapshot query</Field>
+  <Field name="field">Table formats and SQL</Field>
+  <Field name="key_parts">VERSION AS OF, TIMESTAMP AS OF, table versions or snapshots, retention</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) with [Delta Lake](/wiki/Delta_Lake), [Apache Iceberg](/wiki/Apache_Iceberg) and [Apache Hudi](/wiki/Apache_Hudi); [Trino](/wiki/Trino), Snowflake, BigQuery</Field>
+  <Field name="related">[Open table format](/wiki/Open_table_format), [Data Source V2](/wiki/Data_Source_V2), [Catalog plugin API (Spark)](/wiki/Catalog_plugin_API_(Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SqlBaseParser.g4, SQLConf.scala, TableCatalog.java, TimeTravelSpec.scala, DataFrameReader.scala, docs/sql-migration-guide.md), the Spark 3.3.0, 3.4.0, 4.0.0 and 4.3.0 release notes, Delta Lake batch reads and writes docs, Apache Iceberg 1.12.0 Spark queries and configuration docs, Apache Hudi 1.2.1 SQL queries and quick start docs, Trino 484 Iceberg and Delta Lake connector docs, the Snowflake AT/BEFORE reference and the BigQuery query syntax and time travel docs</Verified>
+
+**Time travel** in SQL is a query that reads a table as it was at an earlier version or point in time, written in [Apache Spark](/wiki/Apache_Spark) SQL as `SELECT ... FROM t VERSION AS OF v` or `SELECT ... FROM t TIMESTAMP AS OF ts`.[^grammar] Spark parses the clause, and the table format resolves it: [Delta Lake](/wiki/Delta_Lake) maps the version to a commit in its transaction log, and [Apache Iceberg](/wiki/Apache_Iceberg) maps it to a snapshot ID, branch or tag. Time travel is used to reproduce reports and models, audit changes and recover from bad writes, and it works only while the old data and metadata are still retained.[^delta]
+
+## What is the syntax in Apache Spark?
+
+The Spark SQL grammar accepts four spellings after a table name: `VERSION AS OF` and `FOR SYSTEM_VERSION AS OF` take an integer or string literal; `TIMESTAMP AS OF` and `FOR SYSTEM_TIME AS OF` take an expression.[^grammar] The timestamp expression must be deterministic and evaluable once at analysis time, and a query cannot carry both a version and a timestamp.[^ttspec]
+
+Spark 3.3.0 added the `AS OF` syntax (SPARK-37219), and Spark 3.4.0 allowed a scalar subquery in the timestamp (SPARK-39306).[^r330][^r340] Spark 4.0.0 added time travel options to the `spark.read` API (SPARK-45575); the option names are `versionAsOf` and `timestampAsOf` by default, configurable with `spark.sql.timeTravelVersionKey` and `spark.sql.timeTravelTimestampKey`.[^r400][^sqlconf]
+
+Spark 4.3.0 added an `@` suffix on table names (SPARK-57421, SPARK-58012): `name@v123` reads version 123, and `name@20240101000000000` (format `yyyyMMddHHmmssSSS`, in the session time zone) reads the table at that timestamp to millisecond precision. The suffix is controlled by `spark.sql.timeTravel.atSyntax.enabled`, default `true`.[^r430][^sqlconf] Also since 4.3, Spark rejects these time travel options on catalog-backed Data Source V2 writes with `UNSUPPORTED_FEATURE.TIME_TRAVEL`, because a write must target the current table state.[^migration]
+
+## How does a connector implement time travel?
+
+For catalog tables, Spark passes the parsed clause to the [catalog plugin](/wiki/Catalog_plugin_API_(Spark)). `TableCatalog` has `loadTable(ident, String version)` and `loadTable(ident, long timestamp)`, where the timestamp is in microseconds since the Unix epoch. Their default implementations throw a "no such table" error, so a catalog that does not override them does not support time travel.[^tablecatalog]
+
+## Example
+
+Spark SQL against a Delta Lake or Iceberg table named `sales.orders`:[^delta][^iceq][^sqlconf]
+
+```sql
+-- Delta Lake: commit version from DESCRIBE HISTORY
+SELECT * FROM sales.orders VERSION AS OF 12;
+SELECT * FROM sales.orders TIMESTAMP AS OF '2026-11-01 00:00:00';
+
+-- Iceberg: snapshot ID, branch or tag name
+SELECT * FROM lake.sales.orders VERSION AS OF 10963874102873;
+SELECT * FROM lake.sales.orders VERSION AS OF 'audit-branch';
+
+-- Spark 4.3 @ suffix (for catalogs that implement time travel)
+SELECT * FROM sales.orders@v12;
+```
+
+The same reads with the DataFrame API, where `spark.read.table` passes its options to the relation that Spark resolves:[^reader][^r400]
+
+```python
+df_v12 = spark.read.option("versionAsOf", 12).table("sales.orders")
+df_nov = spark.read.option("timestampAsOf", "2026-11-01 00:00:00").table("sales.orders")
+```
+
+## How do table formats compare?
+
+|  | Delta Lake | Apache Iceberg | Apache Hudi |
+| --- | --- | --- | --- |
+| What a version is | A commit version in the transaction log, listed by `DESCRIBE HISTORY`[^delta] | A snapshot ID, or a branch or tag name[^iceq] | A commit time (instant)[^hudiqs] |
+| Spark SQL syntax | `VERSION AS OF`, `TIMESTAMP AS OF`[^delta] | `VERSION AS OF`, `TIMESTAMP AS OF`, `FOR SYSTEM_VERSION AS OF`, `FOR SYSTEM_TIME AS OF`[^iceq] | `TIMESTAMP AS OF`[^hudisql] |
+| Timestamp forms | Any expression castable to a timestamp, such as `'2018-10-18'` or `current_timestamp() - interval 12 hours`; no subqueries[^delta] | Timestamp string, or Unix time in seconds in SQL[^iceq] | `yyyy-MM-dd HH:mm:ss.SSS`, `yyyy-MM-dd` or `yyyyMMddHHmmssSSS`[^hudisql] |
+| DataFrame options | `versionAsOf`, `timestampAsOf`[^delta] | `snapshot-id`, `as-of-timestamp` (milliseconds), `branch`, `tag`[^iceq] | `as.of.instant`[^hudiqs] |
+| What limits how far back | `delta.logRetentionDuration` (default 30 days) and `VACUUM`, governed by `delta.deletedFileRetentionDuration` (default 7 days)[^delta] | Snapshot expiration; `history.expire.max-snapshot-age-ms` defaults to 5 days and `history.expire.min-snapshots-to-keep` to 1[^icecfg] | Not described on the cited Hudi pages |
+
+Delta Lake documents that, by default, a table can be read up to 30 days back unless `VACUUM` has run or the retention properties were changed. Because version timestamps come from log file timestamps, time travel by timestamp can break if the table directory is copied to a new location, while time travel by version is unaffected.[^delta]
+
+Iceberg branches and tags give names to snapshots. A query by snapshot ID or timestamp uses the schema of that snapshot, a query on a branch uses the table's current schema, and a query on a tag uses the schema of the tagged snapshot.[^iceq] Iceberg snapshots remain until they are expired, so expiration settings, not a fixed window, decide what can be read.[^icemaint]
+
+## Time travel in other engines
+
+| Engine | Syntax |
+| --- | --- |
+| [Trino](/wiki/Trino) 484 (Iceberg and Delta Lake connectors) | `FOR VERSION AS OF` and `FOR TIMESTAMP AS OF`; on Iceberg, the version can be a branch or tag name[^n1][^n2] |
+| Snowflake | `AT` or `BEFORE` in the `FROM` clause, for example `AT (TIMESTAMP => ...)`[^n3] |
+| BigQuery | `FOR SYSTEM_TIME AS OF`; the time travel window is seven days by default and can be set between two and seven days[^n4][^n5] |
+
+## See also
+
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Apache Hudi](/wiki/Apache_Hudi)
+- [Open table format](/wiki/Open_table_format)
+- [Catalog plugin API (Spark)](/wiki/Catalog_plugin_API_(Spark))
+
+## References
+
+[^grammar]: [SqlBaseParser.g4 (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta]: [Table batch reads and writes](https://docs.delta.io/latest/delta-batch.html). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^ttspec]: [TimeTravelSpec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/TimeTravelSpec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r330]: [Spark Release 3.3.0](https://spark.apache.org/releases/spark-release-3-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r340]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: SQL, Datasets and DataFrame (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tablecatalog]: [TableCatalog.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/TableCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^iceq]: [Spark Queries (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/spark-queries/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^reader]: [DataFrameReader.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/classic/DataFrameReader.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^hudiqs]: [Spark Quick Start (Apache Hudi 1.2.1)](https://hudi.apache.org/docs/quick-start-guide/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^hudisql]: [SQL Queries (Apache Hudi 1.2.1)](https://hudi.apache.org/docs/sql_queries/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icecfg]: [Configuration (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/configuration/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icemaint]: [Maintenance (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/maintenance/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Iceberg connector (Trino 484)](https://trino.io/docs/current/connector/iceberg.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [Delta Lake connector (Trino 484)](https://trino.io/docs/current/connector/delta-lake.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [AT, BEFORE](https://docs.snowflake.com/en/sql-reference/constructs/at-before). *Snowflake*. Retrieved 2026-11-23.
+[^n4]: [Query syntax (GoogleSQL for BigQuery)](https://cloud.google.com/bigquery/docs/reference/standard-sql/query-syntax). *Google Cloud*. Retrieved 2026-11-23.
+[^n5]: [Data retention with time travel and fail-safe](https://cloud.google.com/bigquery/docs/time-travel). *Google Cloud*. Retrieved 2026-11-23.

@@ -1,0 +1,118 @@
+---
+title: "Real-time mode (Structured Streaming)"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration", "Apache Spark"]
+---
+
+<Infobox type="concept" name="Real-time mode">
+  <Field name="also_known_as">Real-time Mode (RTM), real-time trigger</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="introduced">Apache Spark 4.1.0 (2025)</Field>
+  <Field name="key_parts">Real-time trigger, long-running tasks, pipelined shuffle, checkpoint interval, update output mode</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark) 4.1.0 and later</Field>
+  <Field name="related">[Trigger (Structured Streaming)](/wiki/Trigger_(Structured_Streaming)), [Structured Streaming](/wiki/Structured_Streaming), [transformWithState](/wiki/TransformWithState), [Exactly-once semantics](/wiki/Exactly-once_semantics)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">docs/streaming/real-time-mode.md and Trigger.java at tag v4.3.0, Trigger.java at v4.1.0 and v4.2.0, python/pyspark/sql/streaming/readwriter.py at v4.1.0 and v4.3.0, SQLConf.scala at v4.3.0, the Spark 4.1.0, 4.2.0 and 4.3.0 release notes, and SPARK-53736, SPARK-53737, SPARK-54660 and SPARK-57281</Verified>
+
+<Status level="active" since="Apache Spark 4.1.0">The `Trigger.RealTime` methods carried the `@Experimental` annotation in Spark 4.1.0; SPARK-57281, listed in the Spark 4.3.0 release notes, removed it, and the Spark 4.3.0 documentation does not label Real-time mode experimental.[^jira57281]</Status>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), **real-time mode** (Real-time Mode, RTM) is a streaming execution mode that runs long-lived tasks which process and emit each record as it arrives, instead of running a new short job for every micro-batch, to reach millisecond-scale end-to-end latency with the same DataFrame APIs and exactly-once processing guarantees.[^rtm] It was introduced in Spark 4.1.0 for stateless Scala queries and is enabled with a real-time [trigger](/wiki/Trigger_(Structured_Streaming)) on the streaming write.[^r410] Spark 4.3.0 added a first set of stateful operations: deduplication, streaming aggregation and the Scala and Java [transformWithState](/wiki/TransformWithState) API.[^r430]
+
+## What is real-time mode?
+
+Real-time mode is an alternative to the default micro-batch engine of Structured Streaming. The Spark 4.3.0 documentation describes it as aimed at operational workloads that must react to data as soon as it arrives, and gives fraud detection, real-time alerting and live personalization as examples.[^rtm] The query code is the same as for a micro-batch query; only the trigger changes.[^rtm]
+
+Real-time mode is not the same as continuous processing, the older low-latency mode started with `Trigger.Continuous`. The documentation calls continuous processing experimental and legacy, notes that it supports only map-like operations with at-least-once guarantees, and recommends real-time mode for new low-latency workloads.[^rtm]
+
+## How does real-time mode work?
+
+In micro-batch execution, the driver plans each batch and launches a fresh set of short tasks, and that fixed per-batch overhead sets a latency floor of about 100 milliseconds. Real-time mode instead launches one long-running task per input partition for the duration of a long batch, so records flow from source through transformations to sink without waiting for a batch boundary. The documentation puts the resulting latency at roughly the time to process and ship one record, often a few milliseconds.[^rtm]
+
+In real-time mode the trigger duration is mainly a **checkpoint interval**, not a latency target. With the default duration of 5 minutes, results can still be emitted within milliseconds; the duration controls how often the query commits progress and starts the next batch. Batch-scoped work, such as advancing the [watermark](/wiki/Watermark) and firing processing-time timers on idle partitions, can wait for the boundary.[^rtm] A shorter duration gives finer-grained recovery but adds more commit gaps, which can raise tail latency.[^rtm]
+
+Stateful operators need records grouped by key, which normally requires a [shuffle](/wiki/Shuffle) whose producer stage finishes before the consumer stage starts. Because a real-time task never finishes its batch, Spark 4.3.0 runs these shuffles as a **pipelined shuffle**: producer and consumer stages are scheduled at the same time, and shuffle data is streamed over the network record by record rather than written to files. This is enabled automatically.[^rtm] The Spark 4.3.0 release notes describe stateful real-time queries as reaching end-to-end latency on the order of 100 milliseconds.[^r430]
+
+## How is real-time mode enabled?
+
+Real-time mode is enabled by setting a real-time trigger. In Scala and Java the trigger is `Trigger.RealTime()`, with forms that take a duration string, milliseconds, a value and `TimeUnit`, or a Scala `Duration`; with no argument the duration is 5 minutes.[^trig430] In PySpark the trigger is the `realTime` keyword of `DataStreamWriter.trigger()`, and a duration string is required.[^rtm] The PySpark keyword was added in Spark 4.2.0 (SPARK-54660); it is not in the 4.1.0 PySpark API.[^r420][^n1] The [Spark Connect](/wiki/Spark_Connect) Python client also accepts `realTime` at v4.3.0.[^n2]
+
+The following PySpark query (Spark 4.2.0 or later) reads a Kafka topic, drops duplicate keys and writes to another Kafka topic in real-time mode. Deduplication needs Spark 4.3.0.[^rtm]
+
+```python
+query = (
+    spark.readStream.format("kafka")
+    .option("kafka.bootstrap.servers", "host1:9092")
+    .option("subscribe", "input-topic")
+    .load()
+    .selectExpr("CAST(key AS STRING) AS key", "CAST(value AS STRING) AS value")
+    .dropDuplicates(["key"])
+    .writeStream.format("kafka")
+    .option("kafka.bootstrap.servers", "host1:9092")
+    .option("topic", "output-topic")
+    .option("checkpointLocation", "/tmp/checkpoints/rtm-dedup")
+    .outputMode("update")
+    .trigger(realTime="5 minutes")
+    .start()
+)
+```
+
+## What are the requirements and limits?
+
+A real-time query is checked when it starts. The Spark 4.3.0 documentation lists these requirements:[^rtm]
+- The output mode must be `update`; other modes fail with `STREAMING_REAL_TIME_MODE.OUTPUT_MODE_NOT_SUPPORTED`.
+- A `checkpointLocation` is required.
+- The trigger duration must be at least `spark.sql.streaming.realTimeMode.minBatchDuration`, which defaults to 5000 milliseconds; month-based intervals are not accepted.
+- Stateful queries do not support asynchronous progress tracking.
+
+Operators and sinks are checked against an allowlist before the query starts, controlled by `spark.sql.streaming.realTimeMode.allowlistCheck` (default `true`). Both settings were added in Spark 4.1.0.[^sqlconf]
+
+For stateful real-time queries, Spark 4.3.0 applies soft defaults at query start: the RocksDB [state store](/wiki/State_store) provider, state store checkpoint format version 2, and RocksDB changelog checkpointing. Format version 1 is rejected unless `spark.sql.streaming.realTimeMode.dangerouslyAllowCheckpointV1.enabled` is set to `true`, which the documentation describes as unsafe for stateful queries.[^rtm]
+
+### Which sources, sinks and operations are supported?
+
+| Area | Supported in Spark 4.3.0 | Not supported |
+| --- | --- | --- |
+| Sources | Kafka | Other sources, including the built-in `rate` source |
+| Sinks | Kafka, `foreach` (`ForeachWriter`), console, memory | `foreachBatch` and other sinks |
+| Stateless operations (since 4.1.0) | Projections, filters, UDFs, `explode`, unions of distinct sources, stream-static joins with a broadcast static side | Unions that read the same source twice |
+| Stateful operations (since 4.3.0) | `dropDuplicates`, streaming aggregation including windowed aggregation, Scala and Java `transformWithState`, `withWatermark` | Stream-stream joins, `flatMapGroupsWithState`, session windows, `dropDuplicatesWithinWatermark`, PySpark `transformWithState` and `transformWithStateInPandas`, range partitioning |
+
+All rows are from the Spark 4.3.0 Real-time Mode documentation.[^rtm]
+
+## What delivery guarantees does real-time mode give?
+
+Real-time mode gives the same exactly-once processing guarantee as the micro-batch engine: each input record affects engine-managed state once, across failures and restarts. End-to-end delivery depends on the sink. Offsets are committed at the end of each batch, after records have reached the sink, so a failure can cause records to be written again; the built-in Kafka sink is at-least-once, and Spark does not yet ship an exactly-once sink for real-time mode.[^rtm] See [Exactly-once semantics](/wiki/Exactly-once_semantics).
+
+## History
+
+Real-time mode was developed under the umbrella issue SPARK-53736, "Real-time Mode in Structured Streaming (Scala stateless support)", created on 27 September 2025, with fix version 4.1.0; SPARK-53737 added the trigger.[^jira53736][^n3] The Spark 4.1.0 release notes call it the first official support for Structured Streaming queries in real-time mode.[^r410]
+
+| Spark release | Real-time mode change |
+| --- | --- |
+| 4.1.0 | Real-time trigger and stateless Scala and Java queries; `Trigger.RealTime` marked `@Experimental`[^r410][^n4] |
+| 4.2.0 | PySpark `realTime` trigger keyword (SPARK-54660)[^r420] |
+| 4.3.0 | Stateful queries on pipelined shuffles (SPARK-58508, SPARK-58635, SPARK-57228); async progress tracking (SPARK-58131); `@Experimental` removed (SPARK-57281)[^r430][^jira57281] |
+
+## See also
+
+- [Trigger (Structured Streaming)](/wiki/Trigger_(Structured_Streaming))
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [transformWithState](/wiki/TransformWithState)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Stream processing](/wiki/Stream_processing)
+- [Streaming lakehouse](/wiki/Streaming_lakehouse)
+
+## References
+
+[^jira57281]: [SPARK-57281: Remove @Experimental annotation from Real-time Mode trigger APIs](https://issues.apache.org/jira/browse/SPARK-57281). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trig430]: [sql/api/src/main/java/org/apache/spark/sql/streaming/Trigger.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/java/org/apache/spark/sql/streaming/Trigger.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [python/pyspark/sql/streaming/readwriter.py (v4.1.0)](https://github.com/apache/spark/blob/v4.1.0/python/pyspark/sql/streaming/readwriter.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [python/pyspark/sql/connect/streaming/readwriter.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/streaming/readwriter.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira53736]: [SPARK-53736: Real-time Mode in Structured Streaming (Scala stateless support)](https://issues.apache.org/jira/browse/SPARK-53736). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n3]: [SPARK-53737: Add Real-time Mode trigger](https://issues.apache.org/jira/browse/SPARK-53737). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n4]: [sql/api/src/main/java/org/apache/spark/sql/streaming/Trigger.java (v4.1.0)](https://github.com/apache/spark/blob/v4.1.0/sql/api/src/main/java/org/apache/spark/sql/streaming/Trigger.java). *Apache Software Foundation*. Retrieved 2026-11-23.

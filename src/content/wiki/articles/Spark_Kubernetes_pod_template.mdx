@@ -1,0 +1,118 @@
+---
+title: "Spark Kubernetes pod template"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Pod template file, driver pod template, executor pod template</Field>
+  <Field name="field">Cluster resource management</Field>
+  <Field name="introduced">Apache Spark 3.0.0</Field>
+  <Field name="key_parts">`spark.kubernetes.driver.podTemplateFile`, `spark.kubernetes.executor.podTemplateFile`, `podTemplateContainerName`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [Executor](/wiki/Executor), [Spark Kubernetes shuffle storage](/wiki/Spark_Kubernetes_shuffle_storage), [Executor decommissioning](/wiki/Executor_decommissioning)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/running-on-kubernetes.md and resource-managers/kubernetes/core/.../deploy/k8s/Config.scala), SPARK-24434 and the Kubernetes sidecar containers page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **Kubernetes pod template** is a YAML or JSON pod specification that Spark uses as the starting point when it builds the driver pod or the executor pods of an application on Kubernetes.[^k8s] A pod template sets pod fields that have no Spark configuration property, such as tolerations, security contexts, priority classes and extra containers. Spark still overwrites a fixed list of fields, so the template is a base that Spark completes rather than a final pod definition.[^k8s] The feature is part of [Spark on Kubernetes](/wiki/Spark_on_Kubernetes) and is also used by the [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark), which runs applications on the same scheduler backend.[^k8s]
+
+## Which configuration keys control a pod template?
+
+Four Spark properties control pod templates. All four were added in Apache Spark 3.0.0 and have no default value.[^k8s][^config][^jira24434]
+
+| Property | Purpose |
+| --- | --- |
+| `spark.kubernetes.driver.podTemplateFile` | File with the template for the driver pod |
+| `spark.kubernetes.executor.podTemplateFile` | File with the template for every executor pod |
+| `spark.kubernetes.driver.podTemplateContainerName` | Name of the container in the driver template that becomes the Spark driver container |
+| `spark.kubernetes.executor.podTemplateContainerName` | Name of the container in the executor template that becomes the Spark executor container |
+
+The template files must be readable by the `spark-submit` process, and the Spark documentation shows them read from object storage, for example `s3a://bucket/executor.yml`. In cluster mode Spark mounts the executor template into the driver pod as a volume, because the driver creates the executor pods.[^k8s]
+
+Spark does not validate a template after parsing it. Validation is left to the Kubernetes API server, so an invalid field shows up as a rejected pod creation rather than a Spark error.[^k8s]
+
+## How does Spark choose the Spark container in a template?
+
+A pod template can list several containers. Spark uses the container named by `spark.kubernetes.driver.podTemplateContainerName` or `spark.kubernetes.executor.podTemplateContainerName` as the basis for the driver or executor container. If the property is unset, or names a container that does not exist, Spark takes the first container in the list.[^k8s]
+
+Spark changes only the driver or executor container. Every other container in the template is passed to Kubernetes unchanged.[^k8s] If the template does not name the Spark container, Spark calls it `spark-kubernetes-driver` or `spark-kubernetes-executor`.[^k8s]
+
+## Which pod template fields does Spark override?
+
+The Spark documentation lists the fields that Spark always sets or adds to, whatever the template says.[^k8s]
+
+| Level | Field | What Spark does |
+| --- | --- | --- |
+| Pod metadata | `name` | Sets the driver pod name from `spark.kubernetes.driver.pod.name`; executor pod names are not taken from the template |
+| Pod metadata | `namespace` | Replaced by `spark.kubernetes.namespace` for driver and executors |
+| Pod metadata | `labels`, `annotations` | Keeps the template's entries and adds those from `spark.kubernetes.{driver,executor}.label.*` and `.annotation.*` |
+| Pod spec | `restartPolicy` | Always `Never` |
+| Pod spec | `nodeSelector` | Adds selectors from `spark.kubernetes.node.selector.*` |
+| Pod spec | `imagePullSecrets` | Adds secrets from `spark.kubernetes.container.image.pullSecrets` |
+| Pod spec | `serviceAccount`, `serviceAccountName` | Driver only, and only when `spark.kubernetes.authenticate.driver.serviceAccountName` is set and no driver credentials are mounted |
+| Pod spec | `volumes` | Adds volumes from `spark.kubernetes.{driver,executor}.volumes.*` plus the volumes that carry the Spark configuration and template files |
+| Spark container | `image`, `imagePullPolicy` | Set from `spark.kubernetes.{driver,executor}.container.image` and `spark.kubernetes.container.image.pullPolicy` |
+| Spark container | `resources` | CPU from `spark.{driver,executor}.cores` and `spark.kubernetes.{driver,executor}.limit.cores`; memory request and limit from memory plus memory overhead |
+| Spark container | `env`, `volumeMounts` | Adds environment variables and mounts from the Spark configuration |
+
+Fields not in this list, such as `tolerations`, `affinity`, `priorityClassName`, `securityContext` and `initContainers`, are taken from the template as written.[^k8s] The documentation uses `priorityClassName` in a template as its example of priority scheduling.[^k8s]
+
+Resources in a template apply only to the default resource profile. With stage-level scheduling, custom ResourceProfiles do not inherit resources from the template file, so they must declare every resource they need.[^k8s]
+
+## What is a pod template commonly used for?
+
+**Scheduling.** Node selectors can be set without a template: `spark.kubernetes.node.selector.[labelKey]` (since Spark 2.3.0) applies to driver and executors, and the driver-only and executor-only variants were added in Spark 3.3.0.[^k8s] Tolerations and affinity rules have no Spark property and are set through the template.[^config][^k8s]
+
+**Volumes.** Spark properties can mount `hostPath`, `emptyDir`, `nfs` and `persistentVolumeClaim` volumes.[^k8s] Other volume types, such as a ConfigMap or projected volume, are declared in the template. Volumes for shuffle and spill data are described in [Spark Kubernetes shuffle storage](/wiki/Spark_Kubernetes_shuffle_storage).
+
+**Sidecars.** A template can add containers next to the Spark container, for example a log shipper. Kubernetes treats an init container with `restartPolicy: Always` as a native sidecar; it is stable since Kubernetes 1.33, and the kubelet waits until the main container has stopped before it terminates the sidecar.[^sidecar] Spark 4.3.0 documents Kubernetes 1.34 or later as a prerequisite.[^k8s]
+
+**Security contexts.** The Spark images built from the project Dockerfiles run as UID 185. The documentation names the pod template as the way to add a security context with `runAsUser` that overrides the image's user.[^k8s] Apache Spark 4.3.0 added `spark.kubernetes.securityContext.allowPrivilegeEscalation` (default false) and driver and executor variants, which set the `allowPrivilegeEscalation` field of the Spark containers.[^config]
+
+## Example
+
+An executor pod template that pins executors to a tainted node pool, runs them as a non-root user and adds a native sidecar. The `image` value is replaced by Spark.
+
+```yaml
+apiVersion: v1
+kind: Pod
+spec:
+  nodeSelector:
+    pool: spark
+  tolerations:
+  - key: dedicated
+    operator: Equal
+    value: spark
+    effect: NoSchedule
+  securityContext:
+    runAsUser: 185
+    runAsNonRoot: true
+  initContainers:
+  - name: log-shipper
+    image: example.org/log-shipper:1.0
+    restartPolicy: Always
+  containers:
+  - name: spark-executor
+    image: will-be-overwritten
+```
+
+```
+spark.kubernetes.executor.podTemplateFile           s3a://bucket/executor.yml
+spark.kubernetes.executor.podTemplateContainerName  spark-executor
+```
+
+## See also
+
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark)
+- [Executor](/wiki/Executor)
+- [Spark Kubernetes shuffle storage](/wiki/Spark_Kubernetes_shuffle_storage)
+- [Executor decommissioning](/wiki/Executor_decommissioning)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Config.scala (Kubernetes resource manager, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/Config.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira24434]: [SPARK-24434: Support user-specified driver and executor pod templates](https://issues.apache.org/jira/browse/SPARK-24434). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^sidecar]: [Sidecar Containers](https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/). *The Kubernetes Authors*. Retrieved 2026-11-23.

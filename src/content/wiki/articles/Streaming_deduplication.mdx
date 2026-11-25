@@ -1,0 +1,104 @@
+---
+title: "Streaming deduplication"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Stream deduplication</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Unique identifier column(s), [watermark](/wiki/Watermark), deduplication state in the [state store](/wiki/State_store)</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming): `dropDuplicates`, `dropDuplicatesWithinWatermark` (Spark 3.5.0 and later); [Delta Lake](/wiki/Delta_Lake) insert-only `MERGE` in [foreachBatch](/wiki/ForeachBatch)</Field>
+  <Field name="related">[Watermark](/wiki/Watermark), [Exactly-once semantics](/wiki/Exactly-once_semantics), [State store](/wiki/State_store), [Stateful stream processing](/wiki/Stateful_stream_processing)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (streaming deduplication, recovery semantics) and Real-time Mode guide, `python/pyspark/sql/dataframe.py` at tag v4.3.0 of apache/spark, SPARK-42931, and the Delta Lake merge documentation</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), **streaming deduplication** is removing repeated records from a stream by a unique identifier, so that each event is passed on once even if the source delivers it several times. Spark keeps the identifiers it has already seen as state; `dropDuplicates` does this with or without a [watermark](/wiki/Watermark), and `dropDuplicatesWithinWatermark`, added in Spark 3.5.0, deduplicates within the watermark delay when duplicates carry different event times.[^ss-dedup][^jira] Duplicates are common in streaming because producers and connectors retry, and at-least-once delivery means a record may arrive more than once.
+
+## How does dropDuplicates work on a stream?
+
+On a batch DataFrame, `dropDuplicates` (available since Spark 1.4.0) simply drops duplicate rows. On a streaming DataFrame, it keeps the data it needs from all earlier triggers as state in order to drop duplicates in later ones.[^df] The Spark guide describes two ways to use it:[^ss-dedup]
+
+- **Without a watermark**, there is no bound on when a duplicate may arrive, so the query keeps state for every record it has ever seen. State grows for the life of the query.
+- **With a watermark**, if duplicates arrive no later than a known bound, the query sets a watermark on an event-time column and deduplicates on both the identifier and the event-time column. Spark then drops state for records older than the watermark, which bounds state.
+
+Records older than the watermark are dropped, to avoid any chance of emitting a duplicate.[^df]
+
+```python
+events = spark.readStream.table("main.iot.raw_events")   # columns: event_id, event_time, ...
+
+# Unbounded state: every event_id is remembered
+dedup_all = events.dropDuplicates(["event_id"])
+
+# Bounded state: event_id plus event_time, cleaned by the watermark
+dedup_bounded = (events
+    .withWatermark("event_time", "10 seconds")
+    .dropDuplicates(["event_id", "event_time"]))
+```
+
+## What is dropDuplicatesWithinWatermark?
+
+The bounded form of `dropDuplicates` works only if the event time is part of the identity of a record, so that true duplicates share it. Sometimes they do not, for example when a non-idempotent writer sets the event time at write time and a retried write gets a new one. `dropDuplicatesWithinWatermark` handles this case: it deduplicates on the identifier alone, within the time range of the watermark.[^ss-dedup]
+
+```python
+dedup = (events
+    .withWatermark("event_time", "10 hours")
+    .dropDuplicatesWithinWatermark(["event_id"]))
+```
+
+The guarantee is that events are deduplicated as long as the distance between the earliest and the latest copy is smaller than the watermark delay, so the delay should be longer than the largest time difference expected between duplicates. A watermark is required, and the operator works only on streaming DataFrames. Data older than the watermark is dropped.[^df][^ss-dedup]
+
+## dropDuplicates vs dropDuplicatesWithinWatermark
+
+|  | `dropDuplicates` without watermark | `dropDuplicates` with watermark | `dropDuplicatesWithinWatermark` |
+| --- | --- | --- | --- |
+| Available since | Spark 1.4.0[^df] | Spark 1.4.0[^df] | Spark 3.5.0[^jira] |
+| Key | Identifier columns[^ss-dedup] | Identifier and event-time columns[^ss-dedup] | Identifier columns only[^ss-dedup] |
+| State | Unbounded[^ss-dedup] | Bounded by the watermark[^ss-dedup] | Bounded by the watermark[^ss-dedup] |
+| Duplicates with different event times | Removed[^ss-dedup] | Not removed, because event time is part of the key | Removed if within the watermark delay[^df] |
+| Batch DataFrames | Supported[^df] | Supported[^df] | Streaming only[^df] |
+| Real-time Mode (Spark 4.3.0) | Supported[^rtm] | Supported[^rtm] | Not supported[^rtm] |
+
+The deduplication columns are part of the query's state schema: changing their number or type is not allowed between restarts from the same [streaming checkpoint](/wiki/Streaming_checkpoint).[^ss-changes] The plain `distinct` operation is not supported on streaming DataFrames.[^ss-unsup]
+
+## Deduplicating against a table
+
+`dropDuplicates` only removes duplicates that the query itself sees within its state. To avoid inserting a record that is already in the target table, for example one written by an earlier query or a backfill, the [Delta Lake](/wiki/Delta_Lake) documentation uses an insert-only `MERGE` inside [foreachBatch](/wiki/ForeachBatch), which inserts only rows whose key is not yet in the table.[^delta-merge]
+
+```python
+from delta.tables import DeltaTable
+
+target = DeltaTable.forName(spark, "main.iot.events")
+
+def insert_new(batch_df, batch_id):
+    (target.alias("t")
+        .merge(batch_df.dropDuplicates(["event_id"]).alias("s"),
+               "t.event_id = s.event_id")
+        .whenNotMatchedInsertAll()
+        .execute())
+
+(dedup_bounded.writeStream
+    .foreachBatch(insert_new)
+    .option("checkpointLocation", "/checkpoints/iot_events")
+    .start())
+```
+
+Deduplication in the stream and an insert-only merge into the table can be combined: the first bounds the work per batch, the second protects the table across queries and restarts.
+
+## See also
+
+- [Watermark](/wiki/Watermark)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [foreachBatch](/wiki/ForeachBatch)
+- [State store](/wiki/State_store)
+- [Stateful stream processing](/wiki/Stateful_stream_processing)
+
+## References
+
+[^ss-dedup]: [Structured Streaming: Streaming Deduplication (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#streaming-deduplication). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira]: [SPARK-42931: dropDuplicates within watermark](https://issues.apache.org/jira/browse/SPARK-42931). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^df]: [python/pyspark/sql/dataframe.py (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-changes]: [Structured Streaming: Recovery Semantics after Changes in a Streaming Query (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#recovery-semantics-after-changes-in-a-streaming-query). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-unsup]: [Structured Streaming: Unsupported Operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#unsupported-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta-merge]: [Table deletes, updates, and merges: Upsert from streaming queries using foreachBatch](https://docs.delta.io/latest/delta-update.html#upsert-from-streaming-queries-using-foreachbatch). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.

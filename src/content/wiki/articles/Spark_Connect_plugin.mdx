@@ -1,0 +1,124 @@
+---
+title: "Spark Connect plugin"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark Connect extension, Spark Server Library</Field>
+  <Field name="field">Distributed data processing, client-server protocols</Field>
+  <Field name="introduced">Apache Spark 3.4.0</Field>
+  <Field name="key_parts">`google.protobuf.Any` extension fields, `RelationPlugin`, `ExpressionPlugin`, `CommandPlugin`, `spark.connect.extensions.*.classes`, client wrapper</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark); used by [Delta Lake](/wiki/Delta_Lake) (Delta Connect)</Field>
+  <Field name="related">[Spark Connect](/wiki/Spark_Connect), [Spark Connect server](/wiki/Spark_Connect_server), [Spark Connect client](/wiki/Spark_Connect_client)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (sql/connect/server plugin interfaces, SparkConnectPluginRegistry.scala, SparkConnectPlanner.scala, config/Connect.scala, ConnectProtoUtils.scala, the Spark Connect protobuf files, SparkConnectPluginRegistrySuite.scala), the Spark 4.3.0 Application Development with Spark Connect and configuration pages, SPARK-47062, SPARK-51343, and the Delta Lake Delta Connect documentation</Verified>
+
+A **Spark Connect plugin** is a server-side class that extends [Spark Connect](/wiki/Spark_Connect) in [Apache Spark](/wiki/Apache_Spark) with new relations, expressions or commands: the client packs a custom Protocol Buffers message into an extension field of the Spark Connect protocol, and the plugin on the server turns that message into a Spark logical plan, a Catalyst expression, or an action.[^appdev] Plugins let a library such as [Delta Lake](/wiki/Delta_Lake) expose features that classic PySpark reached through the driver JVM to clients that only speak the Spark Connect protocol. The Spark documentation calls a plugin together with its protocol messages and client package a *Spark Server Library* and says these extension points were offered with Spark 3.4.[^appdev]
+
+## How does a Spark Connect plugin work?
+
+The Spark Connect protocol reserves a field of type `google.protobuf.Any` in its three main message types: `Relation.extension` (field 998), `Expression.extension` (field 999) and `Command.extension` (field 999).[^relproto][^exprproto][^cmdproto] An `Any` holds any serialized protobuf message together with its type URL, so an extension author defines its own message and the core protocol does not change.[^appdev]
+
+A Spark Server Library has four parts, according to the Spark documentation: the protocol extension (the custom protobuf messages), the Spark Connect plugin, the application logic it calls, and a client package that builds the messages for PySpark or Scala users.[^appdev]
+
+When the Spark Connect planner meets an extension field, it passes the serialized `Any` to every registered plugin of the matching kind, in order, and uses the first one that handles it. A plugin signals "not mine" by returning an empty `Optional` (relations and expressions) or `false` (commands). If no plugin handles the message, the request fails with an error that names the type URL.[^planner]
+
+## Which plugin interfaces does Spark provide?
+
+In Spark 4.3.0 the plugin interfaces are Java interfaces in the package `org.apache.spark.sql.connect.plugin`, each registered with a static configuration key:[^iface][^connectconf][^config]
+
+| Interface | Method | Returns | Configuration key | Since |
+| --- | --- | --- | --- | --- |
+| `RelationPlugin` | `transform(byte[] relation, SparkConnectPlanner planner)` | `Optional<LogicalPlan>` | `spark.connect.extensions.relation.classes` | 3.4.0 |
+| `ExpressionPlugin` | `transform(byte[] relation, SparkConnectPlanner planner)` | `Optional<Expression>` | `spark.connect.extensions.expression.classes` | 3.4.0 |
+| `CommandPlugin` | `process(byte[] command, SparkConnectPlanner planner)` | `boolean` | `spark.connect.extensions.command.classes` | 3.4.0 |
+| `GetStatusPlugin` | `processRequestExtensions`, `processOperationExtensions` | `Optional<List<Any>>` | `spark.connect.extensions.getStatus.classes` | 4.1.0 |
+| `MLBackendPlugin` (experimental) | `transform(String mlName)` | `Optional<String>` | `spark.connect.ml.backend.classes` | 4.0.0 |
+
+Each key takes a comma-separated list of class names. Plugin classes must be trivially constructable and should not rely on internal state; the registry creates them by reflection the first time a plugin is needed.[^iface][^registry] The JAR with the plugin goes on the server's classpath, for example with `spark.jars`.[^appdev]
+
+## Why do plugins receive bytes instead of protobuf objects?
+
+Spark shades its copy of the protobuf library inside the Spark Connect server, so a plugin compiled against `com.google.protobuf` cannot share protobuf classes with the server. A 2025 bug report, SPARK-51343, describes the resulting mismatch for the older Scala `RelationPlugin` trait, whose bytecode referred to `org.sparkproject.connect.protobuf.Any`.[^jira51343] SPARK-47062, "Make Spark Connect Plugins Java Compatible", was fixed in Spark 4.0.0.[^jira47062] In the 4.3.0 source, the planner calls each plugin with `extension.toByteArray`, the bytes of the whole `Any` message.[^planner]
+
+A plugin therefore parses the bytes with its own protobuf library. To turn nested Spark Connect messages (for example a child expression or input relation inside the custom message) back into Spark's own classes, Spark provides `org.apache.spark.sql.connect.ConnectProtoUtils`, whose documentation states that it exists for plugins because of the shading of `com.google.protobuf`.[^protoutils] The code samples on the Application Development page still show the older signature that takes a `protobuf.Any` and returns a Scala `Option`.[^appdev]
+
+## Example
+
+The following expression plugin follows the pattern of the plugin tests in Spark 4.3.0.[^suite] A custom message `MyUpper` (fields `spark.connect.Expression child = 1;`) is generated in the package `com.example.proto`, and the plugin turns it into Spark's `Upper` expression:
+
+```scala
+package com.example
+
+import java.util.Optional
+
+import com.google.protobuf
+import org.apache.spark.sql.catalyst.expressions.{Expression, Upper}
+import org.apache.spark.sql.connect.ConnectProtoUtils
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.plugin.ExpressionPlugin
+
+class MyUpperPlugin extends ExpressionPlugin {
+  override def transform(
+      relation: Array[Byte],
+      planner: SparkConnectPlanner): Optional[Expression] = {
+    val any = protobuf.Any.parseFrom(relation)
+    if (!any.is(classOf[com.example.proto.MyUpper])) {
+      return Optional.empty()
+    }
+    val msg = any.unpack(classOf[com.example.proto.MyUpper])
+    // Re-parse the nested Spark Connect message into Spark's own (shaded) classes.
+    val child = ConnectProtoUtils.parseExpressionWithRecursionLimit(
+      msg.getChild.toByteArray, recursionLimit = 1024)
+    Optional.of(Upper(planner.transformExpression(child)))
+  }
+}
+```
+
+The server is then started with the JAR and the class name, for example `--jars my-upper.jar --conf spark.connect.extensions.expression.classes=com.example.MyUpperPlugin`. On the client side, the Spark documentation shows a PySpark wrapper that subclasses the Spark Connect `Expression` class, packs the custom message into `proto.Expression().extension` in `to_plan()`, and wraps it in a `Column`.[^appdev] The Scala client offers the developer APIs `SparkSession.newDataFrame(f: proto.Relation.Builder => Unit)` and `SparkSession.execute(command: proto.Command)`, both since 4.0.0, for sending custom relations and commands.[^scalasession]
+
+## Spark Connect plugin vs other Spark extension points
+
+The Spark documentation says Spark Connect extension points differ from existing ones such as `SparkSessionExtensions` and `SparkPlugin`, because they expose functionality to a client.[^appdev]
+
+|  | Spark Connect plugin | `SparkSessionExtensions` | `SparkPlugin` |
+| --- | --- | --- | --- |
+| Purpose | Map a new protocol message to a plan, expression or command | Inject rules, parsers and functions into a Spark session | Run driver and executor components inside a Spark application |
+| Visible to remote clients | Yes; clients send the custom message | Only through SQL or plans the client can already build | No |
+| Registered with | `spark.connect.extensions.*.classes`[^config] | `spark.sql.extensions`[^n1] | `spark.plugins`[^n2] |
+
+The Spark Connect server is itself loaded as a `SparkPlugin`, `org.apache.spark.sql.connect.SparkConnectPlugin`.[^sparkplugin]
+
+## Use in an open lakehouse
+
+[Delta Lake](/wiki/Delta_Lake) uses Spark Connect plugins for Delta Connect, available from Delta Lake 4.0.0 and described in its documentation as a preview. The documented server command sets `spark.connect.extensions.relation.classes` to `org.apache.spark.sql.connect.delta.DeltaRelationPlugin` and `spark.connect.extensions.command.classes` to `org.apache.spark.sql.connect.delta.DeltaCommandPlugin`, alongside the usual Delta session extension and catalog. The Python `DeltaTable` API then works with a remote Spark Connect session.[^deltaconnect]
+
+## See also
+
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark Connect server](/wiki/Spark_Connect_server)
+- [Spark Connect client](/wiki/Spark_Connect_client)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^appdev]: [Application Development with Spark Connect (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/app-dev-spark-connect.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^relproto]: [relations.proto (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/relations.proto). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^exprproto]: [expressions.proto (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/expressions.proto). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^cmdproto]: [commands.proto (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/protobuf/spark/connect/commands.proto). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^planner]: [SparkConnectPlanner.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/planner/SparkConnectPlanner.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^iface]: [sql/connect/server/src/main/java/org/apache/spark/sql/connect/plugin (tag v4.3.0)](https://github.com/apache/spark/tree/v4.3.0/sql/connect/server/src/main/java/org/apache/spark/sql/connect/plugin). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^connectconf]: [Connect.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/config/Connect.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^registry]: [SparkConnectPluginRegistry.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/plugin/SparkConnectPluginRegistry.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^jira51343]: [SPARK-51343: RelationPlugin scala signature does not match bytecode](https://issues.apache.org/jira/browse/SPARK-51343). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^jira47062]: [SPARK-47062: Make Spark Connect Plugins Java Compatible](https://issues.apache.org/jira/browse/SPARK-47062). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^protoutils]: [ConnectProtoUtils.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/ConnectProtoUtils.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^suite]: [SparkConnectPluginRegistrySuite.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/test/scala/org/apache/spark/sql/connect/plugin/SparkConnectPluginRegistrySuite.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^scalasession]: [SparkSession.scala (Spark Connect Scala client, tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/SparkSession.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^n1]: [StaticSQLConf.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/StaticSQLConf.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^n2]: [core/src/main/scala/org/apache/spark/internal/config/package.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^sparkplugin]: [SparkConnectPlugin.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/SparkConnectPlugin.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^deltaconnect]: [Delta Connect (aka Spark Connect Support in Delta)](https://github.com/delta-io/delta/blob/master/docs/src/content/docs/delta-spark-connect.mdx). *Delta Lake project*. Retrieved 2026-11-23.

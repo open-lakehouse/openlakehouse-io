@@ -1,0 +1,120 @@
+---
+title: "Spark on Kubernetes"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark K8s, Kubernetes scheduler backend for Spark</Field>
+  <Field name="field">Cluster management for distributed data processing</Field>
+  <Field name="introduced">Spark 2.3.0 (experimental); generally available in Spark 3.1.1</Field>
+  <Field name="key_parts">Driver pod, executor pods, container image, service account, pod templates, volumes</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark)</Field>
+  <Field name="related">[spark-submit](/wiki/Spark-submit), [Executor](/wiki/Executor), [Spark on YARN](/wiki/Spark_on_YARN), [Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/running-on-kubernetes.md, docs/configuration.md, docs/job-scheduling.md), the Spark 2.3.0 and 3.1.1 release notes, SPARK-18278, SPARK-33005 and the Apache Spark Kubernetes Operator 1.1.0 release</Verified>
+
+**Spark on Kubernetes** is the mode of [Apache Spark](/wiki/Apache_Spark) in which Kubernetes is the cluster manager: the Spark driver and each [executor](/wiki/Executor) run as Kubernetes pods, and Spark asks the Kubernetes API server for executor pods directly through its native Kubernetes scheduler backend.[^k8s] Applications are submitted with [spark-submit](/wiki/Spark-submit) using a `k8s://` master URL, or declaratively through the [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark), a separate Apache Spark subproject that uses the same scheduler backend.[^k8s] Spark 4.3.0 documents Kubernetes 1.34 or newer as a prerequisite.[^k8s]
+
+## How does Spark run on Kubernetes?
+
+When an application is submitted in cluster mode, Spark creates the driver inside a Kubernetes pod. The driver then creates executor pods, connects to them and runs the application code. When the application finishes, the executor pods terminate and are cleaned up, while the driver pod stays in the "completed" state, keeping its logs, until it is garbage collected or deleted; a completed driver pod uses no compute or memory resources.[^k8s]
+
+Kubernetes, not Spark, schedules the driver and executor pods onto nodes. Spark talks to the Kubernetes API through the fabric8 Kubernetes client, and node selectors can restrict pods to a subset of nodes.[^k8s] Spark launches executor pods in rounds; `spark.kubernetes.allocation.batch.size` (default 20) is the number of pods launched in each round.[^k8s]
+
+The driver needs permission to manage its executors. The service account used by the driver pod must be allowed to create pods, services and configmaps, and it is set with `spark.kubernetes.authenticate.driver.serviceAccountName` (default `default`).[^k8s]
+
+## How do you submit a PySpark application to Kubernetes?
+
+The master URL has the form `k8s://<api_server_host>:<port>`; the port is required even when it is 443, and the scheme defaults to HTTPS.[^k8s] The application name is used to name the Kubernetes resources, so it must contain only lowercase alphanumeric characters, `-` and `.`.[^k8s] The image comes from `spark.kubernetes.container.image`; Spark ships Dockerfiles and `bin/docker-image-tool.sh` to build images (including a PySpark image), and the Apache Spark images on Docker Hub (`apache/spark`) can be used directly.[^k8s]
+
+```bash
+./bin/spark-submit \
+  --master k8s://https://k8s-apiserver.example.com:6443 \
+  --deploy-mode cluster \
+  --name daily-orders \
+  --conf spark.kubernetes.namespace=spark-jobs \
+  --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
+  --conf spark.kubernetes.container.image=apache/spark:4.3.0-python3 \
+  --conf spark.executor.instances=4 \
+  local:///opt/app/daily_orders.py
+```
+
+The `local://` scheme points to a file already inside the image. Dependencies on the submitting machine (`file://` or a plain path) are uploaded to a Hadoop-compatible file system set by `spark.kubernetes.file.upload.path`, for example an S3 bucket, and downloaded by the driver pod.[^k8s] The namespace defaults to `default` when `spark.kubernetes.namespace` is not set.[^k8s]
+
+In cluster mode, `spark-submit --status` and `spark-submit --kill` take a submission ID of the form `namespace:driver-pod-name`, and both accept glob patterns.[^k8s]
+
+## What is the difference between cluster mode and client mode on Kubernetes?
+
+In cluster mode the driver runs in a pod that Spark creates. Client mode, supported since Spark 2.4.0, lets the driver run in an existing pod or on a host outside the cluster.[^k8s] In client mode the executors must be able to reach the driver at a routable host name and port (`spark.driver.host`, `spark.driver.port`); for a driver in a pod, the documentation suggests a headless service.[^k8s]
+
+In client mode inside a pod, setting `spark.kubernetes.driver.pod.name` to the driver pod's name makes Spark add an OwnerReference to each executor pod, so Kubernetes deletes the executors when the driver pod is deleted. Without it, executor pods can remain in the cluster if Spark's own deletion request fails.[^k8s]
+
+## What are pod templates?
+
+A pod template is a Kubernetes pod specification file that Spark uses as the starting point for the driver or executor pod, for settings that Spark configuration properties do not cover (for example security contexts or sidecar containers). The files are set with `spark.kubernetes.driver.podTemplateFile` and `spark.kubernetes.executor.podTemplateFile`.[^k8s]
+
+Spark does not validate pod templates and leaves validation to the API server. Spark always overwrites some fields, such as the namespace and the driver's service account, so a template only gives Spark a non-empty pod to start from. When a template defines several containers, `spark.kubernetes.driver.podTemplateContainerName` and `spark.kubernetes.executor.podTemplateContainerName` choose the Spark container; otherwise the first container is used.[^k8s]
+
+## How are volumes and local storage configured?
+
+Spark on Kubernetes can mount four volume types into driver and executor pods: `hostPath`, `emptyDir`, `nfs` and `persistentVolumeClaim`. Volumes are declared with properties of the form `spark.kubernetes.[driver|executor].volumes.[VolumeType].[VolumeName].mount.path`, plus type-specific `options.*` properties.[^k8s] The documentation warns that `hostPath` volumes have known security risks and recommends the Pod Security Admission controller to limit them.[^k8s]
+
+For executors, a claim name of `OnDemand` creates a persistent volume claim per executor, with `storageClass` and `sizeLimit` options. Since Spark 3.4 the driver can own these claims and reuse them for new executors (`spark.kubernetes.driver.ownPersistentVolumeClaim`, `spark.kubernetes.driver.reusePersistentVolumeClaim`, `spark.kubernetes.driver.waitToReusePersistentVolumeClaim`).[^k8s]
+
+Volumes whose names start with `spark-local-dir-` are used as Spark local storage for shuffle and spill data. Without one, Spark uses an `emptyDir` volume, which does not outlive the pod; `spark.kubernetes.local.dirs.tmpfs=true` makes these volumes RAM-backed, which counts toward the pod's memory.[^k8s]
+
+```properties
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.claimName=OnDemand
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.storageClass=gp
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit=500Gi
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path=/data
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly=false
+```
+
+## How does memory and dynamic allocation differ on Kubernetes?
+
+Each executor pod requests its heap plus overhead memory. `spark.executor.memoryOverheadFactor` defaults to 0.10, except for Kubernetes non-JVM jobs (such as PySpark), where it defaults to 0.40 because non-JVM tasks need more memory outside the heap.[^config] CPU requests and limits for pods can be set separately with `spark.kubernetes.executor.request.cores` and `spark.kubernetes.executor.limit.cores`.[^k8s]
+
+Dynamic allocation works on Kubernetes, but Spark on Kubernetes does not support the external shuffle service, so `spark.shuffle.service.enabled=true` cannot be used to keep shuffle files.[^jobsched] Shuffle tracking, decommissioning with shuffle block migration, or a shuffle storage plugin are used instead; see [Executor: dynamic allocation](/wiki/Executor#dynamic-allocation). Spark 4.3.0 also ships a `KubernetesLocalDiskShuffleDataIO` plugin that recovers shuffle data from reused persistent volume claims.[^k8s]
+
+## How does it relate to the Kubernetes Operator for Apache Spark?
+
+<Hatnote>Main article: [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark)</Hatnote>
+
+The Apache Spark Kubernetes Operator is a separate Apache Spark project that manages Spark workloads declaratively through custom resources: `SparkApplication` for applications and `SparkCluster` for [standalone](/wiki/Spark_standalone_cluster_manager) clusters. The Spark documentation calls the two approaches complementary, because the operator runs applications on the same native Kubernetes scheduler backend that spark-submit uses.[^k8s] Its latest release is 1.1.0, published on 12 November 2026.[^n1]
+
+## History
+
+Spark 2.3.0 added the Kubernetes scheduler backend for native submission to Kubernetes (SPARK-18278) and marked it experimental.[^n2] Spark 3.1.1 declared Kubernetes support generally available (SPARK-33005).[^n3][^n4] Spark on Kubernetes is not deprecated in Spark 4.3.0.
+
+## Spark on Kubernetes compared with other cluster managers
+
+|  | Spark on Kubernetes | [Spark on YARN](/wiki/Spark_on_YARN) | [Spark standalone](/wiki/Spark_standalone_cluster_manager) |
+| --- | --- | --- | --- |
+| Driver and executors run in | Kubernetes pods[^k8s] | YARN containers[^yarn] | Processes on standalone workers[^standalone] |
+| Master URL | `k8s://HOST:PORT` | `yarn` | `spark://HOST:PORT`[^submit] |
+| External shuffle service | Not supported | Supported | Supported[^jobsched] |
+
+## See also
+
+- [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark)
+- [spark-submit](/wiki/Spark-submit)
+- [Executor](/wiki/Executor)
+- [Spark on YARN](/wiki/Spark_on_YARN)
+- [Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager)
+- [Spark configuration precedence](/wiki/Spark_configuration_precedence)
+- [Spark Connect](/wiki/Spark_Connect)
+
+## References
+
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Release 1.1.0](https://github.com/apache/spark-kubernetes-operator/releases/tag/1.1.0). *apache/spark-kubernetes-operator on GitHub*. Retrieved 2026-11-23.
+[^n2]: [Spark Release 2.3.0](https://spark.apache.org/releases/spark-release-2-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [Spark Release 3.1.1](https://spark.apache.org/releases/spark-release-3-1-1.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [SPARK-33005: Kubernetes GA Preparation](https://issues.apache.org/jira/browse/SPARK-33005). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^yarn]: [Running Spark on YARN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-yarn.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^standalone]: [Spark Standalone Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-standalone.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^submit]: [Submitting Applications (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/submitting-applications.html). *Apache Software Foundation*. Retrieved 2026-11-23.

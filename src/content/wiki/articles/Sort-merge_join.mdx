@@ -1,0 +1,92 @@
+---
+title: "Sort-merge join"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Shuffle sort-merge join, SMJ, `SortMergeJoin`</Field>
+  <Field name="field">Distributed query processing</Field>
+  <Field name="key_parts">Shuffle exchange, hash partitioning, per-partition sort, merge scan</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Broadcast join](/wiki/Broadcast_join), [Shuffle hash join](/wiki/Shuffle_hash_join), [Shuffle](/wiki/Shuffle), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SparkStrategies.scala, SortMergeJoinExec.scala, joins.scala, SQLConf.scala, sql-performance-tuning.md and sql-ref-syntax-qry-select-hints.md)</Verified>
+
+A **sort-merge join** is a distributed equality-join strategy that repartitions both inputs by the join keys, sorts each resulting partition by those keys, and merges the two ordered streams.[^smjexec] In [Apache Spark](/wiki/Apache_Spark), `SortMergeJoin` is the usual physical operator for an equality join between two large inputs when neither side can be broadcast: Spark prefers it over a [shuffle hash join](/wiki/Shuffle_hash_join) by default, and its memory use does not depend on building an entire input partition as a hash table.[^strategies][^sqlconf]
+
+## How does a sort-merge join work?
+
+A Spark sort-merge join has three distributed steps:[^smjexec]
+
+1. **Shuffle both sides.** Spark applies compatible hash partitioning to the two inputs so rows with equal join keys arrive in partitions with the same partition number.
+1. **Sort each partition.** Each side is ordered by its join keys. The `SortMergeJoinExec` operator declares ascending key order as a requirement for both children.
+1. **Merge matching keys.** A task reads one partition from each side, advances through the two ordered streams, and emits rows when the keys compare equal. Spark may buffer rows that share a key and can spill that buffer when necessary.
+
+The two exchanges are stage boundaries. The exchange writers create shuffle files, and later tasks fetch, sort and join the matching partitions. This makes sort-merge join suitable for inputs that are too large to copy to every executor, but it also means network I/O, disk I/O and sorting work on both sides.
+
+## What does SortMergeJoin mean in EXPLAIN?
+
+A representative physical plan has this shape:
+
+```
+*(5) SortMergeJoin [customer_id#1L], [customer_id#8L], Inner
+:- *(2) Sort [customer_id#1L ASC NULLS FIRST], false, 0
+:  +- Exchange hashpartitioning(customer_id#1L, 200), ENSURE_REQUIREMENTS
+:     +- Scan parquet sales
++- *(4) Sort [customer_id#8L ASC NULLS FIRST], false, 0
+   +- Exchange hashpartitioning(customer_id#8L, 200), ENSURE_REQUIREMENTS
+      +- Scan parquet customers
+```
+
+`SortMergeJoin` names the algorithm and lists the left and right join keys. The two `Exchange hashpartitioning` nodes show that both inputs shuffle. The `Sort` nodes satisfy the ordering required by the join. The partition count shown by a real plan comes from the chosen exchange partitioning and can be changed by [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) after runtime statistics become available.[^perf]
+
+If an input already has compatible partitioning or ordering, Spark can reuse those properties rather than inserting every operator shown above. `EXPLAIN FORMATTED` is useful for tracing each `Exchange` and `Sort` to its input.[^n1]
+
+## When does Spark choose sort-merge join?
+
+For an equality join without hints, Spark 4.3.0 tries a broadcast hash join first. It next considers a shuffled hash join only when one side meets the size tests and `spark.sql.join.preferSortMergeJoin` is false. Spark then chooses sort-merge join when the join keys have a sortable data type.[^strategies] The internal setting `spark.sql.join.preferSortMergeJoin` defaults to `true`.[^sqlconf]
+
+The `MERGE` hint asks Spark to use sort-merge join. Its aliases are `SHUFFLE_MERGE` and `MERGEJOIN`:[^hints]
+
+```sql
+SELECT /*+ MERGE(large_orders, large_customers) */
+       large_orders.order_id, large_customers.region
+FROM large_orders
+JOIN large_customers
+  ON large_orders.customer_id = large_customers.customer_id;
+```
+
+A hint is a request rather than a guarantee. Spark ignores an inapplicable merge hint, including when there are no equality keys or the key type cannot supply the binary ordering required by the strategy.[^hints][^strategies]
+
+## How does sort-merge join compare with other joins?
+
+|  | Sort-merge join | Shuffle hash join | Broadcast hash join |
+| --- | --- | --- | --- |
+| Data movement | Shuffles both inputs by the join keys | Shuffles both inputs by the join keys | Broadcasts the build side; normally does not shuffle the streamed side |
+| Local work | Sorts both partitions, then merges ordered streams | Builds a hash table from one shuffled partition and probes it with the other | Builds one relation at the driver, broadcasts it, and probes it in each task |
+| Main memory risk | Groups of equal keys may need buffering; the implementation can spill its match buffer[^smjexec] | The build partition must fit well enough to construct a local hash table | The complete build side must be collected and broadcast |
+| Typical use in Spark | Two large inputs with sortable equality keys | One side is much smaller per partition, or the strategy is selected by hint or AQE | One complete input is small enough to broadcast |
+
+Sort-merge join can be slower when the shuffle and sort dominate the query, especially if the inputs were not already partitioned compatibly. Skew can leave one reducer with far more rows than the others. AQE can split skewed sort-merge partitions, coalesce small shuffle partitions, or convert an eligible sort-merge join to a broadcast or shuffled hash join after it observes actual shuffle sizes.[^perf]
+
+## What cannot sort-merge join do?
+
+Spark's sort-merge implementation requires equality keys with sortable data types.[^strategies] A condition such as `left.ts > right.ts` by itself is not a sort-merge equality join; Spark must use another physical strategy. A sort-merge join also cannot remove the cost of a required shuffle merely because the SQL uses a `MERGE` hint.
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Shuffle hash join](/wiki/Shuffle_hash_join)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations)
+
+## References
+
+[^smjexec]: [SortMergeJoinExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/joins/SortMergeJoinExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^strategies]: [SparkStrategies.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [EXPLAIN statement (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-explain.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^hints]: [Hints (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-hints.html). *Apache Software Foundation*. Retrieved 2026-11-23.

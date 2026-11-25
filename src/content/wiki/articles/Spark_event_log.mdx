@@ -1,0 +1,97 @@
+---
+title: "Spark event log"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Event log, eventLog</Field>
+  <Field name="field">Monitoring and debugging</Field>
+  <Field name="key_parts">EventLoggingListener, JSON lines (one listener event per line), compression codec, rolling files, compaction</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark History Server](/wiki/Spark_History_Server), [Spark UI](/wiki/Spark_UI), [Spark listener](/wiki/Spark_listener)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (EventLoggingListener.scala, EventLogFileWriters.scala, config/package.scala, config/History.scala, docs/configuration.md, docs/monitoring.md, docs/core-migration-guide.md) and Spark JIRA SPARK-28594 and SPARK-45771</Verified>
+
+The **Spark event log** is a file, or a directory of files, in which an [Apache Spark](/wiki/Apache_Spark) application records the listener events that its driver posts for jobs, stages, tasks, executors and SQL query executions, so that the application's [Spark UI](/wiki/Spark_UI) can be rebuilt after it ends. Not every event is written: some are recorded only when a setting turns them on, events can opt out of logging, and `spark.eventLog.excludedPatterns` suppresses named events.[^ell] The [Spark History Server](/wiki/Spark_History_Server) reads event logs to show finished applications. Event logging is off by default and is turned on with `spark.eventLog.enabled`.[^coreconf]
+
+## What does the event log record?
+
+The event log is written by `EventLoggingListener`, a [Spark listener](/wiki/Spark_listener) that the driver registers when event logging is on. Each event that it logs is serialized to JSON and written as one line; the first line records the Spark version.[^ell] The events include application start and end, job start and end, stage submission and completion, task start and end with task metrics, executors added and removed, environment updates, and SQL execution start and end with the query plans. These are the kinds of events that also build the live Spark UI.
+
+Some events are left out by default. `EventLoggingListener` writes block updates and stage executor metrics only when their settings are on, writes events from other modules only if the event's `logEvent` flag is true, and the log writer drops any line that starts with a pattern listed in `spark.eventLog.excludedPatterns`:[^ell][^writers][^coreconf][^confdoc]
+- `spark.eventLog.logBlockUpdates.enabled` (default false) logs every block update. The documentation warns that this increases the size of the event log considerably.
+- `spark.eventLog.logStageExecutorMetrics` (default false) writes per-stage peaks of executor metrics.
+
+## Where is the event log written?
+
+```properties
+spark.eventLog.enabled  true
+spark.eventLog.dir      hdfs://namenode/shared/spark-logs
+```
+
+`spark.eventLog.dir` defaults to `/tmp/spark-events`, a path on the driver's local file system, so on a cluster it is set to a shared location such as HDFS or object storage that the [Spark History Server](/wiki/Spark_History_Server) also reads.[^coreconf][^ell][^monitoring]
+
+A single-file event log is named after the application ID and carries an `.inprogress` suffix until the application ends. A rolling event log is a directory named `eventlog_v2_<appId>` that holds numbered `events_<index>_<appId>` files and an `appstatus_<appId>` file, which also has the `.inprogress` suffix while the application runs.[^writers]
+
+## What changed in Spark 4.0?
+
+Two event log defaults changed in Spark 4.0. The Spark migration guide says that since 4.0, Spark rolls event logs to archive them incrementally, and that it compresses event logs; setting `spark.eventLog.rolling.enabled` or `spark.eventLog.compress` to false restores the earlier behaviour.[^migration] The rolling default came from SPARK-45771.[^n1] Since Spark 3.2, the event log codec defaults to `zstd` and no longer falls back to `spark.io.compression.codec`.[^migration]
+
+| Setting | Default in 4.3.0 | Since |
+| --- | --- | --- |
+| `spark.eventLog.enabled` | false | 1.0.0 |
+| `spark.eventLog.dir` | `/tmp/spark-events` | 1.0.0 |
+| `spark.eventLog.compress` | true | 1.0.0 |
+| `spark.eventLog.compression.codec` | zstd | 3.0.0 |
+| `spark.eventLog.rolling.enabled` | true | 3.0.0 |
+| `spark.eventLog.rolling.maxFileSize` | 128m | 3.0.0 |
+| `spark.eventLog.excludedPatterns` | (none) | 4.1.0 |
+
+All values are from the Spark 4.3.0 source.[^coreconf]
+
+## Why do event logs get so large?
+
+An event log grows with the number of tasks, because every task end event carries the task's metrics. Applications with many small tasks, long-running [Structured Streaming](/wiki/Structured_Streaming) queries that run a job for every micro-batch, and queries with very large plans produce the largest logs. A large single-file log is slow for the History Server to replay, because the whole file must be read to build the UI.[^monitoring]
+
+Ways to keep event logs manageable:
+- **Rolling.** With `spark.eventLog.rolling.enabled` (on by default since 4.0), Spark starts a new file when the current one reaches `spark.eventLog.rolling.maxFileSize` (default 128m). Rolling was added for running streaming applications in Spark 3.0.0 (SPARK-28594).[^coreconf][^n2]
+- **Compaction.** Rolling alone does not reduce the total size. Setting `spark.history.fs.eventLog.rolling.maxFilesToRetain` on the History Server compacts older rolled files and drops events for finished jobs, terminated executors and finished SQL executions. The documentation describes compaction as lossy.[^monitoring][^history]
+- **Excluding events.** `spark.eventLog.excludedPatterns` (since 4.1.0) takes a comma-separated list of event names that are not written.[^confdoc]
+- **Leaving verbose events off**, such as block updates.[^confdoc]
+- **Retention.** The History Server cleaner (`spark.history.fs.cleaner.enabled`, default false) deletes old logs.[^history]
+
+## Reading an event log without the History Server
+
+Because each line is a JSON object whose `Event` field names the event class (for example `SparkListenerStageCompleted`),[^jsonprotocol] a compressed log can be decompressed and read with ordinary JSON tools. Spark itself can read one as a JSON data source, which is a quick way to find the slowest stages of a finished run:
+
+```python
+events = spark.read.json("/tmp/spark-events/app-20261123120000-0000")
+(events.filter("Event = 'SparkListenerStageCompleted'")
+       .selectExpr("`Stage Info`.`Stage ID` AS stage",
+                   "`Stage Info`.`Completion Time` - `Stage Info`.`Submission Time` AS ms")
+       .orderBy("ms", ascending=False)
+       .show(5))
+```
+
+The JSON format comes from Spark's `JsonProtocol`, an internal class whose source states that any version of Spark should be able to read event logs written by any other version, and that JSON fields are never deleted, only added as optional fields.[^jsonprotocol] For tools, the REST API of the History Server or the live UI, at `/api/v1`, is the documented interface to the same data and has its own versioning policy.[^monitoring]
+
+## See also
+
+- [Spark History Server](/wiki/Spark_History_Server)
+- [Spark UI](/wiki/Spark_UI)
+- [Spark listener](/wiki/Spark_listener)
+- [Structured Streaming](/wiki/Structured_Streaming)
+
+## References
+
+[^ell]: [EventLoggingListener.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/EventLoggingListener.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^coreconf]: [config/package.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^writers]: [EventLogFileWriters.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/history/EventLogFileWriters.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^confdoc]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: Spark Core (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/core-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-45771: Enable spark.eventLog.rolling.enabled by default](https://issues.apache.org/jira/browse/SPARK-45771). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [SPARK-28594: Allow event logs for running streaming apps to be rolled over](https://issues.apache.org/jira/browse/SPARK-28594). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^history]: [config/History.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/History.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jsonprotocol]: [JsonProtocol.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/util/JsonProtocol.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

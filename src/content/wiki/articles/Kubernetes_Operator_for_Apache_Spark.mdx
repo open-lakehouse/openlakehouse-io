@@ -1,0 +1,114 @@
+---
+title: "Kubernetes Operator for Apache Spark"
+categories: ["Pipelines and orchestration", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software" name="Apache Spark Kubernetes Operator">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) subproject)</Field>
+  <Field name="initial_release">0.1.0 (May 2025)</Field>
+  <Field name="latest_release">1.1.0</Field>
+  <Field name="latest_release_date">2026-11-12</Field>
+  <Field name="written_in">Java</Field>
+  <Field name="type">Kubernetes operator for Spark applications and clusters</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[Operator documentation](https://github.com/apache/spark-kubernetes-operator/tree/1.1.0/docs)</Field>
+  <Field name="repo">[github.com/apache/spark-kubernetes-operator](https://github.com/apache/spark-kubernetes-operator)</Field>
+  <Field name="related">[Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [spark-submit](/wiki/Spark-submit), [Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the 1.1.0 tag of apache/spark-kubernetes-operator (README, docs/architecture.md, docs/spark_custom_resources.md, docs/operations.md, docs/migration_guide.md, SparkAppSubmissionWorker.java), its GitHub releases, SPARK-45923, docs/running-on-kubernetes.md at Spark v4.3.0, the kubeflow/spark-operator README and v2.6.0 release, and the Kubeflow announcement of April 2024</Verified>
+
+The **Kubernetes Operator for Apache Spark** is software that runs Spark workloads on Kubernetes through the operator pattern: users describe a Spark application or cluster as a Kubernetes custom resource, and a controller creates and watches the driver, executor and other pods until the workload ends. The name covers two projects. The **Apache Spark Kubernetes Operator** is an official subproject of [Apache Spark](/wiki/Apache_Spark) with the custom resources `SparkApplication` and `SparkCluster`.[^readme][^k8sdoc] The older **Kubeflow Spark Operator**, which began as Google Cloud Platform's Spark on Kubernetes Operator, moved to the Kubeflow community in 2024.[^kfblog]
+
+## What does the Apache Spark Kubernetes Operator do?
+
+The Apache Spark Kubernetes Operator acts as a control plane for the deployment lifecycle of Spark applications and clusters. It is installed with Helm, usually in its own namespace, and watches Spark custom resources in one or more workload namespaces.[^arch] It is built with the Java Operator SDK and talks to the Kubernetes API server with the fabric8 client.[^arch]
+
+For a `SparkApplication`, the operator launches the driver, observes it and the executors it spawns, records their status until the application ends, and then releases the resources the application owned.[^arch] It builds the driver with Spark's own Kubernetes driver builder in-process, instead of starting a separate spark-submit process.[^worker] The Spark documentation describes the operator and spark-submit as complementary, because both use the same native Kubernetes scheduler backend; see [Spark on Kubernetes](/wiki/Spark_on_Kubernetes).[^k8sdoc]
+
+For a `SparkCluster`, the operator deploys a [Spark standalone](/wiki/Spark_standalone_cluster_manager) master and workers as StatefulSets exposed through Kubernetes services, and garbage-collects them when the resource is deleted.[^crd]
+
+## What does a SparkApplication look like?
+
+A `SparkApplication` in API group `spark.apache.org/v1` names the entry point (`mainClass` and `jars` for JVM applications, `pyFiles` for Python), the Spark configuration in `sparkConf`, and the Spark version in `runtimeVersions`.[^crd] This example, adapted from the operator's Python example, runs the PySpark Pi program:[^n1]
+
+```yaml
+apiVersion: spark.apache.org/v1
+kind: SparkApplication
+metadata:
+  name: pi-python
+spec:
+  pyFiles: "local:///opt/spark/examples/src/main/python/pi.py"
+  sparkConf:
+    spark.kubernetes.authenticate.driver.serviceAccountName: "spark"
+    spark.kubernetes.container.image: "apache/spark:4.3.0-python3"
+  runtimeVersions:
+    sparkVersion: "4.3.0"
+```
+
+`kubectl get sparkapp` lists applications with their current state. Pod details that Spark configuration cannot set go in `spec.driverSpec.podTemplateSpec` and `spec.executorSpec.podTemplateSpec`, which take precedence over `spark.kubernetes.[driver|executor].podTemplateFile`.[^readme][^crd]
+
+## What is the SparkApplication lifecycle?
+
+The operator moves each `SparkApplication` through a state machine. A typical successful run goes `Submitted`, `DriverRequested`, `DriverStarted`, `DriverReady`, `RunningHealthy`, `Succeeded` and finally `ResourceReleased`.[^arch] While running, an application can also be in `RunningWithBelowThresholdExecutors` or `RunningWithPartialCapacity` when fewer executors are available than requested.[^arch]
+
+The failure states are `SchedulingFailure`, `DriverStartTimedOut`, `DriverReadyTimedOut`, `ExecutorsStartTimedOut`, `DriverEvicted` and `Failed`. From a failure the application moves to `ScheduledToRestart` if a retry is configured, or to `ResourceReleased`; a retain policy can hold it in `TerminatedWithoutReleaseResources` first.[^arch] The operator treats `DriverStartTimedOut`, `ExecutorsStartTimedOut` and `SchedulingFailure` as likely infrastructure failures on a best-effort basis, and `restartConfig.restartPolicy` accepts `Never`, `Always`, `OnFailure` and `OnInfrastructureFailure`.[^crd]
+
+Since 1.1.0, both custom resources have `spec.suspend` and a `Suspended` state, and the operator can queue workloads through Kueue when `spark.kubernetes.operator.kueue.enabled` is set.[^migration][^arch]
+
+## Which versions does it support?
+
+The 1.1.0 release, published on 12 November 2026, supports Kubernetes 1.35 to 1.37 and Apache Spark 4.0 to 4.3, is built with Spark 4.3.0, and deprecates the `v1beta1` custom resource definitions.[^r110] The migration guide says `spark.apache.org/v1beta1` is scheduled for removal in 2.0.0 and that `spark.apache.org/v1` should be used.[^migration] The operations guide lists Java 21 or newer and Spark 4.0 or above as requirements.[^n2]
+
+## History
+
+The Apache Spark Kubernetes Operator was proposed in SPARK-45923, opened in November 2023, and the ticket was resolved with the operator's 0.1.0 release.[^n3] Release v0.1.0 was published on GitHub on 8 May 2025 and 1.0.0 on 26 July 2026.[^n4]
+
+The Kubeflow Spark Operator began at Google Cloud. In April 2024 the Kubeflow project announced that Google's Spark Operator had moved to Kubeflow, under the repository `kubeflow/spark-operator`, to be governed by an open community.[^kfblog]
+
+## Apache Spark Kubernetes Operator vs Kubeflow Spark Operator
+
+|  | Apache Spark Kubernetes Operator | Kubeflow Spark Operator |
+| --- | --- | --- |
+| Home | Apache Spark subproject[^readme] | Kubeflow community; formerly Google Cloud Platform's Spark on Kubernetes Operator[^kfblog] |
+| API group | `spark.apache.org/v1` (`v1beta1` deprecated)[^migration] | `sparkoperator.k8s.io` (`v1beta2`, `v1alpha1`)[^kfcrd] |
+| Custom resources | `SparkApplication`, `SparkCluster`[^crd] | `SparkApplication`, `ScheduledSparkApplication`, `SparkConnect`[^kfcrd] |
+| How the driver is created | In-process with Spark's Kubernetes driver builder, no spark-submit process[^worker] | Runs spark-submit on behalf of the user; v2.6.0 adds a REST-based submitter as an option[^kfreadme][^kf260] |
+| Spark versions | 4.0 to 4.3 (1.1.0)[^r110] | 2.3 and up[^kfreadme] |
+| Scheduled (cron) runs | No dedicated resource; the examples use a Kubernetes `CronJob`[^n5] | `ScheduledSparkApplication` with cron schedules[^kfreadme] |
+| Standalone clusters | Yes, `SparkCluster`[^crd] | No standalone cluster resource[^kfcrd] |
+| Pod customization | Pod template specs in the resource[^crd] | A mutating admission webhook, for example for volumes and affinity[^kfreadme] |
+| Queueing | Kueue integration since 1.1.0[^r110] | Kueue integration (referenced by the Apache operator documentation)[^crd] |
+| Latest release (checked 2026-11-23) | 1.1.0, 12 November 2026[^r110] | v2.6.0, 11 November 2026[^kf260] |
+| License | Apache License 2.0 | Apache License 2.0 |
+
+## Is either operator deprecated?
+
+Neither operator is deprecated. The Apache Spark Kubernetes Operator 1.1.0 deprecates only its `v1beta1` API version.[^migration] The Kubeflow Spark Operator v2.6.0 deprecates the client deploy mode (`spec.mode: client`) for `SparkApplication`, which still works but returns a warning.[^kf260]
+
+## See also
+
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [spark-submit](/wiki/Spark-submit)
+- [Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Executor](/wiki/Executor)
+
+## References
+
+[^readme]: [Apache Spark K8s Operator README (tag 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8sdoc]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^kfblog]: [Announcing the Kubeflow Spark Operator: Building a Stronger Spark on Kubernetes Community](https://blog.kubeflow.org/operators/2024/04/15/kubeflow-spark-operator.html). *Kubeflow*, 2024-04-15. Retrieved 2026-11-23.
+[^arch]: [Design & Architecture (docs/architecture.md at 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/docs/architecture.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^worker]: [SparkAppSubmissionWorker.java (tag 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/spark-submission-worker/src/main/java/org/apache/spark/k8s/operator/SparkAppSubmissionWorker.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^crd]: [Spark Operator API (docs/spark_custom_resources.md at 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/docs/spark_custom_resources.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [examples/pi-python.yaml (tag 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/examples/pi-python.yaml). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide (docs/migration_guide.md at 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/docs/migration_guide.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r110]: [Release 1.1.0](https://github.com/apache/spark-kubernetes-operator/releases/tag/1.1.0). *apache/spark-kubernetes-operator on GitHub*, 2026-11-12. Retrieved 2026-11-23.
+[^n2]: [Operations (docs/operations.md at 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/docs/operations.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [SPARK-45923: Spark Kubernetes Operator](https://issues.apache.org/jira/browse/SPARK-45923). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n4]: [Releases](https://github.com/apache/spark-kubernetes-operator/releases). *apache/spark-kubernetes-operator on GitHub*. Retrieved 2026-11-23.
+[^kfcrd]: [config/crd/bases (tag v2.6.0)](https://github.com/kubeflow/spark-operator/tree/v2.6.0/config/crd/bases). *kubeflow/spark-operator on GitHub*. Retrieved 2026-11-23.
+[^kfreadme]: [Kubeflow Spark Operator README (tag v2.6.0)](https://github.com/kubeflow/spark-operator/blob/v2.6.0/README.md). *kubeflow/spark-operator on GitHub*. Retrieved 2026-11-23.
+[^kf260]: [Release v2.6.0](https://github.com/kubeflow/spark-operator/releases/tag/v2.6.0). *kubeflow/spark-operator on GitHub*, 2026-11-11. Retrieved 2026-11-23.
+[^n5]: [examples/job/cron-pi-swift.yaml (tag 1.1.0)](https://github.com/apache/spark-kubernetes-operator/blob/1.1.0/examples/job/cron-pi-swift.yaml). *Apache Software Foundation*. Retrieved 2026-11-23.

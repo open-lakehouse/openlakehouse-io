@@ -1,0 +1,111 @@
+---
+title: "Broadcast join"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Broadcast hash join, map-side join, `BroadcastHashJoin`</Field>
+  <Field name="field">Distributed query processing</Field>
+  <Field name="key_parts">Build side (small table), stream side (large table), `BroadcastExchange`, `spark.sql.autoBroadcastJoinThreshold`, `BROADCAST` hint</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Sort-merge join](/wiki/Sort-merge_join), [Shuffle hash join](/wiki/Shuffle_hash_join), [Shuffle](/wiki/Shuffle), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-performance-tuning.md, docs/sql-ref-syntax-qry-select-hints.md, SQLConf.scala, SparkStrategies.scala, joins.scala, BroadcastExchangeExec.scala, QueryExecutionErrors.scala) and EXPLAIN output and configuration defaults from a PySpark 4.3.0 run</Verified>
+
+A **broadcast join** is a join strategy in which the smaller table is copied in full to every [executor](/wiki/Executor), so that each task can join its part of the larger table locally, without a [shuffle](/wiki/Shuffle) of the larger table.[^perf] In [Apache Spark](/wiki/Apache_Spark) it appears in plans as `BroadcastHashJoin` (for equality joins) or `BroadcastNestedLoopJoin` (for other conditions), fed by a `BroadcastExchange`. Spark picks it automatically when one side is estimated below `spark.sql.autoBroadcastJoinThreshold` (default 10 MB). It is usually the fastest join when one side is small, and the most common cause of driver memory errors when that side is larger than expected.
+
+## How does a broadcast join work in Spark?
+
+A broadcast hash join in Spark SQL has three steps, all visible in the Spark 4.3.0 source:[^bex]
+
+1. **Collect.** Spark runs the small side (the **build side**) and collects its rows to the [driver](/wiki/Driver_(Apache_Spark)).
+1. **Build.** The driver builds a hash table (a `HashedRelation`) keyed on the join columns.
+1. **Broadcast.** The driver broadcasts the hash table to the executors. Each task of the large side (the **stream side**) probes the table for each of its rows.
+
+In a physical plan from PySpark 4.3.0, a join of a 1,000,000-row range with a 100-row range looks like this:
+
+```
+*(2) BroadcastHashJoin [k#9L], [k#11L], Inner, BuildRight, false, false
+:- *(2) Project [id#8L AS k#9L]
+:  +- *(2) Range (0, 1000000, step=1, splits=2)
++- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false)
+   +- *(1) Project [id#10L AS k#11L]
+      +- *(1) Range (0, 100, step=1, splits=2)
+```
+
+`BuildRight` means the right input is the broadcast side. There is no `Exchange` on the large side, so the scan, the join and any later narrow operators run in one stage (codegen stage 2 above).
+
+## When does Spark choose a broadcast join?
+
+For an equality join with no hint, Spark's join selection picks a broadcast hash join first, if one side is small enough to broadcast and the join type allows that side to be the build side. If both sides are small, Spark broadcasts the smaller one.[^strategies] "Small enough" means an estimated size in bytes at or below the threshold.[^joins]
+
+| Setting | Default (4.3.0) | Meaning |
+| --- | --- | --- |
+| `spark.sql.autoBroadcastJoinThreshold` | 10 MB (10485760 bytes) | Maximum estimated size of a table to broadcast automatically; -1 disables automatic broadcast[^perf] |
+| `spark.sql.adaptive.autoBroadcastJoinThreshold` | (none; same as the above) | The threshold used by [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) with runtime sizes[^perf] |
+| `spark.sql.broadcastTimeout` | 300 seconds | How long to wait for the broadcast to complete[^perf] |
+| `spark.sql.maxBroadcastTableSize` | 8 GiB | Hard limit on the built table size; above it the query fails (since 4.1.0)[^sqlconf] |
+
+The decision uses estimated sizes. For a table without statistics, Spark assumes `Long.MaxValue` bytes and does not broadcast it unless it knows the table is small.[^sqlconf] `ANALYZE TABLE` and the [cost-based optimizer](/wiki/Cost-based_optimizer_(Spark)) improve these estimates. If the planner did not choose a broadcast join, [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) can still switch a sort-merge join to a broadcast join once a side's runtime size is below the adaptive threshold, although the Spark documentation notes this is less efficient than planning it from the start.[^perf]
+
+The build side must be the side whose unmatched rows do not need to be returned. For a left outer join, Spark can broadcast only the right side; for a right outer join, only the left side.[^joins] A full outer join cannot use a broadcast hash join.[^joins]
+
+## Broadcast hints
+
+A hint asks Spark to broadcast a relation even when its estimated size is above the threshold. In SQL, `BROADCAST`, `BROADCASTJOIN` and `MAPJOIN` are accepted; in the DataFrame API, `hint("broadcast")` or the `broadcast()` function.[^perf][^hints]
+
+```sql
+SELECT /*+ BROADCAST(r) */ *
+FROM sales s JOIN regions r ON s.region_id = r.id;
+```
+
+```python
+from pyspark.sql.functions import broadcast
+
+sales.join(broadcast(regions), sales.region_id == regions.id)
+```
+
+When both sides of a join carry hints, `BROADCAST` takes priority over `MERGE`, `SHUFFLE_HASH` and `SHUFFLE_REPLICATE_NL`. Spark does not guarantee that the hinted strategy is used, because a strategy may not support the join type.[^perf] A hint also overrides `autoBroadcastJoinThreshold=-1`: in PySpark 4.3.0, a join with `hint("broadcast")` was planned as `BroadcastHashJoin` with automatic broadcast disabled.
+
+## When does broadcasting backfire?
+
+A broadcast join moves the whole build side through the driver and into every executor, so its cost grows with the build side and with the cluster size. The problems this causes are documented in Spark's source and settings:
+
+- **Driver out of memory.** The build side is collected and the hash table is built on the driver.[^bex] If that runs out of memory, Spark fails the query with an error that it does not have enough memory to build and broadcast the table, and suggests disabling broadcast by setting `spark.sql.autoBroadcastJoinThreshold` to -1 or increasing `spark.driver.memory`; for file tables it also suggests running `ANALYZE TABLE`.[^qee]
+- **Hard limits.** A broadcast fails if the built table reaches `spark.sql.maxBroadcastTableSize` (8 GiB), or if the collected side has too many rows: 512,000,000 in general, and a lower limit derived from the hash map's maximum capacity when the join key is not a single `long` column.[^bex][^sqlconf]
+- **Timeouts.** If building and sending the table takes longer than `spark.sql.broadcastTimeout` (300 seconds), the query fails.[^perf]
+- **Wrong estimates.** A table that looks small to the planner, for example after a filter whose selectivity is overestimated, or a forced `BROADCAST` hint on a table that has grown, can be far larger at run time.
+- **Executor memory.** Every executor holds a copy of the table for the duration of the join, in addition to its own work.
+
+The usual fixes are to remove the hint, lower `spark.sql.autoBroadcastJoinThreshold` or set it to -1, filter the build side before the join, or give the driver more memory.[^qee]
+
+## Broadcast join compared with the other join strategies
+
+|  | Broadcast hash join | [Sort-merge join](/wiki/Sort-merge_join) | [Shuffle hash join](/wiki/Shuffle_hash_join) |
+| --- | --- | --- | --- |
+| Shuffles | None on the large side; the small side goes through the driver | Both sides | Both sides |
+| Memory need | Whole build side in the driver and in every executor | Low; sorts spill to disk | Build side of one partition in one task's memory |
+| Chosen by default when | One side is below `spark.sql.autoBroadcastJoinThreshold` | No side is small enough to broadcast and the join keys are sortable | Only when `spark.sql.join.preferSortMergeJoin` is false, or by hint or AQE |
+| Full outer join | Not supported | Supported | Supported |
+
+Sources: SparkStrategies.scala and joins.scala at v4.3.0.[^strategies][^joins]
+
+## See also
+
+- [Sort-merge join](/wiki/Sort-merge_join)
+- [Shuffle hash join](/wiki/Shuffle_hash_join)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))
+- [Shuffle](/wiki/Shuffle)
+- [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))
+
+## References
+
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^bex]: [BroadcastExchangeExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/BroadcastExchangeExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^strategies]: [SparkStrategies.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^joins]: [joins.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/joins.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^hints]: [Hints (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-hints.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^qee]: [QueryExecutionErrors.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/errors/QueryExecutionErrors.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

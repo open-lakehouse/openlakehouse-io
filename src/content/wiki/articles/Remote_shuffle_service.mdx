@@ -1,0 +1,92 @@
+---
+title: "Remote shuffle service"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">RSS, disaggregated shuffle</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Shuffle manager plug-in in the engine, a coordinator or master, shuffle servers or workers, local disk or remote storage</Field>
+  <Field name="implementations">[Apache Celeborn](/wiki/Apache_Celeborn), [Apache Uniffle](/wiki/Apache_Uniffle)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Executor](/wiki/Executor), [External shuffle service](/wiki/External_shuffle_service), [Push-based shuffle](/wiki/Push-based_shuffle), [Apache Spark](/wiki/Apache_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/job-scheduling.md, core config package.scala, shuffle/api), Apache Celeborn 0.7.0 (README.md, docs/deploy.md, docs/deploy_on_k8s.md), Apache Uniffle 0.10.0 (README.md, pom.xml), the Celeborn and Uniffle download pages and the Apache Incubator status pages</Verified>
+
+A **remote shuffle service** (RSS) is a cluster of long-running servers that receives, stores and serves the intermediate [shuffle](/wiki/Shuffle) data of distributed jobs, so that the data no longer lives on the local disks of the compute processes that wrote it.[^celebornreadme][^uniffereadme] In [Apache Spark](/wiki/Apache_Spark), a remote shuffle service plugs in as a custom shuffle manager: map tasks push their output to shuffle servers over the network, and reduce tasks read it back from those servers.[^coreconf] Two open source implementations at the Apache Software Foundation are [Apache Celeborn](/wiki/Apache_Celeborn) and [Apache Uniffle](/wiki/Apache_Uniffle).[^celebornincubator][^uniffleincubator]
+
+## What problem does a remote shuffle service solve?
+
+By default, a Spark executor writes shuffle files to its own local disk and serves them to the next stage; the [external shuffle service](/wiki/External_shuffle_service) moves the serving to a long-running process on the same node, but the files still sit on that node.[^jobsched] When executors are removed, as happens with dynamic allocation or on [Kubernetes](/wiki/Kubernetes), the shuffle files must be kept somewhere else or the stages that produced them must run again.
+
+Spark's documentation lists four ways to let dynamic allocation remove executors without losing shuffle files: the external shuffle service, shuffle tracking, shuffle block migration during decommissioning, or a custom `ShuffleDataIO` (set with `spark.shuffle.sort.io.plugin.class`) whose driver components support reliable storage.[^jobsched] A remote shuffle service is the fourth kind: shuffle data lives on separate servers, so compute nodes can be added and removed freely. Spark on Kubernetes does not support the built-in external shuffle service.[^jobsched]
+
+Separating shuffle storage from compute is what both Apache projects name as their goal. Celeborn describes its features as disaggregated computing and storage, push-based shuffle write with merged shuffle read, and high availability.[^celebornreadme] Uniffle describes itself as changing shuffle from a "local file pull-like style" to a "remote block push-like style", with disaggregated storage and high elasticity.[^uniffereadme]
+
+## How does a remote shuffle service plug into Apache Spark?
+
+Spark loads its shuffle implementation from `spark.shuffle.manager` (default `sort`, since Spark 1.1.0), so a remote shuffle service ships a jar with its own `ShuffleManager` class and asks users to point this setting at it.[^coreconf] Since Spark 3.0.0 there is also a narrower shuffle storage API, `org.apache.spark.shuffle.api.ShuffleDataIO`, selected by `spark.shuffle.sort.io.plugin.class` (default `LocalDiskShuffleDataIO`).[^coreconf][^n1]
+
+Both Celeborn and Uniffle use the two hooks together. The shuffle manager does the data transfer, and the `ShuffleDataIO` class tells Spark (3.5 and later) that shuffle data is stored reliably, so dynamic allocation can release executors without the external shuffle service:
+
+```properties
+# Apache Celeborn 0.7.0 client settings for Spark
+spark.shuffle.manager                 org.apache.spark.shuffle.celeborn.SparkShuffleManager
+spark.serializer                      org.apache.spark.serializer.KryoSerializer
+spark.celeborn.master.endpoints       clb-1:9097,clb-2:9097,clb-3:9097
+spark.shuffle.service.enabled         false
+spark.shuffle.sort.io.plugin.class    org.apache.spark.shuffle.celeborn.CelebornShuffleDataIO
+```
+
+The settings above come from the Celeborn deployment guide.[^celebornreadme] Uniffle's equivalents are `spark.shuffle.manager=org.apache.spark.shuffle.RssShuffleManager`, `spark.rss.coordinator.quorum` for the coordinator addresses, and `spark.shuffle.sort.io.plugin.class=org.apache.spark.shuffle.RssShuffleDataIo` on Spark 3.5 or later; for older Spark versions Uniffle ships patches to Spark in its `patch/spark` folder.[^uniffereadme] Both projects require a serializer that supports relocation of serialized objects, such as Kryo.[^celebornreadme][^uniffereadme]
+
+## Remote shuffle service implementations compared
+
+The first column is Spark's built-in shuffle, shown for reference.
+
+|  | Apache Spark built-in shuffle (with external shuffle service) | Apache Celeborn | Apache Uniffle |
+| --- | --- | --- | --- |
+| Where shuffle data lives | Local disks of the nodes that ran the map tasks[^jobsched] | Celeborn workers, which merge data per reducer and flush to disk; HDFS is a supported storage type[^celebornreadme] | Shuffle servers, which buffer data in memory and write to local disk, remote storage such as HDFS, or both[^uniffereadme] |
+| Components | Executors, plus one external shuffle service per node[^jobsched] | Master (resource management, state replicated with Raft), Worker, and a LifecycleManager that runs in the Spark driver[^celebornreadme] | Coordinator cluster, shuffle server cluster, optional remote storage[^uniffereadme] |
+| Write and read model | Map tasks write sorted files locally; reducers fetch blocks from many nodes[^jobsched] | Mappers push data to workers; reducers read merged partition files[^celebornreadme] | Tasks push blocks to shuffle servers; readers read from shuffle servers, remote storage or both[^uniffereadme] |
+| Engines (latest release) | Spark only | Spark 3.0 to 4.2, Flink 1.18 to 2.3, Hadoop MapReduce 3; Tez client marked experimental[^celebornreadme] | Spark 2.3 to 3.5, Hadoop MapReduce, Apache Tez[^uniffereadme] |
+| Kubernetes | External shuffle service not supported on Kubernetes[^jobsched] | Helm chart for deployment on Kubernetes[^celeborndeployk8s] | Kubernetes operator in `deploy/kubernetes`[^unifflek8s] |
+| Origin | Part of Apache Spark | Started at Alibaba in 2020 as "RemoteShuffleService", open sourced in 2021[^celebornproposal] | Started at Tencent in 2020 as "Firestorm", open sourced in 2021[^uniffleproposal] |
+| ASF top-level project since | (Spark is a top-level project) | 2024-03-21[^celebornincubator] | 2025-02-19[^uniffleincubator] |
+| Latest release (checked 2026-11-23) | Spark 4.3.0[^n2] | 0.7.0, 2026-08-16[^celeborndl] | 0.10.0, 2025-09-25[^uniffledl] |
+
+## Remote shuffle service vs external shuffle service vs push-based shuffle
+
+The three terms are often confused. The **[external shuffle service](/wiki/External_shuffle_service)** is part of Spark; it serves shuffle files that executors wrote to the node's local disk, and is off by default (`spark.shuffle.service.enabled`).[^jobsched] **[Push-based shuffle](/wiki/Push-based_shuffle)**, added in Spark 3.2.0, has map tasks push blocks to external shuffle services that merge them per partition; it works only on YARN.[^sparkconfdoc] A **remote shuffle service** is a separate cluster, outside Spark, that stores the shuffle data on its own servers.
+
+## When is a remote shuffle service worth running?
+
+A remote shuffle service is one more distributed system to deploy, size and monitor. Its configuration guidance shows the tradeoffs: Celeborn recommends server-side replication (`spark.celeborn.client.push.replicate.enabled=true`) unless there is only one worker or HDFS storage is used, and recommends turning off Spark's AQE local shuffle reader (`spark.sql.adaptive.localShuffleReader.enabled=false`).[^celebornreadme] Teams usually consider one when dynamic allocation on Kubernetes keeps losing shuffle data, or when shuffles are large enough to strain the local disks of compute nodes.
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [Apache Celeborn](/wiki/Apache_Celeborn)
+- [Apache Uniffle](/wiki/Apache_Uniffle)
+- [Executor](/wiki/Executor)
+- [External shuffle service](/wiki/External_shuffle_service)
+- [Push-based shuffle](/wiki/Push-based_shuffle)
+- [Dynamic allocation](/wiki/Dynamic_allocation)
+
+## References
+
+[^celebornreadme]: [Apache Celeborn README (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^uniffereadme]: [Apache Uniffle README (v0.10.0)](https://github.com/apache/uniffle/blob/v0.10.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^coreconf]: [config/package.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^celebornincubator]: [Celeborn Project Incubation Status](https://incubator.apache.org/projects/celeborn.html). *Apache Incubator*. Retrieved 2026-11-23.
+[^uniffleincubator]: [Uniffle Project Incubation Status](https://incubator.apache.org/projects/uniffle.html). *Apache Incubator*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [ShuffleDataIO.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/shuffle/api/ShuffleDataIO.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^celeborndeployk8s]: [Deploy Celeborn on Kubernetes (v0.7.0)](https://github.com/apache/celeborn/blob/v0.7.0/docs/deploy_on_k8s.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^unifflek8s]: [deploy/kubernetes (Uniffle v0.10.0)](https://github.com/apache/uniffle/tree/v0.10.0/deploy/kubernetes). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^celebornproposal]: [Celeborn Proposal](https://cwiki.apache.org/confluence/display/INCUBATOR/CelebornProposal). *Apache Incubator*. Retrieved 2026-11-23.
+[^uniffleproposal]: [Uniffle Proposal](https://cwiki.apache.org/confluence/display/INCUBATOR/UniffleProposal). *Apache Incubator*. Retrieved 2026-11-23.
+[^n2]: [Release v4.3.0](https://github.com/apache/spark/releases/tag/v4.3.0). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^celeborndl]: [Download](https://celeborn.apache.org/download/). *Apache Celeborn*. Retrieved 2026-11-23.
+[^uniffledl]: [Download](https://uniffle.apache.org/download). *Apache Uniffle*. Retrieved 2026-11-23.
+[^sparkconfdoc]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.

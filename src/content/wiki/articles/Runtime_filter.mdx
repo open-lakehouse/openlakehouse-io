@@ -1,0 +1,92 @@
+---
+title: "Runtime filter"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Bloom filter join, dynamic filtering (Trino), runtime filtering (Impala), semi-join reduction</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="key_parts">Creation side (small, filtered join input), application side (large join input), filter structure (bloom filter, value set or min/max range)</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (since 3.3.0), [Trino](/wiki/Trino), [Apache Flink](/wiki/Apache_Flink), Apache Impala</Field>
+  <Field name="related">[Dynamic partition pruning](/wiki/Dynamic_partition_pruning), [Bloom filter (data files)](/wiki/Bloom_filter_(data_files)), [Shuffle](/wiki/Shuffle), [Sort-merge join](/wiki/Sort-merge_join), [Predicate pushdown](/wiki/Predicate_pushdown)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (InjectRuntimeFilter.scala, BloomFilterMightContain.scala, FileSourceStrategy.scala, SQLConf.scala), Spark JIRA SPARK-32268 and SPARK-38841, the Trino 484 dynamic filtering page, the Apache Flink 2.3 table configuration page and the Apache Impala runtime filtering page</Verified>
+
+A **runtime filter** is a filter that a query engine builds while a join is running from the join keys of the smaller, filtered input and applies to the larger input before the join, so that rows which cannot find a match are dropped early.[^rule] In [Apache Spark](/wiki/Apache_Spark), a runtime filter is a bloom filter built from one side of a shuffle join and applied to the other side to reduce the data that goes into the [shuffle](/wiki/Shuffle); Spark added it in 3.3.0 and has enabled it by default since 3.4.0. Other engines have the same idea under other names, such as dynamic filtering in [Trino](/wiki/Trino).[^trino]
+
+## How does a runtime filter work?
+
+A runtime filter has two sides. The **creation side** is the join input with a selective predicate, for example a dimension table filtered to a few rows; the engine reads its join keys and builds a compact filter from them. The **application side** is the large input; the engine applies the filter to it, ideally at the scan, so that rows whose keys are not in the filter never reach the join.
+
+The filter structure varies. A bloom filter answers "might this key be present?" in a fixed amount of memory; it can return false positives but never false negatives, so it never drops a row that would match.[^parquetbloom] Other engines also use exact value sets or minimum and maximum ranges.
+
+## How does the runtime filter work in Apache Spark?
+
+Spark's optimizer rule `InjectRuntimeFilter` inserts a runtime filter on one side of a join if it can build one from the other side. The source describes the filter as logically an `IN` subquery on the join keys, currently always implemented as a bloom filter.[^rule] The feature came from SPARK-32268, "Bloom Filter Join", fixed in 3.3.0, and SPARK-38841 enabled it by default in 3.4.0.[^n1][^n2]
+
+At Spark 4.3.0, the rule adds a bloom filter on a join key only when:[^rule][^sqlconf]
+- the join is a shuffle join, or a broadcast join with a shuffle below the side to be filtered;
+- the join keys are simple, cheap expressions;
+- there is no [dynamic partition pruning](/wiki/Dynamic_partition_pruning) filter on the same key already;
+- the creation side has a selective predicate, or is a fully materialized, repeatable cached input with evidence that pruning helps;
+- the creation side is small enough: its estimated size must be under `spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold` (default 10MB), or, for a fully materialized, repeatable input with accurate statistics, under `spark.sql.optimizer.runtime.bloomFilter.materializedCreationSideThreshold` (default 100MB, since 4.3.0), which replaces the general threshold for such inputs;
+- the application side's scan size is over `spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold` (default 10GB);
+- the query has fewer than `spark.sql.optimizer.runtimeFilter.number.threshold` (default 10) runtime filters already, a limit that protects the driver from running out of memory.
+
+| Setting | Default | Since |
+| --- | --- | --- |
+| `spark.sql.optimizer.runtime.bloomFilter.enabled` | true | 3.3.0 |
+| `spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold` | 10MB | 3.3.0 |
+| `spark.sql.optimizer.runtime.bloomFilter.materializedCreationSideThreshold` | 100MB | 4.3.0 |
+| `spark.sql.optimizer.runtime.bloomFilter.applicationSideScanSizeThreshold` | 10GB | 3.3.0 |
+| `spark.sql.optimizer.runtime.bloomFilter.expectedNumItems` | 1000000 | 3.3.0 |
+| `spark.sql.optimizer.runtime.bloomFilter.numBits` | 8388608 | 3.3.0 |
+| `spark.sql.optimizer.runtimeFilter.number.threshold` | 10 | 3.3.0 |
+
+All values are from `SQLConf.scala` at Spark 4.3.0.[^sqlconf]
+
+In a Spark plan, an injected runtime filter appears as a `might_contain(...)` predicate in a `Filter` on the application side, which refers to a scalar subquery that builds the bloom filter.[^rule][^n3] Spark does not push the bloom filter into file scans as a data filter; it is evaluated on the rows after the scan.[^n4]
+
+## Runtime filters in other engines
+
+|  | Apache Spark | Trino | Apache Flink | Apache Impala |
+| --- | --- | --- | --- | --- |
+| Name | Runtime filter (bloom filter join)[^rule] | Dynamic filtering[^trino] | Runtime filter[^flink] | Runtime filtering[^impala] |
+| On by default? | Yes, since 3.4.0[^sqlconf] | Yes[^trino] | No (`table.optimizer.runtime-filter.enabled` is false)[^flink] | Yes; `RUNTIME_FILTER_MODE` defaults to `GLOBAL` in Impala 2.6 and higher[^impala] |
+| Filter structure | Bloom filter | Distinct value sets; falls back to per-column minimum and maximum when the build side exceeds size thresholds[^trino] | Not described on the configuration page | Bloom filter for HDFS-based tables; minimum and maximum filter for Kudu tables[^impala] |
+| Applies to | Shuffle joins (and broadcast joins with a shuffle below them)[^rule] | Inner and right joins with `=`, `<`, `<=`, `>`, `>=` or `IS NOT DISTINCT FROM`, and semi-joins with `IN`[^trino] | Batch jobs only[^flink] | Joins; available since Impala 2.5[^impala] |
+| Size limits | Creation side under 10MB (100MB for fully materialized inputs with accurate statistics), application side over 10GB by default[^sqlconf] | Build-side thresholds before falling back to min and max[^trino] | Build side under 150 mb, probe side over 10 gb, filter ratio over 0.5 by default[^flink] | Controlled by query options[^impala] |
+
+## Runtime filter vs dynamic partition pruning
+
+<Hatnote>Main article: [Dynamic partition pruning](/wiki/Dynamic_partition_pruning)</Hatnote>
+
+Both techniques move information across a join at run time. [Dynamic partition pruning](/wiki/Dynamic_partition_pruning) needs a partition column as the join key, and it skips whole partitions before they are read. A runtime filter works on any equi-join key, and it removes rows after the scan and before the shuffle. Spark checks for an existing DPP filter on a key before it injects a bloom filter on the same key.[^rule]
+
+## Runtime filters vs bloom filters in data files
+
+<Hatnote>Main article: [Bloom filter (data files)](/wiki/Bloom_filter_(data_files))</Hatnote>
+
+A runtime filter is built for one query and thrown away. A bloom filter in a data file, such as an [Apache Parquet](/wiki/Apache_Parquet) column bloom filter, is written once with the file and lets readers skip row groups for equality filters with a literal value.[^parquetbloom]
+
+## See also
+
+- [Dynamic partition pruning](/wiki/Dynamic_partition_pruning)
+- [Bloom filter (data files)](/wiki/Bloom_filter_(data_files))
+- [Shuffle](/wiki/Shuffle)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Trino](/wiki/Trino)
+
+## References
+
+[^rule]: [InjectRuntimeFilter.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/InjectRuntimeFilter.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trino]: [Dynamic filtering (Trino 484)](https://trino.io/docs/current/admin/dynamic-filtering.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^parquetbloom]: [Bloom Filter](https://parquet.apache.org/docs/file-format/bloomfilter/). *Apache Parquet*. Retrieved 2026-11-23.
+[^n1]: [SPARK-32268: Bloom Filter Join](https://issues.apache.org/jira/browse/SPARK-32268). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [SPARK-38841: Enable Bloom filter join by default](https://issues.apache.org/jira/browse/SPARK-38841). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [BloomFilterMightContain.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/BloomFilterMightContain.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [FileSourceStrategy.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FileSourceStrategy.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink]: [Configuration (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/table/config/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^impala]: [Runtime Filtering for Impala Queries](https://impala.apache.org/docs/build/html/topics/impala_runtime_filtering.html). *Apache Software Foundation*. Retrieved 2026-11-23.

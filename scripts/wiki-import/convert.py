@@ -202,6 +202,8 @@ class Page:
             return self.block(f"```{lang}\n{body}\n```")
         if name == "br":
             return "<br />"
+        if name in ("sup", "sub"):
+            return f"<{name}>{self.walk(n.contents)}</{name}>"
         if name == "small":
             return f"<small>{self.walk(n.contents)}</small>"
         if name == "span" and n.has("id") and not str(n.contents or "").strip():
@@ -237,21 +239,23 @@ class Page:
         rows: list[list[tuple[bool, str]]] = []
         caption = None
 
-        def cell(c: Tag) -> tuple[bool, str]:
-            if c.has("colspan") or c.has("rowspan"):
-                self.warnings.append("table span flattened")
-            return (str(c.tag) == "th", self.inline(c.contents).replace("|", "\\|"))
+        def cells_of(c: Tag) -> list[tuple[bool, str]]:
+            # Markdown tables have no merged cells: repeat a colspan cell's text in each column it spans.
+            if c.has("rowspan"):
+                self.warnings.append("table rowspan flattened")
+            span = int(str(c.get("colspan").value).strip().strip('"')) if c.has("colspan") else 1
+            return [(str(c.tag) == "th", self.inline(c.contents).replace("|", "\\|"))] * span
 
         # Cells before the first |- are a row of their own (usually the header).
         loose: list[tuple[bool, str]] = []
         for child in n.contents.nodes:
             if isinstance(child, Tag) and str(child.tag) in ("td", "th"):
-                loose.append(cell(child))
+                loose.extend(cells_of(child))
             elif isinstance(child, Tag) and str(child.tag) == "tr":
                 if loose:
                     rows.append(loose)
                     loose = []
-                cells = [cell(c) for c in child.contents.nodes if isinstance(c, Tag) and str(c.tag) in ("td", "th")]
+                cells = [x for c in child.contents.nodes if isinstance(c, Tag) and str(c.tag) in ("td", "th") for x in cells_of(c)]
                 if cells:
                     rows.append(cells)
             elif isinstance(child, Tag) and str(child.tag) == "caption":
@@ -296,12 +300,15 @@ class Page:
             return " ".join(parts)
         if key == "Navbox open lakehouse":
             return ""
-        if key in ("Infobox software", "Infobox concept"):
+        if key in ("Infobox software", "Infobox concept", "Infobox person"):
+            for k in ("image", "caption", "logo"):
+                if s(k):
+                    self.warnings.append(f"infobox {k} dropped (no uploaded files on the site)")
             kind = key.split()[1]
             attrs = f' type="{kind}"'
             if s("name") and s("name") != self.title.replace("_", " "):
                 attrs += f' name="{esc_attr(html.unescape(str(p["name"]).strip()))}"'
-            rows = [f'  <Field name="{k}">{s(k)}</Field>' for k in p if k != "name" and s(k)]
+            rows = [f'  <Field name="{k}">{s(k)}</Field>' for k in p if k not in ("name", "image", "caption", "logo") and s(k)]
             return self.block(f"<Infobox{attrs}>\n" + "\n".join(rows) + "\n</Infobox>")
         if key == "Verified":
             against = s("2")

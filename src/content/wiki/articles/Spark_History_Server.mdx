@@ -1,0 +1,81 @@
+---
+title: "Spark History Server"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">History server, port 18080</Field>
+  <Field name="field">Monitoring and debugging</Field>
+  <Field name="key_parts">Event log directory, FsHistoryProvider, local KV store, cleaner, REST API at /api/v1</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark UI](/wiki/Spark_UI), [Spark event log](/wiki/Spark_event_log), [Spark listener](/wiki/Spark_listener)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/monitoring.md, config/History.scala, config/package.scala, EventLoggingListener.scala, docs/core-migration-guide.md)</Verified>
+
+The **Spark History Server** is a long-running [Apache Spark](/wiki/Apache_Spark) service that reads the [event logs](/wiki/Spark_event_log) of applications and rebuilds their [Spark UI](/wiki/Spark_UI), so that jobs, stages, SQL queries and executors can be inspected after an application has finished. It is started with `./sbin/start-history-server.sh` and serves a web interface at `http://<server-url>:18080` by default, listing completed and incomplete applications.[^monitoring] The live Spark UI on port 4040 disappears when the driver exits; the History Server is how finished applications are debugged.
+
+## How does the Spark History Server work?
+
+The History Server and the applications share a directory. Each application writes its event log there, and the server reads it:[^monitoring]
+
+```properties
+# On the applications
+spark.eventLog.enabled   true
+spark.eventLog.dir       hdfs://namenode/shared/spark-logs
+
+# On the History Server
+spark.history.fs.logDirectory  hdfs://namenode/shared/spark-logs
+```
+
+Event logging is off by default (`spark.eventLog.enabled`, default false), and both `spark.eventLog.dir` and `spark.history.fs.logDirectory` default to `/tmp/spark-events`.[^coreconf][^history][^ell] `spark.history.fs.logDirectory` accepts a comma-separated list of directories, so one server can watch several locations.[^history]
+
+The default provider, `org.apache.spark.deploy.history.FsHistoryProvider` (`spark.history.provider`), scans the directory every `spark.history.fs.update.interval` (default 10s) for new or changed logs.[^history] When a user opens an application, the server replays its event log through the same status listeners that build the live UI, and caches the result. `spark.history.retainedApplications` (default 50) sets how many applications' UI data stay in the cache; others are loaded from disk again when opened.[^history]
+
+## Reading finished applications
+
+The History Server shows the same tabs as the live [Spark UI](/wiki/Spark_UI): Jobs, Stages, Storage, Environment, Executors and SQL. The same data is available from the REST API, at `http://<server-url>:18080/api/v1`, which is useful for scripts that compare runs.[^monitoring]
+
+The Spark documentation lists several behaviours that surprise new users:[^monitoring]
+- An application with several attempts shows its failed attempts, as well as the ongoing or final successful attempt.
+- Incomplete (running) applications are refreshed only at each update interval. The documentation recommends viewing a running application in its own live UI.
+- An application that exits without registering as complete, for example after a crash, stays listed as incomplete. Stopping the session explicitly (`spark.stop()`) marks it complete.
+
+## Retention: how long are event logs kept?
+
+The History Server does not delete event logs unless its cleaner is turned on. The cleaner settings at Spark 4.3.0 are:[^history][^monitoring]
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `spark.history.fs.cleaner.enabled` | false | Turns on periodic deletion of event logs. |
+| `spark.history.fs.cleaner.interval` | 1d | How often the cleaner runs. |
+| `spark.history.fs.cleaner.maxAge` | 7d | Logs older than this are deleted. |
+| `spark.history.fs.cleaner.maxNum` | Int.MaxValue | If there are more logs than this, the oldest completed attempts are deleted. |
+
+A log is deleted if either condition holds. When several log directories are configured, one cleaner cycle covers all of them.[^monitoring]
+
+For long-running applications, the History Server can also compact rolled event logs. Setting `spark.history.fs.eventLog.rolling.maxFilesToRetain` (default: all files kept) makes the server rewrite older rolled files into one compact file, dropping events for finished jobs, terminated executors and finished SQL executions. The documentation calls compaction lossy, notes that it may not run if little space would be saved, and asks users to use it with caution.[^monitoring] See [Spark event log](/wiki/Spark_event_log) for rolling.
+
+## Running a History Server at scale
+
+Replaying a large event log takes time and memory. Several settings help:[^history][^monitoring]
+- `spark.history.store.path` (no default) stores application data on local disk instead of in memory, and reuses it after a restart. `spark.history.store.maxDiskUsage` (default 10g) caps that disk.
+- `spark.history.store.hybridStore.enabled` (default false, since 3.1.0) first parses logs into memory and then moves the result to disk, limited by `spark.history.store.hybridStore.maxMemoryUsage` (default 2g).
+- `spark.history.fs.numReplayThreads` sets how many threads replay logs; its default is a quarter of the available cores.
+- `SPARK_DAEMON_MEMORY` sets the server's memory (default 1g).
+
+Access control uses `spark.history.ui.acls.enable` and the admin ACL settings, and Kerberos is supported with `spark.history.kerberos.enabled`.[^history]
+
+## See also
+
+- [Spark UI](/wiki/Spark_UI)
+- [Spark event log](/wiki/Spark_event_log)
+- [Spark listener](/wiki/Spark_listener)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^coreconf]: [config/package.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^history]: [config/History.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/History.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ell]: [EventLoggingListener.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/EventLoggingListener.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
