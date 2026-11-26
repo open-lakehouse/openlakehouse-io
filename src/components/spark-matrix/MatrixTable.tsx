@@ -116,7 +116,9 @@ export function GapSummary() {
   })
     .filter((x) => x.r?.spark_base)
     .sort((a, b) => b.n - a.n || shortName(a.p).localeCompare(shortName(b.p)));
-  const minors = APACHE_MINORS.slice(1).map((m) => ({ m, n: apacheMissing(m) }));
+  const minors = APACHE_MINORS.slice(1)
+    .map((m) => ({ m, n: apacheMissing(m) }))
+    .sort((a, b) => b.n - a.n);
   const bar = (n: number) => `${Math.round((n / Math.max(total, 1)) * 100)}%`;
   return (
     <section aria-labelledby="smx-gap-heading" className="mt-10 rounded-xl border border-border bg-card p-4 md:p-6">
@@ -174,6 +176,13 @@ export function MatrixTable() {
   // the order they were added, so no vendor is shown ahead of another.
   const [selected, setSelected] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // When the picker is opened from a column's Change runtime link, focus that
+  // platform's runtime control instead of the dialog's first element.
+  const [focusPlatform, setFocusPlatform] = useState<string | null>(null);
+  const openPicker = (platformId: string | null = null) => {
+    setFocusPlatform(platformId);
+    setPickerOpen(true);
+  };
   const [category, setCategory] = useState("all");
   const [q, setQ] = useState("");
   const [onlyDiff, setOnlyDiff] = useState(false);
@@ -325,7 +334,7 @@ export function MatrixTable() {
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => setPickerOpen(true)}
+          onClick={() => openPicker()}
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-3.5 w-3.5" /> Add a platform
@@ -444,7 +453,7 @@ export function MatrixTable() {
                     {p.runtimes.length > 1 ? (
                       <button
                         type="button"
-                        onClick={() => setPickerOpen(true)}
+                        onClick={() => openPicker(p.id)}
                         className="mt-0.5 block text-[0.65rem] font-medium text-primary hover:underline"
                       >
                         Change runtime
@@ -583,8 +592,24 @@ export function MatrixTable() {
         </SheetContent>
       </Sheet>
 
-      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
+      <Dialog
+        open={pickerOpen}
+        onOpenChange={(o) => {
+          setPickerOpen(o);
+          if (!o) setFocusPlatform(null);
+        }}
+      >
+        <DialogContent
+          className="max-h-[85vh] overflow-y-auto"
+          onOpenAutoFocus={(e) => {
+            if (!focusPlatform) return;
+            const el = document.getElementById(`smx-rt-${focusPlatform}`);
+            if (el) {
+              e.preventDefault();
+              el.focus();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Add a platform to compare</DialogTitle>
             <DialogDescription>
@@ -615,6 +640,7 @@ export function MatrixTable() {
                         </label>
                         {p.runtimes.length > 1 ? (
                           <select
+                            id={`smx-rt-${p.id}`}
                             className="h-8 max-w-full rounded-md border border-input bg-background px-2 text-xs"
                             value={r?.id}
                             onChange={(e) => setRuntime(p.id, e.target.value)}
