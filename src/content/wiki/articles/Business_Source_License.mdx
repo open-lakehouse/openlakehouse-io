@@ -1,0 +1,79 @@
+---
+title: "Business Source License"
+categories: ["Concepts", "Glossary terms"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">BSL, BUSL, BSL 1.1</Field>
+  <Field name="field">Software licensing</Field>
+  <Field name="key_parts">Licensor, Licensed Work, Additional Use Grant, Change Date, Change License</Field>
+  <Field name="implementations">Terraform (1.6.0 and later), Materialize, CockroachDB (19.2 to 24.2)</Field>
+  <Field name="related">[MinIO](/wiki/MinIO), [Open lakehouse](/wiki/Open_lakehouse)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the BSL 1.1 text published by MariaDB, the LICENSE files of hashicorp/terraform, MaterializeInc/materialize and cockroachdb/cockroach (v19.1.0, v19.2.0 and current), the HashiCorp and Cockroach Labs announcements and the Linux Foundation OpenTofu announcement</Verified>
+
+The **Business Source License** (BSL, also written BUSL) is a source-available software license, published by MariaDB, under which the source code can be read, changed and redistributed, but production use is allowed only as far as the licensor's **Additional Use Grant** permits, until each version converts to an open source license on its **Change Date**.[^bsl] The license text itself says it "is not an Open Source license".[^bsl] In data infrastructure the BSL is best known from vendors that moved projects off open source licenses to stop competitors from selling hosted versions; the move of HashiCorp's Terraform in 2023 led to the OpenTofu fork.
+
+## How it works
+
+The BSL is a template. A licensor fills in a short parameter block at the top, and the fixed license text below it applies to those values:[^bsl]
+
+| Parameter | What it sets |
+| --- | --- |
+| Licensor | Who grants the license. |
+| Licensed Work | The software and version covered. |
+| Additional Use Grant | Which production use is allowed before the Change Date. Without a grant, only non-production use is allowed. |
+| Change Date | When the version converts. The conversion happens on the Change Date or on the fourth anniversary of the version's first public release, whichever comes first. |
+| Change License | The license the version converts to. It must be GPL version 2.0 or later, or a license compatible with it. |
+
+Without an Additional Use Grant, the BSL lets anyone copy, modify, create derivative works of and redistribute the code, and make non-production use of it.[^bsl] Each version has its own clock: a newer release starts a new period, so the latest code is always under the restrictive terms while versions older than the change period become open source.[^bsl]
+
+## Is the BSL open source?
+
+No. The BSL text states that it is not an Open Source license, and that the Licensed Work will eventually be made available under one, namely the Change License.[^bsl] Code under the BSL is often called *source available*: anyone can read it, but the restriction on production use conflicts with the Open Source Definition's rule that a license must not restrict anyone from using the program in a specific field of endeavor.[^n1] A version becomes open source only when it reaches its Change Date.
+
+## Use in data tools
+
+The parameters vary a great deal between projects, so "under the BSL" says little until the parameter block is read.
+
+| Project | Previous license | First BSL version | Additional Use Grant (summary) | Change period | Change License |
+| --- | --- | --- | --- | --- | --- |
+| Terraform (HashiCorp, now IBM) | Mozilla Public License 2.0[^hashi] | 1.6.0[^tf] | Production use allowed, except offering it to third parties on a hosted or embedded basis to compete with the licensor's paid versions[^tf] | Four years from publication[^tf] | MPL 2.0[^tf] |
+| Materialize | Not covered here | Each release; the current LICENSE names a dated version[^mz] | Production use within memory and disk limits per installation, and no commercial database service that lets third parties define views[^mz] | Four years (the current LICENSE has a Change Date of 23 November 2030)[^mz] | Apache License 2.0[^mz] |
+| CockroachDB (Cockroach Labs) | Apache License 2.0 (core, up to 19.1)[^crdb191] | 19.2[^crdb192] | Use allowed, except a commercial database service that lets third parties create tables[^crdb192] | Change Date 1 October 2022 for 19.2[^crdb192] | Apache License 2.0[^crdb192] |
+
+HashiCorp announced on 10 August 2023 that future releases of its products would move from the MPL 2.0 to the BSL 1.1, while its APIs, SDKs and almost all other libraries would stay under the MPL 2.0.[^hashi] On 20 September 2023 the Linux Foundation announced OpenTofu, which it described as an open source successor to the MPLv2-licensed Terraform.[^n2]
+
+The BSL is not always the last step. Cockroach Labs used it for the CockroachDB core from 19.2, then announced in August 2024 that from version 24.3 it would retire its Core offering and consolidate on a single enterprise license, with free tiers for individuals and smaller companies; the code remains source available.[^n3] The repository's current `LICENSE` file is the CockroachDB Software License, not the BSL.[^n4]
+
+## What the BSL is not
+
+- **Not a single set of terms.** Two BSL projects can have opposite production rules, because the Additional Use Grant is written by each licensor.
+- **Not the same as the AGPL.** The GNU AGPLv3 is an open source license that allows any use but requires source code for network-served modifications; [MinIO](/wiki/MinIO) used it for its community edition and never moved to the BSL.[^n5]
+- **Not retroactive.** A license change applies to new versions. Releases published under an earlier open source license stay available under it, which is what makes forks such as OpenTofu possible.[^hashi]
+
+## Use in an open lakehouse
+
+The core open lakehouse projects (for example [Apache Iceberg](/wiki/Apache_Iceberg), [Apache Spark](/wiki/Apache_Spark), [Apache Parquet](/wiki/Apache_Parquet) and [Delta Lake](/wiki/Delta_Lake)) are under the Apache License 2.0. The BSL matters at the edges of a stack: infrastructure as code, databases and streaming tools that a team runs next to the lakehouse. For each such tool the questions are the same: what the Additional Use Grant forbids, whether the planned use is production use, and which version converts to which license on which date.
+
+## See also
+
+- [MinIO](/wiki/MinIO)
+- [Open lakehouse](/wiki/Open_lakehouse)
+- [Apache Software Foundation](/wiki/Apache_Software_Foundation)
+- [Linux Foundation](/wiki/Linux_Foundation)
+
+## References
+
+[^bsl]: [Business Source License 1.1](https://mariadb.com/bsl11/). *MariaDB*. Retrieved 2026-11-22.
+[^n1]: [The Open Source Definition](https://opensource.org/osd). *Open Source Initiative*. Retrieved 2026-11-22.
+[^hashi]: [HashiCorp adopts Business Source License](https://www.hashicorp.com/en/blog/hashicorp-adopts-business-source-license). *HashiCorp*, 2023-08-10. Retrieved 2026-11-22.
+[^tf]: [terraform/LICENSE](https://github.com/hashicorp/terraform/blob/main/LICENSE). *GitHub (hashicorp/terraform)*. Retrieved 2026-11-22.
+[^mz]: [materialize/LICENSE](https://github.com/MaterializeInc/materialize/blob/main/LICENSE). *GitHub (MaterializeInc/materialize)*. Retrieved 2026-11-22.
+[^crdb191]: [cockroach/LICENSE at v19.1.0](https://github.com/cockroachdb/cockroach/blob/v19.1.0/LICENSE). *GitHub (cockroachdb/cockroach)*. Retrieved 2026-11-22.
+[^crdb192]: [cockroach/licenses/BSL.txt at v19.2.0](https://github.com/cockroachdb/cockroach/blob/v19.2.0/licenses/BSL.txt). *GitHub (cockroachdb/cockroach)*. Retrieved 2026-11-22.
+[^n2]: [Linux Foundation Launches OpenTofu: A New Open Source Alternative to Terraform](https://www.linuxfoundation.org/press/announcing-opentofu). *Linux Foundation*, 2023-09-20. Retrieved 2026-11-22.
+[^n3]: [Enterprise license announcement](https://www.cockroachlabs.com/blog/enterprise-license-announcement/). *Cockroach Labs*, 2024-08-15. Retrieved 2026-11-22.
+[^n4]: [cockroach/LICENSE](https://github.com/cockroachdb/cockroach/blob/master/LICENSE). *GitHub (cockroachdb/cockroach)*. Retrieved 2026-11-22.
+[^n5]: [minio/minio](https://github.com/minio/minio). *GitHub*. Retrieved 2026-11-22.

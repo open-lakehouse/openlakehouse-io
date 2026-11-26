@@ -1,0 +1,94 @@
+---
+title: "Collation (Spark SQL)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">String collation, collated string type</Field>
+  <Field name="field">SQL query engines</Field>
+  <Field name="key_parts">`COLLATE` clause, `UTF8_BINARY`, `UTF8_LCASE`, ICU-based `UNICODE` and locale collations, `_CI`, `_AI` and `_RTRIM` modifiers, `DEFAULT COLLATION`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark error classes](/wiki/Spark_error_classes), [Delta Lake](/wiki/Delta_Lake), [Apache Parquet](/wiki/Apache_Parquet)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-syntax-aux-show-collations.md, SqlBaseParser.g4, CollationFactory.java, collationExpressions.scala, RewriteCollationJoin.scala, SQLConf.scala, error-conditions.json, sql-tests collations-basic results), the Spark 4.0.0, 4.1.0, 4.2.0 and 4.3.0 release notes and the PostgreSQL collation documentation</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **collation** is a property of the `STRING` type that sets how Spark SQL compares, sorts, groups and joins string values, for example whether `'a'` equals `'A'`. Spark SQL added string collation support in Spark 4.0.0 (SPARK-46830).[^r400] The default collation, `UTF8_BINARY`, compares the raw UTF-8 bytes; other collations make comparisons case-insensitive, accent-insensitive, trailing-space-insensitive or locale-aware.[^show]
+
+## What collations does Spark SQL support?
+
+Spark SQL has two kinds of collation. Two, with their `_RTRIM` variants, are built into Spark and do not depend on a locale: `UTF8_BINARY` (case- and accent-sensitive byte comparison) and `UTF8_LCASE` (case-insensitive). The others come from the International Components for Unicode (ICU) library: `UNICODE`, which uses the locale-independent Unicode rules, and locale collations such as `en_USA`.[^show] The Spark 4.3.0 build uses ICU4J 78.3.[^pom]
+
+A collation name can carry modifiers. `_CI` makes it case-insensitive, `_AI` accent-insensitive and `_RTRIM` ignores trailing spaces, giving names such as `UNICODE_CI_AI`, `en_USA_CI` or `UTF8_BINARY_RTRIM`.[^show][^factory] The `SHOW COLLATIONS [LIKE pattern]` command, added in Spark 4.2.0 (SPARK-49543), lists every collation with its language, country, case and accent sensitivity, pad attribute and ICU version.[^r420][^show]
+
+## How to set a collation in Spark SQL
+
+A collation can be attached at several levels, according to the Spark 4.3.0 grammar:[^grammar]
+- on a column type: `STRING COLLATE UTF8_LCASE`, and also on `CHAR` and `VARCHAR`;
+- on an expression: `name COLLATE UNICODE_CI`, or the function `collate(expr, 'UTF8_LCASE')`;
+- as a default for new objects: a `DEFAULT COLLATION` clause on `CREATE TABLE`, `CREATE SCHEMA`, `ALTER TABLE`, `ALTER SCHEMA` and SQL functions.
+
+Schema-level default collation for tables arrived in Spark 4.1.0 (SPARK-52219), and Spark 4.2.0 extended collation support to `CHAR`/`VARCHAR`, `CREATE TABLE AS SELECT` and SQL user-defined functions.[^r410][^r420] The function `collation(expr)` returns the fully qualified collation of a value; for a plain string literal it returns `SYSTEM.BUILTIN.UTF8_BINARY`.[^expr]
+
+## How does collation affect comparison, grouping and joins?
+
+Collation changes the result of every operation that compares strings. In Spark's own test suite, a table with the values `aaa`, `AAA`, `bbb` and `BBB` produces four groups when grouped by a `UTF8_BINARY` column and two groups when grouped by a `UTF8_LCASE` column. A filter `= 'aaa'` on the `UTF8_LCASE` column returns both `aaa` and `AAA`, and a self-join on that column matches each value with both spellings.[^tests]
+
+Spark's hash joins compare keys by their bytes, which is wrong for a collation in which different bytes can be equal. The analyzer rule `RewriteCollationJoin` therefore wraps equality join keys of non-binary collations, including those nested in structs and arrays, in a `CollationKey` expression, so that equal values under the collation produce equal keys and hash joins still work.[^join]
+
+Both sides of a comparison must agree on one collation. Spark picks it by strength: a `COLLATE` clause is explicit and wins; a column, variable or subquery result carries an implicit collation; a literal carries the default collation and loses to either. A literal compared with a `UTF8_LCASE` column is therefore compared case-insensitively.[^coercion]
+
+If two explicit collations conflict, or two columns with different implicit collations meet, the query fails with `COLLATION_MISMATCH` (SQLSTATE `42P21`); its `IMPLICIT` sub-condition suggests adding a `COLLATE` clause.[^errjson] See [Spark error classes](/wiki/Spark_error_classes) for how such conditions are structured.
+
+## Limitations
+
+- Non-`UTF8_BINARY` strings are not allowed in map keys unless `spark.sql.collation.allowInMapKeys` is set; it defaults to false.[^sqlconf]
+- Some functions do not support every collation and fail with `UNSUPPORTED_COLLATION.FOR_FUNCTION`.[^errjson]
+- Since Spark 4.1.0 the user-facing hash functions ignore collation (SPARK-52828); `spark.sql.legacy.collationAwareHashFunctions` restores the earlier behaviour.[^r410][^sqlconf]
+- Since Spark 4.3, a streaming file sink rejects a partition column that is a string with a non-default collation such as `UTF8_LCASE`.[^n1]
+- Several correctness bugs involving non-binary collations have been fixed in recent releases, for example in `NOT IN` subqueries and constraint inference (SPARK-54852 and SPARK-55647 in 4.2.0, SPARK-57727 in 4.3.0).[^r420][^r430]
+
+## Example
+
+```sql
+CREATE TABLE users (name STRING COLLATE UTF8_LCASE) USING parquet;
+INSERT INTO users VALUES ('Alice'), ('ALICE'), ('bob');
+
+SELECT count(*) FROM users WHERE name = 'alice';   -- 2
+SELECT name, count(*) FROM users GROUP BY name;    -- 2 groups: alice/ALICE and bob
+
+SELECT 'a' = 'A';                                  -- false (UTF8_BINARY)
+SELECT 'a' COLLATE UTF8_LCASE = 'A';               -- true
+SELECT collation('a' COLLATE UNICODE_CI);          -- SYSTEM.BUILTIN.UNICODE_CI
+```
+
+## Collation in other SQL engines
+
+Collation is a general SQL concept, and engines implement it differently. PostgreSQL offers a `libc` provider based on the operating system locales and an `icu` provider, and it supports case-insensitive and accent-insensitive comparison through user-defined "nondeterministic" collations; its documentation notes that these carry a performance cost and do not support some pattern-matching operations.[^pg] In Spark, the built-in `UTF8_LCASE` collation gives case-insensitive comparison without ICU.[^show]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark error classes](/wiki/Spark_error_classes)
+- [Spark SQL ANSI mode](/wiki/Spark_SQL_ANSI_mode)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Parquet](/wiki/Apache_Parquet)
+
+## References
+
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^show]: [SHOW COLLATIONS (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-aux-show-collations.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pom]: [pom.xml (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/pom.xml). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^factory]: [CollationFactory.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/unsafe/src/main/java/org/apache/spark/sql/catalyst/util/CollationFactory.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^grammar]: [SqlBaseParser.g4 (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^expr]: [collationExpressions.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/collationExpressions.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tests]: [collations-basic.sql.out (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-tests/results/collations-basic.sql.out). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^join]: [RewriteCollationJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/RewriteCollationJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^coercion]: [CollationTypeCoercion.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/CollationTypeCoercion.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^errjson]: [error-conditions.json (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/error-conditions.json). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Structured Streaming Migration Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/ss-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pg]: [Collation Support (PostgreSQL 19 documentation)](https://www.postgresql.org/docs/current/collation.html). *PostgreSQL Global Development Group*. Retrieved 2026-11-23.

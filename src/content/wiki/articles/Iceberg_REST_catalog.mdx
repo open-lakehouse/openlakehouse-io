@@ -1,0 +1,89 @@
+---
+title: "Iceberg REST catalog"
+categories: ["Catalogs", "Concepts"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Iceberg REST Catalog API, IRC</Field>
+  <Field name="field">Data engineering</Field>
+  <Field name="introduced">2022 (client in Apache Iceberg 0.14.0)</Field>
+  <Field name="key_parts">OpenAPI specification, configuration endpoint, namespace, table and view endpoints, access delegation</Field>
+  <Field name="implementations">[Apache Polaris](/wiki/Apache_Polaris), [Unity Catalog](/wiki/Unity_Catalog), Lakekeeper, Apache Gravitino, Project Nessie</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Data catalog](/wiki/Data_catalog), [Open table format](/wiki/Open_table_format)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">rest-catalog-open-api.yaml at tag apache-iceberg-1.12.0 and the documentation of each listed implementation</Verified>
+
+The **Iceberg REST catalog** is an OpenAPI specification, maintained in the [Apache Iceberg](/wiki/Apache_Iceberg) project, that defines an HTTP interface between Iceberg clients and a catalog service. It standardizes how an engine lists namespaces, loads and commits tables and views, and obtains access to the underlying storage, so that any engine with an Iceberg REST client can use any catalog that implements the specification.[^spec] In an [open lakehouse](/wiki/Open_lakehouse), it is the common protocol that separates the choice of [data catalog](/wiki/Data_catalog) from the choice of query engine.
+
+## History
+
+Apache Iceberg 0.14.0, released on 16 July 2022, added a common REST catalog client that uses change-based commits so that commit conflicts are resolved on the service side.[^releases]
+
+The specification is a file named `rest-catalog-open-api.yaml` in the `open-api/` directory of the Iceberg repository. It is licensed under the Apache License 2.0, and its `info` block describes it as the specification for the first version of the REST Catalog API, with all routes under the `/v1/` path.[^spec]
+
+## What the specification standardizes
+
+The specification groups its routes into several areas:[^spec]
+- **Configuration.** Clients call `GET /v1/config` first. The server returns default and override properties that configure the client, and an optional list of the endpoints it supports.
+- **Namespaces.** Routes to list, create, load, check and drop namespaces and to update their properties.
+- **Tables.** Routes to list, create, load, check, drop, rename, register and unregister tables, and to report metrics.
+- **Commits.** A table commit has two parts: requirements, which the server checks before applying changes (for example `assert-ref-snapshot-id`), and updates to the table metadata. Servers must reject unknown requirements or updates with a 400 status code. A separate transactions route commits updates to several tables atomically.
+- **Views.** Routes to list, create, load, replace, drop and rename views.
+- **Server-side scan planning.** Routes through which a client can ask the catalog to plan a table scan.
+
+Each route after `/v1/` takes an optional `{prefix}` path segment, which a server can use for its own hierarchy, such as one catalog per prefix.[^spec][^glue]
+
+The `/v1/oauth/tokens` endpoint in the specification is deprecated. The specification says that it has been deprecated since Iceberg (Java) 1.6.0, that it will be removed in Iceberg (Java) 2.0, and that clients should set the `oauth2-server-uri` property to point at an OAuth server instead.[^spec]
+
+## Credential vending and remote signing
+
+The specification lets a catalog control access to the data files as well as the metadata. A client signals that it supports delegated access by sending the `X-Iceberg-Access-Delegation` header with one or both of the values `vended-credentials` and `remote-signing`. The server may supply access by any or none of the requested mechanisms.[^spec]
+
+With **vended credentials**, the server returns storage credentials for Amazon S3, Azure Data Lake Storage, Google Cloud Storage or other stores in the `storage-credentials` field of the load-table response. Clients must check that field before looking for credentials in the table configuration. A separate route, `GET /v1/{prefix}/namespaces/{namespace}/tables/{table}/credentials`, loads fresh vended credentials for a table.[^spec]
+
+With **remote signing**, the client does not receive credentials. Instead, it sends each object storage request to the catalog's `sign` route, and the catalog returns a signed request.[^spec] Project Nessie's documentation describes the trade-off: vending needs a security token service but adds no round trip per request, while signing works without one but adds a REST call for every storage request.[^nessie]
+
+## Implementations
+
+The table lists catalogs whose own documentation states that they implement the Iceberg REST catalog API. It is not complete.
+
+| Catalog | License or type | Endpoint path | Storage access documented |
+| --- | --- | --- | --- |
+| [Apache Polaris](/wiki/Apache_Polaris) | Apache License 2.0[^n1] | See project docs | Vended credentials[^polaris] |
+| [Unity Catalog](/wiki/Unity_Catalog) (open source) | Apache License 2.0[^n2] | `/api/2.1/unity-catalog/iceberg` | Vended credentials[^uc] |
+| Lakekeeper | Apache License 2.0, written in Rust[^n3] | See project docs | Vended credentials for S3, ADLS and GCS; remote signing for S3[^n4][^n5] |
+| Apache Gravitino | Apache License 2.0[^n6] | `/iceberg/` | Vended credentials for S3, GCS, OSS and ADLS; `remote-signing` is a configurable data access mode[^n7] |
+| Project Nessie | Apache License 2.0[^n8] | `/iceberg` | Vended credentials and request signing; Iceberg REST support marked experimental[^nessie] |
+| AWS Glue Data Catalog | Managed service | `/iceberg` on the regional Glue endpoint | S3 credentials vended for LoadTable; a subset of the REST operations[^glue] |
+
+## Clients
+
+Engines connect to a REST catalog through their Iceberg integration. [Trino](/wiki/Trino) selects it with `iceberg.catalog.type=rest` and uses vended credentials when `iceberg.rest-catalog.vended-credentials-enabled` is set to true (the default is false).[^n9] [DuckDB](/wiki/DuckDB) attaches a REST catalog with `ATTACH ... (TYPE iceberg)`, and attaching a catalog is required for writes.[^n10] [Apache Spark](/wiki/Apache_Spark) uses the Iceberg `SparkCatalog` with the catalog type set to `rest`.[^glue]
+
+## See also
+
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Apache Polaris](/wiki/Apache_Polaris)
+- [Unity Catalog](/wiki/Unity_Catalog)
+- [Data catalog](/wiki/Data_catalog)
+- [Open table format](/wiki/Open_table_format)
+
+## References
+
+[^spec]: [Apache Iceberg REST Catalog API (rest-catalog-open-api.yaml, tag apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/open-api/rest-catalog-open-api.yaml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^releases]: [Apache Iceberg Releases](https://iceberg.apache.org/releases/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^glue]: [Connecting to the Data Catalog using AWS Glue Iceberg REST endpoint](https://docs.aws.amazon.com/glue/latest/dg/connect-glu-iceberg-rest.html). *Amazon Web Services*. Retrieved 2026-11-22.
+[^nessie]: [Configure Nessie with Iceberg REST](https://projectnessie.org/guides/iceberg-rest/). *Project Nessie*. Retrieved 2026-11-22.
+[^n1]: [apache/polaris](https://github.com/apache/polaris). *GitHub*. Retrieved 2026-11-22.
+[^polaris]: [Apache Polaris 1.9.0 Documentation](https://polaris.apache.org/releases/1.9.0/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [unitycatalog/unitycatalog](https://github.com/unitycatalog/unitycatalog). *GitHub*. Retrieved 2026-11-22.
+[^uc]: [Use Iceberg REST clients with Unity Catalog](https://unitycatalog.io/docs/how-to/iceberg-rest/). *Unity Catalog project*. Retrieved 2026-11-22.
+[^n3]: [lakekeeper/lakekeeper](https://github.com/lakekeeper/lakekeeper). *GitHub*. Retrieved 2026-11-22.
+[^n4]: [Lakekeeper: Apache Iceberg REST Catalog written in Rust](https://docs.lakekeeper.io/). *Lakekeeper*. Retrieved 2026-11-22.
+[^n5]: [Storage overview](https://docs.lakekeeper.io/docs/nightly/storage/). *Lakekeeper*. Retrieved 2026-11-22.
+[^n6]: [apache/gravitino](https://github.com/apache/gravitino). *GitHub*. Retrieved 2026-11-22.
+[^n7]: [Iceberg REST Catalog Service](https://github.com/apache/gravitino/blob/main/docs/iceberg-rest-service.md). *Apache Gravitino*. Retrieved 2026-11-22.
+[^n8]: [projectnessie/nessie](https://github.com/projectnessie/nessie). *GitHub*. Retrieved 2026-11-22.
+[^n9]: [Metastores](https://trino.io/docs/current/object-storage/metastores.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^n10]: [Iceberg Extension](https://duckdb.org/docs/2.0/core_extensions/iceberg/overview.html). *DuckDB Foundation*. Retrieved 2026-11-22.

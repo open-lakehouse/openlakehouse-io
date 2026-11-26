@@ -1,0 +1,114 @@
+---
+title: "Parameterized queries (Spark SQL)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Parameter markers, parameterized SQL, bind parameters</Field>
+  <Field name="field">Query languages, application security</Field>
+  <Field name="introduced">Apache Spark 3.4.0 (named parameters); 3.5.0 (positional parameters)</Field>
+  <Field name="key_parts">Named markers (`:name`), unnamed markers (`?`), `args` of `SparkSession.sql()`, `EXECUTE IMMEDIATE ... USING`, `IDENTIFIER` clause</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark SQL](/wiki/Spark_SQL), [Spark Connect](/wiki/Spark_Connect), [SQL injection](/wiki/SQL_injection)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-parameter-markers.md, docs/sql-ref-syntax-aux-exec-imm.md, docs/sql-ref-identifier-clause.md, python/pyspark/sql/session.py, python/pyspark/sql/sql_formatter.py, SQLConf.scala, ParameterHandler.scala, SparkSqlParser.scala, error-conditions.json) and the Spark 3.4.0, 3.5.0, 4.0.0 and 4.1.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) SQL, a **parameterized query** is a SQL statement that contains typed placeholders, called parameter markers, whose values are supplied separately by the calling API instead of being written into the SQL text.[^markers] Spark supports named markers (`:name`) and unnamed, positional markers (`?`). Because the values never become part of the statement text, the Spark documentation states that parameter markers protect code from SQL injection attacks.[^markers]
+
+## What are parameter markers in Spark SQL?
+
+A Spark SQL parameter marker stands for a value that the caller binds when the statement runs. The Spark documentation describes two kinds:[^markers]
+
+- **Named parameter markers** are written as a colon followed by an unqualified identifier, for example `:min_amount`. The caller passes name-value pairs. The same name can appear several times in one statement, and the caller may pass names that the statement does not use. The colon keeps parameter names apart from column names and SQL variables.
+- **Unnamed parameter markers** are written as `?`. The caller passes an ordered list, and each `?` consumes the next value. Extra values are allowed.
+
+A statement cannot mix named and unnamed markers.[^markers] Spark raises the error `INVALID_QUERY_MIXED_QUERY_PARAMETERS` (SQLSTATE 42613) when it does, and `UNBOUND_SQL_PARAMETER` (SQLSTATE 42P02) when a marker has no value.[^errors]
+
+## How do parameterized queries prevent SQL injection?
+
+A Spark SQL parameter marker always receives a value as a typed literal, never as SQL text written by the caller, so the value cannot change the structure of the statement. The Spark documentation gives this separation of values from SQL text as the reason that parameter markers protect against SQL injection.[^markers] A string such as `' OR 1=1 --` passed as a parameter is treated as a string value, not as SQL.
+
+In Spark 4.3 the binding happens in one of two ways. By default, a pre-parser finds the markers and replaces each one with the SQL form of a resolved `Literal` expression, which quotes and escapes string values; the parameter handler rejects any value that is not a resolved literal. With the legacy setting described below, the markers are kept in the parsed plan and substitution is deferred to the analysis phase.[^handler][^parser]
+
+Parameter markers replace literal values only. Table names, column names and other identifiers cannot be passed as plain markers. For those, Spark SQL provides the `IDENTIFIER` clause, which turns a constant string, which can be built from string literals and parameter markers, into an object name. The Spark documentation states that the clause exists to allow templating of identifiers without opening up the risk of SQL injection, and that the string must be a valid, possibly qualified, identifier.[^identifier]
+
+## How are parameters passed from PySpark?
+
+In PySpark, `SparkSession.sql(sqlQuery, args=None, **kwargs)` takes the parameters in its `args` argument: a dictionary for named markers or a list for positional markers.[^session] Each value is a Python object that Spark converts to a SQL literal, or a `Column` made with a literal or with a collection constructor such as `array()`, `map()` or `struct()`.[^session] The method docstring marks parameterized SQL and Spark Connect support as added in 3.4.0 and positional parameters as added in 3.5.0.[^session] Scala and Java use the `args` parameter of `SparkSession.sql()` with a `Map` or an array.[^markers]
+
+The following PySpark example runs on Spark 4.3, in classic mode or through [Spark Connect](/wiki/Spark_Connect). The first query uses named markers, the second positional markers, and the third an `IDENTIFIER` clause for the view name:
+
+```python
+spark.range(10).createOrReplaceTempView("numbers")
+
+# Named markers: a dictionary
+spark.sql(
+    "SELECT id FROM numbers WHERE id > :lo AND id < :hi",
+    args={"lo": 3, "hi": 7},
+).show()
+
+# Positional markers: a list, consumed in order
+spark.sql("SELECT id FROM numbers WHERE id BETWEEN ? AND ?", args=[2, 4]).show()
+
+# A table name passed safely through IDENTIFIER
+spark.sql("SELECT count(*) AS n FROM IDENTIFIER(:tbl)", args={"tbl": "numbers"}).show()
+```
+
+## How are parameters passed in pure SQL?
+
+Spark SQL binds parameters without a host language through `EXECUTE IMMEDIATE`, which runs a SQL statement given as a string. Its `USING` clause supplies constant expressions that bind to the markers, by position for unnamed markers and by name or alias for named markers. An optional `INTO` clause stores the result of a single-row query in SQL variables.[^execimm]
+
+```sql
+DECLARE lo = 3;
+EXECUTE IMMEDIATE 'SELECT id FROM range(10) WHERE id > :lo AND id < :hi'
+  USING lo AS lo, 7 AS hi;
+```
+
+## Where can parameter markers appear?
+
+The Spark 4.3 documentation states that parameter markers can be used wherever literal values are allowed in SQL syntax.[^markers] Spark 4.1.0 extended this with SPARK-53573, which allows parameter markers everywhere through a pre-parser.[^r410] The internal configuration `spark.sql.legacy.parameterSubstitution.constantsOnly` (default `false`, added in 4.1.0) restores the older behavior, in which markers are allowed only where constant literals are expected in queries and data manipulation statements.[^sqlconf] The `EXECUTE IMMEDIATE` reference shows markers used inside a type definition, `DECIMAL(:p, :s)`, and in a column alias through `IDENTIFIER(:col)`.[^execimm]
+
+## Parameter markers vs Python string formatting
+
+PySpark's `SparkSession.sql()` also accepts keyword arguments (`**kwargs`) that it substitutes into the SQL text with the Python standard string formatter, using `{name}` placeholders. The docstring marks this as added in 3.3.0 and describes it as experimental and unstable.[^session] The two mechanisms differ:
+
+|  | Parameter markers (`args`) | Formatter placeholders (`**kwargs`) |
+| --- | --- | --- |
+| Syntax in SQL | `:name` or `?`[^markers] | `{name}`[^session] |
+| When the value is applied | Bound as a typed literal by Spark, separately from the SQL text the caller writes[^markers][^handler] | Rendered into the SQL text before parsing[^session] |
+| Handling of values | Python values converted to SQL literals; `Column` literals and collection constructors accepted[^session] | A `DataFrame` becomes a temporary view name, a `Column` must be a plain column reference, a Python string becomes an escaped string literal, and other values are inserted as formatted by Python[^formatter] |
+| Available in | PySpark, Scala, Java, and SQL through `EXECUTE IMMEDIATE`[^markers] | PySpark only |
+
+Both can be used in one call; the PySpark docstring includes an example that references a DataFrame with `{df}` and binds a value with `:minB`.[^session] For values that come from users, the parameter markers are the mechanism that the Spark documentation describes as injection-safe.[^markers]
+
+## History
+
+- **Spark 3.4.0** added parameterized SQL (SPARK-41271, SPARK-42702) and PySpark support for it (SPARK-41666).[^r340]
+- **Spark 3.5.0** added positional parameters in Scala and Java (SPARK-44066) and in Python (SPARK-44140), and the `IDENTIFIER` clause (SPARK-43205).[^r350]
+- **Spark 4.0.0** added `EXECUTE IMMEDIATE` (SPARK-46246), and its release notes list support for map and array parameters in parameterized `sql()` (SPARK-45137, SPARK-45235).[^r400]
+- **Spark 4.1.0** allowed parameter markers everywhere through a pre-parser (SPARK-53573).[^r410]
+
+## See also
+
+- [Spark SQL](/wiki/Spark_SQL)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Higher-order functions (Spark SQL)](/wiki/Higher-order_functions_(Spark_SQL))
+- [SQL injection](/wiki/SQL_injection)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^markers]: [Parameter markers (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-parameter-markers.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^errors]: [error-conditions.json (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/common/utils/src/main/resources/error/error-conditions.json). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^handler]: [ParameterHandler.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/parser/ParameterHandler.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^parser]: [SparkSqlParser.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkSqlParser.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^identifier]: [IDENTIFIER clause (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-identifier-clause.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^session]: [session.py (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/session.py). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^execimm]: [EXECUTE IMMEDIATE (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-aux-exec-imm.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^formatter]: [sql_formatter.py (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/sql_formatter.py). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^r340]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,96 @@
+---
+title: "Broadcast variable"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">`SparkContext.broadcast`, shared read-only variable</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Driver-side value, chunked BitTorrent-like distribution, per-executor cached copy, `unpersist()` and `destroy()`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Accumulator](/wiki/Accumulator), [Broadcast join](/wiki/Broadcast_join), [Join strategy hints](/wiki/Join_strategy_hints), [Spark Connect](/wiki/Spark_Connect), [RDD](/wiki/RDD)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/rdd-programming-guide.md, docs/tuning.md, docs/configuration.md, docs/spark-connect-overview.md, docs/sql-performance-tuning.md, core broadcast/TorrentBroadcast.scala, core unsafe/map/BytesToBytesMap.java, sql BroadcastExchangeExec.scala, SQLConf.scala, python/pyspark/sql/connect/session.py) and the PySpark 4.3.0 Broadcast.destroy API reference</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **broadcast variable** is a read-only value that the driver sends once to every [executor](/wiki/Executor), where it is cached and shared by all tasks, instead of being shipped again with every task. It is one of Spark's two kinds of shared variable; the other is the [accumulator](/wiki/Accumulator).[^rddguide] Broadcast variables are part of the `SparkContext` API and are not available to [Spark Connect](/wiki/Spark_Connect) clients; DataFrame code uses a [broadcast join](/wiki/Broadcast_join) instead.[^connect]
+
+## What is a broadcast variable used for?
+
+A function passed to a Spark operation such as `map` normally gets its own copy of every variable it uses, shipped with each task. When tasks use a large object from the driver, such as a lookup table, a broadcast variable sends it to each executor once.[^rddguide] The Spark tuning guide says that tasks larger than about 20 KiB are probably worth optimizing, and that turning a large driver-side object into a broadcast variable reduces the size of each serialized task and the cost of launching a job.[^tuning]
+
+Spark already broadcasts the common data that tasks within one stage need. An explicit broadcast variable is therefore useful mainly when tasks in several stages need the same data, or when keeping the data in deserialized form matters.[^rddguide]
+
+## Example
+
+```python
+rates = {"EUR": 1.08, "GBP": 1.27, "JPY": 0.0067}
+b_rates = spark.sparkContext.broadcast(rates)
+
+usd = orders_rdd.map(lambda o: (o.id, o.amount * b_rates.value[o.currency]))
+total = usd.map(lambda kv: kv[1]).sum()   # action: the map runs now and reads b_rates
+
+b_rates.unpersist()   # free executor copies; b_rates is re-sent if used again
+refunds_usd = refunds_rdd.map(lambda r: r.amount * b_rates.value[r.currency]).collect()
+
+b_rates.destroy()     # last step: free everything; b_rates can no longer be used
+```
+
+The value is read with `.value`. It should not be changed after it is broadcast, so that every node sees the same value.[^rddguide] Because transformations such as `map` are lazy and run only when an action needs a result, the broadcast value is read when the action runs, not when `map` is called.[^rddops] `unpersist()` releases the copies on executors, and a later use broadcasts the value again. `destroy()` releases all resources, after which the variable cannot be used. Neither blocks by default.[^rddguide] The PySpark API reference says to use `destroy()` with caution, because a destroyed broadcast variable cannot be used again; it therefore belongs after the last action that reads the variable, including actions on RDDs built earlier.[^destroy]
+
+## How is a broadcast variable distributed?
+
+Spark's default implementation, `TorrentBroadcast`, is BitTorrent-like. The driver splits the serialized value into chunks and stores them in its block manager. Each executor fetches the chunks it lacks from the driver or from other executors that already have them, then stores them so that more executors can fetch from it. This stops the driver from being the bottleneck when every executor needs a copy.[^torrent]
+
+Two settings control the transfer: `spark.broadcast.blockSize` (default `4m`) is the chunk size, and `spark.broadcast.compress` (default true) compresses broadcast data with `spark.io.compression.codec`.[^config]
+
+## How large can a broadcast be?
+
+The Spark docs set no specific maximum for `SparkContext.broadcast`. The practical limit is memory: the value is created on the driver, and each machine keeps a cached copy.[^rddguide] `SizeEstimator.estimate` can show how much heap a broadcast value will take on each executor.[^tuning]
+
+Broadcast joins in Spark SQL have explicit limits. Spark plans one automatically when a table is under `spark.sql.autoBroadcastJoinThreshold` (default 10 MB), waits up to `spark.sql.broadcastTimeout` (default 300 seconds) for the broadcast, and fails a broadcast table of 8 GiB or more (`spark.sql.maxBroadcastTableSize`, added in 4.1.0) or with too many rows: 2<sup>29</sup> / 1.5 (357,913,941) rows for a hash join whose key is not a single `LongType` column, and 512,000,000 rows otherwise.[^btbm][^perf][^sqlconf][^bee]
+
+## Are broadcast variables supported in Spark Connect?
+
+No. A Spark Connect client talks to the server through logical plans and has no access to the `SparkContext`; the Spark docs list `SparkContext` and RDDs among the APIs that Spark Connect does not support.[^connect] In the PySpark Connect client, reading `spark.sparkContext` raises `JVM_ATTRIBUTE_NOT_SUPPORTED`.[^csession]
+
+The DataFrame equivalent works in both classic Spark and Spark Connect: put the lookup data in a small DataFrame and join with a `BROADCAST` [hint](/wiki/Join_strategy_hints) or `pyspark.sql.functions.broadcast()`.[^perf]
+
+```python
+from pyspark.sql.functions import broadcast
+
+rates_df = spark.createDataFrame(list(rates.items()), ["currency", "rate"])
+usd = orders.join(broadcast(rates_df), "currency")
+```
+
+## Broadcast variable compared with broadcast join
+
+|  | Broadcast variable | Broadcast join |
+| --- | --- | --- |
+| API | `SparkContext.broadcast` (RDD and UDF code)[^rddguide] | DataFrame / SQL join with a broadcast hint or automatic planning[^perf] |
+| Spark Connect | Not available[^connect] | Available |
+| Size limits | None documented; bounded by driver and executor memory | 10 MB automatic threshold; hard limits of 8 GiB and a row limit of 357,913,941 or 512,000,000 rows, depending on the join key[^perf][^bee] |
+| Typical use | Lookup tables or models inside RDD functions or UDFs | Joining a large table with a small one without shuffling the large one |
+
+## See also
+
+- [Accumulator](/wiki/Accumulator)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Join strategy hints](/wiki/Join_strategy_hints)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark memory management](/wiki/Spark_memory_management)
+
+## References
+
+[^rddguide]: [RDD Programming Guide: Broadcast Variables (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#broadcast-variables). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tuning]: [Tuning Spark (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rddops]: [RDD Programming Guide: RDD Operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#rdd-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^destroy]: [pyspark.Broadcast.destroy (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/reference/api/pyspark.Broadcast.destroy.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^torrent]: [TorrentBroadcast.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/broadcast/TorrentBroadcast.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^btbm]: [BytesToBytesMap.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/unsafe/map/BytesToBytesMap.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^bee]: [BroadcastExchangeExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/BroadcastExchangeExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^csession]: [connect/session.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/session.py). *Apache Software Foundation*. Retrieved 2026-11-23.

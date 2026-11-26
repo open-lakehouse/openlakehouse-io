@@ -1,0 +1,96 @@
+---
+title: "Spark UI"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark web UI, application UI, port 4040</Field>
+  <Field name="field">Monitoring and debugging</Field>
+  <Field name="key_parts">Jobs, Stages, Storage, Environment, Executors and SQL tabs; Structured Streaming tab; REST API at /api/v1</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark History Server](/wiki/Spark_History_Server), [Spark event log](/wiki/Spark_event_log), [Spark listener](/wiki/Spark_listener), [Job, stage and task](/wiki/Job,_stage_and_task), [Executor](/wiki/Executor), [Shuffle](/wiki/Shuffle)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/web-ui.md, docs/monitoring.md, docs/configuration.md, config/UI.scala, config/Status.scala)</Verified>
+
+The **Spark UI** is the web interface that the driver of an [Apache Spark](/wiki/Apache_Spark) application serves while the application runs, by default at `http://<driver-host>:4040`, to show the application's jobs, stages, tasks, cached data, configuration, executors and SQL queries. It runs when `spark.ui.enabled` is true, which is the default.[^uiconf][^webui] The UI exists only while the application runs; for finished applications, the [Spark History Server](/wiki/Spark_History_Server) rebuilds the same pages from the [Spark event log](/wiki/Spark_event_log).
+
+## How do you open the Spark UI?
+
+The UI is on by default (`spark.ui.enabled`, default true) and listens on `spark.ui.port` (default 4040).[^uiconf] When the port is taken, for example by another application on the same host, Spark tries 4041, 4042 and so on, and logs the chosen port at startup.[^webui] The same data is available as JSON from the REST API at `http://localhost:4040/api/v1` for a running application.[^monitoring]
+
+## Jobs tab
+
+The Jobs tab lists every job of the application with its status, duration and progress, and shows an event timeline of executors being added and removed alongside the jobs.[^webui] A job is the work that one action, such as `count()` or `write`, triggers (see [Job, stage and task](/wiki/Job,_stage_and_task)).
+
+The job detail page shows the job's stages grouped by status, a DAG visualization, and per-stage **Input** (bytes read from storage), **Output** (bytes written), **Shuffle read** and **Shuffle write**. It also links to the SQL query that created the job.[^webui]
+
+**What to look for:** a job that is much slower than its neighbours, failed jobs, and long gaps in the timeline where no executors were available.
+
+## Stages tab
+
+The Stages tab lists all stages by status: active, pending, completed, skipped and failed. Only failed stages show a failure reason, and an active stage can be cancelled with its **(kill)** link, which `spark.ui.killEnabled` (default true) allows.[^webui][^uiconf]
+
+The stage detail page is where most performance problems show up. It gives summary statistics (minimum, percentiles, maximum) over all tasks for these metrics:[^webui]
+- **Duration** and **GC time**. A maximum far above the median means data skew or a straggler.
+- **Scheduler delay** and **task deserialization time**, which are large when tasks are tiny or closures are big.
+- **Shuffle Read Size / Records**, **Shuffle Read Fetch Wait Time** and **Shuffle Remote Reads**, which show how much the stage depends on the network.
+- **Shuffle spill (memory)** and **Shuffle spill (disk)**. Any spill means execution memory ran out for this stage (see [Shuffle](/wiki/Shuffle)).
+- **Peak execution memory** used by shuffles, aggregations and joins.
+
+The page also aggregates the metrics by executor, lists named accumulators, and has a task table with links to each task's executor logs.[^webui]
+
+## Storage tab
+
+The Storage tab lists the RDDs and DataFrames that the application has persisted, with their storage level, size in memory and on disk, and number of cached partitions. The detail page shows which executors hold each partition.[^webui]
+
+**What to look for:** a cached DataFrame with fewer cached partitions than total partitions, which means part of it was evicted or never computed.
+
+## Environment tab
+
+The Environment tab shows the configuration the application is actually running with, in sub-tabs: **Runtime Information** (JVM and Scala versions), **Spark Properties**, **Resource Profiles**, **Hadoop Properties**, **System Properties**, **Metrics Properties** and **Classpath Entries**. Properties set as `spark.hadoop.*` appear under Spark Properties, not Hadoop Properties.[^webui]
+
+**What to look for:** whether a setting passed at submit time was applied, and which jar versions are on the classpath when there is a class conflict.
+
+## Executors tab
+
+The Executors tab lists every executor, including the driver, with its memory, disk, cores, storage memory used for cached data, task counts, shuffle totals and GC time. Each row has **Thread Dump**, **Heap Histogram** and **Flame Graph** links that open live data for that executor, and **stderr** and **stdout** links to its logs.[^webui]
+
+**What to look for:** executors with high GC time, a few executors that ran most of the tasks, and executors that were lost (see [Executor](/wiki/Executor)).
+
+## SQL tab
+
+The SQL tab, sometimes called the SQL / DataFrame tab, lists every SQL query and every DataFrame action that triggered execution, not only queries written as SQL strings.[^webui] Each query has a graph of its physical operators with their metrics, and a detail page with the parsed, analyzed and optimized logical plans and the physical plan.
+
+The operator metrics are the most direct view of what a query did. Examples include `number of output rows` on filters and joins, `data size` on exchanges, `shuffle bytes written` on a shuffle exchange, `spill size` on sorts and hash aggregates, and the file and partition counts on scans.[^webui]
+
+**What to look for:** an unexpected `Exchange`, a scan that read many more files or partitions than the filter should allow (see [Partition pruning](/wiki/Partition_pruning)), and a join whose output row count is far larger than its inputs.
+
+## Other tabs
+
+- **Structured Streaming** appears when micro-batch streaming queries run. It shows input rate, process rate, batch duration, operation durations, watermark gap and state store metrics for each query.[^webui]
+- **Streaming (DStreams)** appears for applications that use the legacy [DStream API](/wiki/Spark_Streaming_(DStreams)).[^webui]
+- **JDBC/ODBC Server** appears when Spark runs as a distributed SQL engine through the Thrift server.[^webui]
+
+## How much history does the Spark UI keep?
+
+The live UI keeps a bounded amount of history in driver memory. By default it remembers 1000 jobs (`spark.ui.retainedJobs`), 1000 stages (`spark.ui.retainedStages`), 100000 tasks per stage (`spark.ui.retainedTasks`) and 1000 finished SQL executions (`spark.sql.ui.retainedExecutions`).[^statusconf][^n1] Older entries are garbage collected, so a long-running application loses its early history from the live UI.
+
+To see an application after it ends, set `spark.eventLog.enabled` to true before starting it, and read the logs with the [Spark History Server](/wiki/Spark_History_Server).[^monitoring]
+
+## See also
+
+- [Spark History Server](/wiki/Spark_History_Server)
+- [Spark event log](/wiki/Spark_event_log)
+- [Spark listener](/wiki/Spark_listener)
+- [Job, stage and task](/wiki/Job,_stage_and_task)
+- [Executor](/wiki/Executor)
+- [Shuffle](/wiki/Shuffle)
+
+## References
+
+[^uiconf]: [config/UI.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/UI.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^statusconf]: [config/Status.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/Status.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,112 @@
+---
+title: "SQL pipe syntax"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Pipe syntax, operator pipe syntax, `|>` syntax</Field>
+  <Field name="field">SQL query languages</Field>
+  <Field name="key_parts">`FROM` or `TABLE` source, pipe operator `|>`, operators `SELECT`, `EXTEND`, `SET`, `DROP`, `AS`, `WHERE`, `AGGREGATE`, `JOIN`, `ORDER BY`, `LIMIT`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), GoogleSQL (BigQuery), ZetaSQL</Field>
+  <Field name="related">[Spark SQL scripting](/wiki/Spark_SQL_scripting), [Spark SQL ANSI mode](/wiki/Spark_SQL_ANSI_mode)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-pipe-syntax.md, SqlBaseParser.g4, SQLConf.scala), SPARK-49555, the Spark 4.0.0 and 4.2.0 release notes, the PVLDB 17(12) paper by Shute et al. and the BigQuery pipe syntax reference</Verified>
+
+**SQL pipe syntax** is an extension of SQL in which a query is written as a sequence of operators joined by the pipe symbol `|>`, each operator taking the table produced by the previous one, so that the query reads top to bottom in the order of its logical transformations. [Apache Spark](/wiki/Apache_Spark) SQL supports pipe syntax since Spark 4.0.0 (SPARK-49555).[^r400][^doc] Pipe syntax keeps standard SQL working unchanged: a query can use standard clauses, pipe operators, or both.[^doc]
+
+## Where does SQL pipe syntax come from?
+
+Pipe syntax was described by Jeff Shute and other Google engineers in the paper "SQL Has Problems. We Can Fix Them: Pipe Syntax In SQL", published in the Proceedings of the VLDB Endowment, volume 17, issue 12 (2024). The paper presents it as an addition to GoogleSQL, Google's SQL dialect, that fixes the rigid clause order of standard SQL without replacing the language.[^paper] BigQuery documents pipe syntax as an extension to GoogleSQL, and Google announced that it would be available to all BigQuery users by default from 4 February 2025.[^bq][^bqblog] The Spark ticket SPARK-49555 links to the paper and to the open source ZetaSQL implementation.[^jira]
+
+## How does pipe syntax work in Spark SQL?
+
+A pipe query in Spark SQL usually starts with `FROM table_name`, which Spark accepts as a standalone query equivalent to `TABLE table_name`. Any number of pipe operators can follow, in any order, each starting with `|>` and one or more SQL keywords.[^doc] Pipe operators can also be appended to the end of any ordinary Spark SQL query.[^doc]
+
+Spark's documentation states several invariants. Each operator works the same way on its input regardless of how that input was computed. For a valid chain of N operators, the first M operators (M ≤ N) also form a valid query, which lets a user run a prefix of a query while debugging. Subqueries, views and DDL or DML statements can contain queries in either syntax.[^doc]
+
+Pipe syntax is controlled by `spark.sql.operatorPipeSyntaxEnabled`, added in Spark 4.0.0 and `true` by default in Spark 4.3.0.[^sqlconf] Since Spark 4.2.0 a single `|` can also be used as the pipe token (SPARK-51518). This is governed by `spark.sql.parser.singleCharacterPipeOperator.enabled`, true by default; the parser tells a pipe apart from bitwise OR by checking whether a pipe operator keyword follows.[^r420][^sqlconf][^grammar]
+
+## Which pipe operators does Spark SQL support?
+
+| Operator | What it does | Closest standard Spark SQL |
+| --- | --- | --- |
+| `SELECT` | Evaluates expressions over each input row | Outermost `SELECT` of a subquery |
+| `EXTEND` | Appends computed columns | `SELECT *, expr AS col` |
+| `SET` | Replaces the values of existing columns | `SELECT * REPLACE (expr AS col)` |
+| `DROP` | Removes columns | `SELECT * EXCEPT (col)` |
+| `AS` | Gives the input a new table alias | Table alias |
+| `WHERE` | Filters rows; can appear anywhere, so no separate `HAVING` or `QUALIFY` is needed | `WHERE`, `HAVING`, `QUALIFY` |
+| `AGGREGATE` | Aggregates, with or without `GROUP BY` | `SELECT ... GROUP BY` |
+| `JOIN` | Joins the input (left side) with a table argument (right side) | `JOIN` |
+| `ORDER BY`, `LIMIT` | Sorts and limits rows | `ORDER BY`, `LIMIT` |
+| `UNION`, `INTERSECT`, `EXCEPT` | Set operations with another table | Same set operations |
+| `TABLESAMPLE`, `PIVOT`, `UNPIVOT` | Sampling and reshaping | Same clauses |
+
+Source: Spark 4.3.0 pipe syntax documentation.[^doc]
+
+`AGGREGATE` differs most from standard SQL. Its output holds the grouping columns first and then the aggregate columns, so the grouping expressions are not repeated in a `SELECT` list. `GROUP BY` ordinals refer to the columns of the input table, not to a select list.[^doc] In Spark 4.3.0 a pipe `SELECT` also accepts aggregate functions and an optional `GROUP BY`, as in `TABLE t |> SELECT a, SUM(b) AS s GROUP BY a`: the grammar allows a `GROUP BY` clause after the select list, the analyzer permits aggregate functions in `SELECT` but rejects them in `EXTEND`, `SET` and other pipe operators, and the Spark test suite runs such queries.[^grammar][^pipeops][^pipetests] The Spark 4.2.0 release notes list this change as SPARK-54292.[^r420] The 4.3.0 pipe syntax documentation still says that aggregate functions are not supported in a pipe `SELECT` and should go in `AGGREGATE`.[^doc]
+
+## Example
+
+The Spark documentation rewrites query 13 of the TPC-H benchmark, which in standard SQL needs a subquery for its two levels of aggregation, as a straight sequence of operators:[^doc]
+
+```sql
+-- Standard SQL
+SELECT c_count, COUNT(*) AS custdist
+FROM (
+  SELECT c_custkey, COUNT(o_orderkey) c_count
+  FROM customer
+  LEFT OUTER JOIN orders ON c_custkey = o_custkey
+    AND o_comment NOT LIKE '%unusual%packages%'
+  GROUP BY c_custkey
+) AS c_orders
+GROUP BY c_count
+ORDER BY custdist DESC, c_count DESC;
+
+-- The same query with pipe syntax
+FROM customer
+|> LEFT OUTER JOIN orders ON c_custkey = o_custkey
+   AND o_comment NOT LIKE '%unusual%packages%'
+|> AGGREGATE COUNT(o_orderkey) c_count
+   GROUP BY c_custkey
+|> AGGREGATE COUNT(*) AS custdist
+   GROUP BY c_count
+|> ORDER BY custdist DESC, c_count DESC;
+```
+
+A smaller example builds columns step by step and filters on an aggregate without `HAVING`:
+
+```sql
+VALUES ('a', 10), ('a', 5), ('b', 3) AS t(k, v)
+|> EXTEND v * 2 AS v2
+|> AGGREGATE SUM(v2) AS total GROUP BY k
+|> WHERE total > 10
+|> ORDER BY total DESC;
+-- one row: k = 'a', total = 30
+```
+
+## Is pipe syntax more readable?
+
+The paper's authors argue that standard SQL's fixed clause order forces subqueries and "inside-out" data flow, and that operators applied in sequence are easier to read, write and extend.[^paper] In Spark SQL, pipe syntax also lets a computed column be used by the next operator without a lateral column alias or a subquery.[^doc] Pipe syntax is optional: any query can be written in standard Spark SQL, in pipe syntax or in a mix of the two, so it can be adopted one query at a time.[^doc]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark SQL scripting](/wiki/Spark_SQL_scripting)
+- [Spark SQL ANSI mode](/wiki/Spark_SQL_ANSI_mode)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+
+## References
+
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^doc]: [SQL Pipe Syntax (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-pipe-syntax.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^paper]: [SQL Has Problems. We Can Fix Them: Pipe Syntax In SQL](https://www.vldb.org/pvldb/vol17/p4051-shute.pdf). *Proceedings of the VLDB Endowment, 17(12): 4051-4063*. Retrieved 2026-11-23.
+[^bq]: [Pipe syntax (BigQuery documentation)](https://docs.cloud.google.com/bigquery/docs/reference/standard-sql/pipe-syntax). *Google Cloud*. Retrieved 2026-11-23.
+[^bqblog]: [Simplify your SQL with pipe syntax in BigQuery and Cloud Logging](https://cloud.google.com/blog/products/data-analytics/simplify-your-sql-with-pipe-syntax-in-bigquery-and-cloud-logging). *Google Cloud Blog*. Retrieved 2026-11-23.
+[^jira]: [SPARK-49555: SQL Pipe Syntax](https://issues.apache.org/jira/browse/SPARK-49555). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^grammar]: [SqlBaseParser.g4 (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/SqlBaseParser.g4). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pipeops]: [pipeOperators.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/pipeOperators.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^pipetests]: [pipe-operators.sql.out (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/test/resources/sql-tests/results/pipe-operators.sql.out). *Apache Spark on GitHub*. Retrieved 2026-11-23.

@@ -1,0 +1,98 @@
+---
+title: "Open table format"
+categories: ["Concepts", "Table formats"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Lakehouse table format, metadata layer</Field>
+  <Field name="field">Data management</Field>
+  <Field name="key_parts">Data files, table metadata, snapshots, atomic commits</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi)</Field>
+  <Field name="related">[Open lakehouse](/wiki/Open_lakehouse), [Apache Parquet](/wiki/Apache_Parquet), [Data catalog](/wiki/Data_catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Iceberg table spec, the Delta transaction log protocol (PROTOCOL.md on the master branch), the Apache Hudi table types and timeline documentation, the Delta UniForm and Apache XTable documentation</Verified>
+
+An **open table format** is a publicly specified way of organizing data files and metadata on file or object storage so that a collection of files behaves as a single database table, with atomic commits, consistent snapshots and schema management. The format is a specification, not an engine: any engine that implements it can read and write the same table. Open table formats are the layer that turns a data lake into an [open lakehouse](/wiki/Open_lakehouse). The best-known open table formats are [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) and [Apache Hudi](/wiki/Apache_Hudi).
+
+## Purpose
+
+Plain files in a data lake have no notion of a transaction. Readers cannot tell a half-written batch from a complete one, and there is no record of which files belong to which version of a table. The CIDR 2021 lakehouse paper calls the solution a metadata layer: a record of which objects are part of a table version, updated transactionally, on top of open file formats such as [Apache Parquet](/wiki/Apache_Parquet) and ORC.[^cidr]
+
+According to the same paper, metadata layers add transactions, zero-copy cloning and time travel to past table versions, and are a natural place to enforce data quality rules and access control.[^cidr]
+
+## History
+
+The CIDR 2021 paper traces the current open table formats to three origins. Databricks began developing Delta Lake in 2016, storing the list of a table's objects as a transaction log in the data lake itself. Apache Iceberg started at Netflix with a similar design. Apache Hudi started at Uber with a focus on streaming ingestion into data lakes.[^cidr]
+
+Today Apache Iceberg and Apache Hudi are projects of the Apache Software Foundation, and Delta Lake is a Linux Foundation project.[^iceberg-home][^hudi-overview][^deltaio]
+
+## How it works
+
+All three formats share a pattern. Data lives in immutable files, usually Parquet. A separate set of metadata files records which data files make up each version of the table. A writer prepares new files first, then commits by atomically publishing new metadata. Readers always see a complete version.
+
+- **Apache Iceberg** keeps table state in metadata files. Each change creates a new metadata file and replaces the old one with an atomic swap, usually by updating a pointer held in a [catalog](/wiki/Data_catalog). A snapshot lists its data files through manifest files, which are reused across snapshots.[^icespec]
+- **Delta Lake** keeps a transaction log in a `_delta_log` directory next to the data. Each commit is a newline-delimited JSON file named by version number, and periodic checkpoints summarize the log in Parquet. Writers first write data files optimistically, then commit by adding a new log entry.[^deltaproto]
+- **Apache Hudi** records every change to the table (writes, table services, schema changes) as an action on a timeline. Each action has a requested instant, which acts as its transaction identifier, and a completed instant.[^hudi-timeline]
+
+## Comparison
+
+The table compares features as described in each project's own specification or documentation.
+
+| Feature | [Apache Iceberg](/wiki/Apache_Iceberg) | [Delta Lake](/wiki/Delta_Lake) | [Apache Hudi](/wiki/Apache_Hudi) |
+| --- | --- | --- | --- |
+| Origin (per CIDR 2021 paper)[^cidr] | Netflix | Databricks (2016) | Uber |
+| Governance | Apache Software Foundation | Linux Foundation | Apache Software Foundation |
+| Metadata structure | Table metadata files, manifest lists and manifests[^icespec] | Transaction log of JSON commits with Parquet checkpoints[^deltaproto] | Timeline of actions at instants[^hudi-timeline] |
+| Commit mechanism | Atomic swap of the table metadata pointer[^icespec] | New entry appended to the log; optimistic writes[^deltaproto] | Action moves from requested to completed on the timeline[^hudi-timeline] |
+| Row-level deletes | Delete files; deletion vectors from format version 3[^icespec] | Optional deletion vectors[^deltaproto] | Copy-on-write rewrites base files; merge-on-read writes log files merged at query time[^hudi-types] |
+| Reading past versions | Snapshots of the table at points in time[^icespec] | Snapshots by table version[^deltaproto] | Time travel queries at timeline instants[^hudi-types] |
+| Incremental reads | Engines can read only the data appended between two snapshots, for example with the Spark `start-snapshot-id` and `end-snapshot-id` read options[^n1] | Readers can tail the log to find added data[^deltaproto] | Incremental and change data capture queries[^hudi-types] |
+| Schema and partition evolution | Full schema evolution and partition spec evolution[^icespec] | Column mapping supports renaming and dropping columns without rewriting data[^deltaproto] | Supports schema evolution on write and through SQL DDL[^n2] |
+
+## Format versions
+
+Open table formats evolve through versioned specifications so that older readers do not misread newer tables.
+
+Apache Iceberg numbers its format versions. Version 1 defines analytic tables over immutable Parquet, Avro and ORC files. Version 2 adds row-level deletes. Version 3 adds new data types (including variant, geometry and geography), column default values, row lineage, binary deletion vectors and table encryption keys. As of November 2026, the specification describes version 4 as under active development and not formally adopted.[^icespec]
+
+Delta Lake versions its protocol with a reader version and a writer version. Reader version 3 and writer version 7 add named table features, which let a table declare the individual capabilities a client must support.[^deltaproto]
+
+## Interoperability between formats
+
+Because Iceberg, Delta Lake and Hudi all store Parquet data files under their own metadata, tools can expose one copy of the data in more than one format.
+
+Delta Lake's Universal Format (UniForm) generates Iceberg metadata, and in preview Hudi metadata, for a Delta table, so that Iceberg and Hudi clients can read it.[^uniform]
+
+Apache XTable, an incubating Apache project formerly named OneTable, reads a table's existing metadata and writes metadata for one or more of the other formats, in any direction among Hudi, Delta Lake and Iceberg.[^xtable]
+
+## Relationship to catalogs
+
+<Hatnote>Main article: [Data catalog](/wiki/Data_catalog)</Hatnote>
+
+A table format defines how one table is stored. A catalog maps table names to the current metadata of each table and coordinates commits. In Iceberg, the catalog stores the pointer to each table's current metadata file and performs the atomic update of that pointer.[^polaris-docs] Delta Lake's protocol also defines catalog-managed tables, in which the catalog is the source of truth for whether a commit succeeded.[^deltaproto]
+
+## See also
+
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Hudi](/wiki/Apache_Hudi)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Data catalog](/wiki/Data_catalog)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^cidr]: Michael Armbrust, Ali Ghodsi, Reynold Xin, Matei Zaharia. [Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper17.pdf). *CIDR 2021*, January 2021. Retrieved 2026-11-22.
+[^iceberg-home]: [Apache Iceberg](https://iceberg.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^hudi-overview]: [Overview](https://hudi.apache.org/docs/overview). *Apache Hudi*. Retrieved 2026-11-22.
+[^deltaio]: [Delta Lake](https://delta.io/). *Linux Foundation*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec](https://iceberg.apache.org/spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^deltaproto]: [Delta Transaction Log Protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-22.
+[^hudi-timeline]: [Timeline](https://hudi.apache.org/docs/timeline). *Apache Hudi*. Retrieved 2026-11-22.
+[^hudi-types]: [Table and Query Types](https://hudi.apache.org/docs/table_types). *Apache Hudi*. Retrieved 2026-11-22.
+[^n1]: [Spark Queries: Incremental read](https://iceberg.apache.org/docs/latest/spark-queries/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^n2]: [Schema Evolution](https://hudi.apache.org/docs/schema_evolution/). *Apache Hudi*. Retrieved 2026-11-22.
+[^uniform]: [Universal Format (UniForm)](https://docs.delta.io/delta-uniform/). *Delta Lake*. Retrieved 2026-11-22.
+[^xtable]: [Apache XTable (Incubating)](https://xtable.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^polaris-docs]: [Apache Polaris documentation (unreleased)](https://polaris.apache.org/in-dev/unreleased/). *Apache Software Foundation*. Retrieved 2026-11-22.

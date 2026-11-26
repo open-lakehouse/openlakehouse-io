@@ -1,0 +1,92 @@
+---
+title: "Session window"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Gap-based window, sessionization</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="introduced">Spark 3.2.0 (`session_window`)</Field>
+  <Field name="key_parts">Grouping key, event-time column, gap duration (static or per record), [watermark](/wiki/Watermark)</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) (`session_window`), [Apache Flink](/wiki/Apache_Flink) (session window assigners, `SESSION` TVF), Kafka Streams (`SessionWindows`)</Field>
+  <Field name="related">[Windowing (stream processing)](/wiki/Windowing_(stream_processing)), [Stateful stream processing](/wiki/Stateful_stream_processing), [transformWithState](/wiki/TransformWithState)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide and Real-time Mode guide, `python/pyspark/sql/functions/builtin.py` and `SQLConf.scala` at tag v4.3.0 of apache/spark, SPARK-10816, the Apache Flink 2.3 DataStream "Windows" and SQL "Windowing TVF" pages, and the Kafka Streams 4.4 DSL developer guide</Verified>
+
+In [stream processing](/wiki/Stream_processing), a **session window** is a window whose length is set by the data: it opens with a record for a key, extends each time another record for that key arrives within a **gap duration**, and closes when no record arrives for the length of the gap. Session windows group bursts of activity, such as one user's clicks during a visit, without fixing the window size in advance. In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), session windows are built with the `session_window` function, added in Spark 3.2.0.[^builtin][^jira]
+
+## How is a session window different from a tumbling or sliding window?
+
+Tumbling and sliding windows have a fixed size and fixed boundaries, so the engine can compute a record's window from its timestamp alone. A session window has neither: its start is the first record of the session and its end moves later with every new record. Spark's guide describes it as having a dynamic size that depends on the inputs.[^ss-types] See [Windowing (stream processing)](/wiki/Windowing_(stream_processing)) for the other window types.
+
+Because a later record can join two earlier sessions into one, engines implement session windows by merging. [Apache Flink](/wiki/Apache_Flink)'s documentation states that its session window operator creates a new window for every record and merges windows that are closer to each other than the gap.[^flink-win]
+
+## How does session_window work in Spark?
+
+`session_window(timeColumn, gapDuration)` returns a struct column named `session_window` with `start` and `end` fields. The end of a session is the timestamp of its latest record plus the gap, so it grows as records join the session.[^builtin]
+
+The gap can be a static string such as `"5 minutes"` or a column expression evaluated per row, for example a different gap per user type. With a dynamic gap, a session's range is the union of the ranges of its events (each event's time plus its own gap), and rows whose gap evaluates to zero or a negative value are filtered out of the aggregation.[^ss-types][^builtin]
+
+A streaming session window query has these restrictions in Spark 4.3.0:[^ss-types]
+- Update [output mode](/wiki/Output_mode) is not supported; use append (sessions are emitted when the [watermark](/wiki/Watermark) passes their end) or complete.
+- The grouping key must contain at least one column besides `session_window`. A global session window, with `session_window` as the only key, is allowed only in batch queries.
+
+By default Spark does not pre-aggregate sessions before the shuffle, because doing so needs an extra local sort. Setting `spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition` (default `false`, since 3.2.0) to `true` sorts and merges sessions within each partition first, which helps when many rows of a batch belong to the same session.[^ss-types][^sqlconf]
+
+Session-window aggregation is not supported in Real-time Mode as of Spark 4.3.0.[^rtm] Sessions with custom rules, such as closing a session on a logout event, need arbitrary stateful processing with [transformWithState](/wiki/TransformWithState).
+
+### Example
+
+This PySpark query counts page views per user session, where a session ends after 30 minutes without activity, and uses a shorter gap for one class of users:
+
+```python
+from pyspark.sql import functions as F
+
+views = spark.readStream.table("main.web.page_views")   # columns: ts, user_id, user_type
+
+gap = F.when(F.col("user_type") == "bot", "1 minute").otherwise("30 minutes")
+
+sessions = (views
+    .withWatermark("ts", "1 hour")
+    .groupBy(F.session_window("ts", gap), "user_id")
+    .agg(F.count("*").alias("views")))
+
+(sessions.writeStream
+    .outputMode("append")
+    .option("checkpointLocation", "/checkpoints/sessions")
+    .toTable("main.web.user_sessions"))
+```
+
+In Spark SQL the same grouping is `GROUP BY session_window(ts, '30 minutes'), user_id`.
+
+## Spark session_window compared with Flink
+
+|  | Spark `session_window` | Flink DataStream session assigners | Flink SQL `SESSION` TVF |
+| --- | --- | --- | --- |
+| Gap | Static string or per-row column expression[^builtin] | Static gap, or a `SessionWindowTimeGapExtractor` for dynamic gaps[^flink-win] | Static gap only[^flink-tvf] |
+| Key | At least one grouping column besides the window in streaming[^ss-types] | Keyed (`keyBy`) or non-keyed streams[^flink-win] | Optional `PARTITION BY` key columns[^flink-tvf] |
+| Time | Event time; processing time by windowing on `current_timestamp`[^builtin] | Event-time and processing-time variants[^flink-win] | Event or processing time attribute[^flink-tvf] |
+
+The two engines differ in batch support and in late data. Spark runs `session_window` in batch queries too, including a global session window, while Flink's `SESSION` TVF is not supported in batch mode.[^ss-types][^flink-tvf] In Spark, a record that arrives after the watermark has passed its session's end is not added to the session; Flink's DataStream session windows drop such records by default, and `allowedLateness` keeps windows open longer.[^ss-types][^flink-win]
+
+Kafka Streams also has session windows: sessions are periods of activity separated by an inactivity gap, and the process is called sessionization.[^kstreams]
+
+## See also
+
+- [Windowing (stream processing)](/wiki/Windowing_(stream_processing))
+- [Watermark](/wiki/Watermark)
+- [Output mode](/wiki/Output_mode)
+- [transformWithState](/wiki/TransformWithState)
+- [Structured Streaming](/wiki/Structured_Streaming)
+
+## References
+
+[^builtin]: [python/pyspark/sql/functions/builtin.py (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira]: [SPARK-10816: EventTime based sessionization (session window)](https://issues.apache.org/jira/browse/SPARK-10816). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^ss-types]: [Structured Streaming: Types of time windows (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#types-of-time-windows). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-win]: [Windows: Session Windows (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/dev/datastream/operators/windows/#session-windows). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-tvf]: [Windowing table-valued functions (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/sql/reference/queries/window-tvf/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^kstreams]: [Kafka Streams DSL (Apache Kafka 4.4)](https://kafka.apache.org/44/streams/developer-guide/dsl-api/). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,88 @@
+---
+title: "SparkSession"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark session, `spark` (the variable name in shells and notebooks)</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 2.0.0</Field>
+  <Field name="key_parts">Builder (`master`, `remote`, `appName`, `config`, `getOrCreate`), runtime configuration (`spark.conf`), catalog, DataFrame readers, SQL</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (Spark Classic and [Spark Connect](/wiki/Spark_Connect))</Field>
+  <Field name="related">[SparkContext](/wiki/SparkContext), [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark)), [Spark Connect](/wiki/Spark_Connect), [Lazy evaluation](/wiki/Lazy_evaluation)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 2.0.0 release notes, the v4.3.0 tag of apache/spark (python/pyspark/sql/session.py, python/pyspark/sql/connect/session.py, python/pyspark/shell.py, sql/api SparkSession.scala, docs/configuration.md, docs/spark-connect-overview.md, docs/spark-connect-gotchas.md) and a PySpark 4.3.0 run</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **SparkSession** is the entry point for programming with the DataFrame and Dataset API: it reads data, runs SQL, holds session configuration and temporary views, and gives access to the catalog.[^pysession] SparkSession was added in Spark 2.0.0 to replace `SQLContext` and `HiveContext`, which were kept for backward compatibility.[^r200] In Spark 4 the same SparkSession API exists in two forms: a classic session that runs inside the [driver](/wiki/Driver_(Apache_Spark)) next to a [SparkContext](/wiki/SparkContext), and a [Spark Connect](/wiki/Spark_Connect) session that is a thin client sending plans to a remote server.
+
+## How is a SparkSession created?
+
+Code creates or reuses a SparkSession through its builder. In PySpark the main builder methods are:
+
+- `master(url)`: the cluster manager URL for a classic session, for example `local[*]`.
+- `remote(url)`: the Spark Connect server URL, for example `sc://localhost:15002`; this makes the session a Connect session.
+- `appName(name)`: the application name shown in the web UI.
+- `config(key, value)`: any Spark setting; values are passed to both the `SparkConf` and the session's own configuration.
+- `enableHiveSupport()`: connect to a [Hive Metastore](/wiki/Hive_Metastore) for persistent tables (not implemented for Connect sessions).
+- `getOrCreate()`: return the existing global default session, applying the builder's options to it, or create a new one.[^pysession][^connsession]
+
+```python
+from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder
+    .master("local[*]")
+    .appName("orders-report")
+    .config("spark.sql.shuffle.partitions", "64")
+    .getOrCreate()
+)
+spark.sql("SELECT 1 AS x").show()
+```
+
+Interactive tools usually create the session in advance. The PySpark shell creates it at startup and prints "SparkSession available as 'spark'."; in such environments the API documentation says to use the builder to get the existing session.[^pyshell][^scalasession]
+
+Settings fall into two kinds. Runtime SQL settings such as `spark.sql.shuffle.partitions` can be changed at any time with `spark.conf.set`. Settings that shape the driver or executors, such as `spark.driver.memory` or `spark.executor.cores`, take effect only when the application starts; in client mode, driver memory must even be passed on the `spark-submit` command line.[^config]
+
+## How does SparkSession relate to SparkContext?
+
+A classic SparkSession wraps a [SparkContext](/wiki/SparkContext). The SparkContext is the connection to the cluster and owns the executors, the schedulers and the RDD API; only one SparkContext may be active per JVM.[^sc] Several SparkSessions can share that one SparkContext: `newSession()` returns a session with its own SQL configuration, temporary views and UDFs, but the same SparkContext and table cache.[^pysession] Spark Connect sessions gained `newSession()` in PySpark 4.3.0; the new Connect session starts empty against the same server.[^connsession]
+
+In classic mode, `spark.sparkContext` returns the underlying SparkContext. In the Spark 4.3.0 Scala API, the `sparkContext` member is marked `@ClassicOnly`, and in a PySpark Connect session, reading `spark.sparkContext` raises the error `JVM_ATTRIBUTE_NOT_SUPPORTED`.[^scalasession][^connsession]
+
+## Spark Connect sessions vs classic sessions
+
+A [Spark Connect](/wiki/Spark_Connect) SparkSession offers the same DataFrame and SQL API, but the client and the Spark driver are separate processes. The client builds unresolved logical plans and sends them over gRPC to a Spark Connect server, which analyzes and runs them.[^connect]
+
+|  | Classic SparkSession | Spark Connect SparkSession |
+| --- | --- | --- |
+| Where it runs | In the driver JVM (PySpark talks to it through Py4J) | In the client process; the driver runs on the Connect server[^connect] |
+| How it is created | `SparkSession.builder.master(...)` | `SparkSession.builder.remote("sc://host:port")`, or the `SPARK_REMOTE` environment variable[^pysession] |
+| Access to `SparkContext` and RDDs | Yes | No; SparkContext and the RDD API are not supported[^connect] |
+| When a query is analyzed | Eagerly, when each transformation is defined | Lazily, when the plan is needed: schema access, `explain`, persisting or an action[^gotchas] |
+| Static Spark configuration | Set by the application | Not accessible to the client[^connect] |
+| Client package for Python | `pyspark` | `pyspark`, or the lighter `pyspark-client`[^connect] |
+
+Spark 4.0.0 added the `spark.api.mode` setting (default `classic`). Set to `connect`, it makes a Spark Classic application start a local Spark Connect server and use a Connect session automatically.[^config]
+
+Spark Connect introduced session-scoped methods that cover tasks once done through the SparkContext: `addArtifacts` adds local files, Python files or archives to the session, and `addTag` with `interruptTag` or `interruptAll` cancels running operations. They were added in PySpark 3.5.0 for Connect and work in Spark Classic since 4.0.0.[^pysession]
+
+## See also
+
+- [SparkContext](/wiki/SparkContext)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))
+- [Lazy evaluation](/wiki/Lazy_evaluation)
+- [Catalyst optimizer](/wiki/Catalyst_optimizer)
+
+## References
+
+[^pysession]: [session.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/session.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r200]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connsession]: [connect/session.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/session.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pyshell]: [shell.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/shell.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scalasession]: [SparkSession.scala, sql/api (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/SparkSession.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sc]: [SparkContext.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/SparkContext.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^gotchas]: [Eager vs Lazy: Spark Connect vs Spark Classic (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-gotchas.html). *Apache Software Foundation*. Retrieved 2026-11-23.

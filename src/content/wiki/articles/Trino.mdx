@@ -1,0 +1,87 @@
+---
+title: "Trino"
+categories: ["Query engines"]
+---
+
+<Infobox type="software">
+  <Field name="developer">Trino Software Foundation and contributors</Field>
+  <Field name="initial_release">2019 (as PrestoSQL); renamed Trino in December 2020</Field>
+  <Field name="latest_release">484</Field>
+  <Field name="latest_release_date">2026-10-15</Field>
+  <Field name="written_in">Java</Field>
+  <Field name="type">Distributed SQL query engine</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[trino.io](https://trino.io)</Field>
+  <Field name="repo">[github.com/trinodb/trino](https://github.com/trinodb/trino)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Trino release notes (release 484) and the Trino 484 documentation</Verified>
+
+**Trino** is an open source distributed SQL query engine for analytical queries over large datasets. It does not store data itself; it queries data where it lives, through connectors for data lakes, [open table formats](/wiki/Open_table_format), relational databases and other systems.[^usecases][^concepts] Trino was known as PrestoSQL until December 2020, and it is supported by the Trino Software Foundation.[^rename]
+
+## History
+
+Dain Sundstrom, David Phillips and Martin Traverso joined the Facebook data infrastructure team in 2012 and created Presto there, to run low-latency interactive queries against the company's large Hadoop data warehouse.[^rename]
+
+According to the creators, it became clear in 2018 that Facebook management wanted tighter control over the project. In January 2019 they started the Presto Software Foundation as an independent entity to oversee the software and its community, and the project continued under the name PrestoSQL. In September 2019, Facebook established a separate Presto Foundation at the Linux Foundation.[^rename]
+
+On 27 December 2020, the creators announced that PrestoSQL was being renamed Trino. The announcement gives the reason as Facebook's application for a trademark on the name "Presto" and its enforcement, after attempts to agree on terms with Facebook and the Linux Foundation failed.[^rename]
+
+Trino releases are numbered with a single integer. Release 484, the latest at the time of writing, is dated 15 October 2026 in the release notes.[^release] Trino is licensed under the Apache License 2.0.[^rename]
+
+## Architecture
+
+A Trino cluster has one coordinator and zero or more workers. Users connect to the coordinator with their SQL client. The coordinator parses SQL statements, plans queries and manages the workers. Workers execute tasks and process data, fetching it from connectors and exchanging intermediate results with each other.[^concepts]
+
+A query runs as a hierarchy of stages that the coordinator builds as a distributed plan. Each stage runs as a set of tasks on workers, and tasks process splits, which are sections of a larger dataset.[^concepts]
+
+A connector adapts Trino to a data source, much like a database driver, by implementing Trino's service provider interface. A catalog is a set of configuration properties that uses a connector to reach one specific data source; the catalog name comes from the name of its properties file.[^concepts]
+
+## What Trino is not
+
+The Trino documentation states that Trino is not a general-purpose relational database and is not a replacement for databases such as MySQL, PostgreSQL or Oracle. It was not designed for online transaction processing (OLTP). It targets analytical workloads such as aggregating large datasets and producing reports.[^usecases]
+
+## Lakehouse connectors
+
+Trino's connector list includes connectors for [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi) and Hive, as well as connectors for relational databases, Kafka and other systems.[^n1]
+
+The Iceberg connector reads and writes data files in Avro, ORC and [Apache Parquet](/wiki/Apache_Parquet) format, with Parquet as the default. It supports `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE` and `MERGE` statements; row-level deletes need tables that use version 2 of the Iceberg specification.[^iceberg]
+
+The Iceberg connector supports table maintenance through `ALTER TABLE EXECUTE`, with procedures including `optimize`, `expire_snapshots` and `remove_orphan_files`. It exposes metadata tables such as `$snapshots`, `$history` and `$files`, and it supports time travel by snapshot ID, timestamp, branch or tag:[^iceberg]
+
+```sql
+SELECT *
+FROM example.testdb.customer_orders
+FOR VERSION AS OF 8954597067493422955;
+```
+
+## Catalog support
+
+The Iceberg connector needs a metastore or catalog. The property `iceberg.catalog.type` accepts the values `hive_metastore`, `glue`, `jdbc`, `rest`, `nessie` and `snowflake`.[^metastores]
+
+With the `rest` type, Trino connects to an [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) at the URI set in `iceberg.rest-catalog.uri`. The property `iceberg.rest-catalog.vended-credentials-enabled` controls whether Trino uses storage credentials supplied by the REST catalog; it defaults to false.[^metastores] Through this connector type Trino can use REST catalogs such as [Apache Polaris](/wiki/Apache_Polaris), whose site lists Trino among compatible engines, and the open source [Unity Catalog](/wiki/Unity_Catalog), whose documentation gives a Trino configuration for its Iceberg REST endpoint.[^n2][^n3]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Trino is a distributed engine for interactive SQL over shared tables. A single Trino cluster can define many catalogs with different or identical connectors, and one SQL query can read from more than one of them, so tables from different systems can be queried together.[^concepts]
+
+## See also
+
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [DuckDB](/wiki/DuckDB)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^usecases]: [Use cases](https://trino.io/docs/current/overview/use-cases.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^concepts]: [Trino concepts](https://trino.io/docs/current/overview/concepts.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^rename]: Martin Traverso, Dain Sundstrom and David Phillips. [We're rebranding PrestoSQL as Trino](https://trino.io/blog/2020/12/27/announcing-trino.html). *Trino Software Foundation*, 2020-12-27. Retrieved 2026-11-22.
+[^release]: [Release notes](https://trino.io/docs/current/release.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Connectors](https://trino.io/docs/current/connector.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^iceberg]: [Iceberg connector](https://trino.io/docs/current/connector/iceberg.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^metastores]: [Metastores](https://trino.io/docs/current/object-storage/metastores.html). *Trino Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Apache Polaris](https://polaris.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [Unity Catalog Trino integration](https://github.com/unitycatalog/unitycatalog/blob/main/docs/integrations/unity-catalog-trino.md). *Unity Catalog project*. Retrieved 2026-11-22.

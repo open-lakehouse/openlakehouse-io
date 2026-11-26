@@ -1,0 +1,137 @@
+---
+title: "Data Source V2"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Query engines"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">DSV2, DataSource V2 API, connector API</Field>
+  <Field name="field">Query engine extensibility</Field>
+  <Field name="key_parts">CatalogPlugin and TableCatalog, Table, ScanBuilder and Scan, WriteBuilder and BatchWrite, pushdown mix-ins</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark); used by [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) and the Spark JDBC source</Field>
+  <Field name="related">[Catalog plugin API (Spark)](/wiki/Catalog_plugin_API_(Spark)), [Predicate pushdown](/wiki/Predicate_pushdown), [Time travel (SQL)](/wiki/Time_travel_(SQL))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-v2-data-sources.md, the org.apache.spark.sql.connector Java interfaces and their @since tags, python/pyspark/sql/datasource.py), the Apache Iceberg 1.12.0 and Delta Lake Spark configuration docs, the Unity Catalog Spark integration guide, and the Spark 2.3.0, 3.0.0, 3.3.0, 3.5.0, 4.0.0 and 4.3.0 release notes</Verified>
+
+**Data Source V2** (**DSV2**) is the connector API of [Apache Spark](/wiki/Apache_Spark): a set of Java interfaces in the `org.apache.spark.sql.connector` package that lets an external system plug its catalogs, tables, reads and writes into Spark's query planning and execution.[^dsv2doc] A connector starts from a small core and opts in to features such as filter pushdown, columnar reads, row-level `DELETE`/`UPDATE`/`MERGE` and catalog support by implementing mix-in interfaces. The Spark documentation names the built-in JDBC source, [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) and Lance as users of the API.[^dsv2doc]
+
+## What problem does Data Source V2 solve?
+
+The earlier Data Source V1 API depended on Scala. Data Source V2 is a pure Java API, adds native catalog integration (namespaces, tables, views, functions and procedures), and lets a connector receive pushed-down filters, columns, aggregates, limits and offsets. A connector can also report its data layout so that Spark skips shuffles and sorts, or ask Spark to repartition and sort rows before a write.[^dsv2doc]
+
+Data Source V2 also unifies batch and streaming. The same `Table` abstraction serves batch reads, micro-batch and continuous streaming reads, and streaming writes, chosen by the capabilities the table declares.[^dsv2doc][^cap]
+
+## History
+
+Spark 2.3.0 introduced "Data source API V2" (SPARK-15689) as an experimental API and warned that breaking changes should be expected.[^r230] Spark 3.0.0 refactored the API (SPARK-25390) and added the catalog plugin API (SPARK-31121); the core interfaces `Table`, `TableProvider` and `TableCatalog` carry `@since 3.0.0`.[^r300][^table]
+
+Later releases extended the API rather than replacing it. Spark 3.3.0 added complete aggregate pushdown, top-N pushdown and the `AS OF` time travel syntax (SPARK-37219); Spark 3.5.0 added `MERGE` and `UPDATE` handling for delta-based and group-based sources.[^r330][^r350] Spark 4.0.0 added the Python Data Source API (SPARK-44076), a Python wrapper for lightweight connectors.[^r400] In 4.3.0 core interfaces such as `Table`, `TableCatalog` and `ScanBuilder` are annotated `@Evolving`, and some newer ones, such as `SupportsRowLevelOperations` and `SupportsRuntimeV2Filtering`, are `@Experimental`.[^tablejava][^tablecatalogjava][^scanbuilderjava][^rowlevel][^runtimefilter]
+
+## What are the entry points?
+
+A Data Source V2 connector enters Spark in one of two ways.[^dsv2doc]
+
+- **`TableProvider`** returns a `Table` from a map of options, such as a path or a Kafka topic. It is used with `spark.read.format(...)`. Built-in file sources add `SupportsCatalogOptions` so that option-based tables can take part in DDL through the session catalog.
+- **`CatalogPlugin`** is registered under a name with `spark.sql.catalog.<name>=<class>` and exposes a catalog of namespaces and tables (and optionally views, functions and procedures). Iceberg and Delta Lake use this route. See [Catalog plugin API (Spark)](/wiki/Catalog_plugin_API_(Spark)).
+
+## How does the read path work?
+
+A table that implements `SupportsRead` returns a `ScanBuilder`. Spark negotiates pushdown with the builder, calls `build()` to get a logical `Scan`, and turns that into a physical `Batch`. The `Batch` returns an array of `InputPartition` objects, one per Spark task, and a serializable `PartitionReaderFactory` that creates a `PartitionReader` on each [executor](/wiki/Executor). Readers return rows or columnar batches.[^dsv2doc]
+
+A `Scan` can add further mix-ins. `SupportsReportPartitioning` reports how output is partitioned, which enables storage-partitioned joins without a [shuffle](/wiki/Shuffle); `SupportsReportOrdering` reports sort order; `SupportsReportStatistics` feeds the cost-based optimizer; and `SupportsRuntimeV2Filtering` accepts filters at execution time for dynamic partition pruning.[^dsv2doc]
+
+## Which pushdown interfaces exist?
+
+Pushdown in Data Source V2 is a negotiation: Spark calls a method on the `ScanBuilder` with the operators, the connector returns what it cannot handle, and Spark evaluates the rest itself.[^dsv2doc] The documented order is sample, filter, aggregate, limit or top-N, offset, then column pruning.[^dsv2doc] See [Predicate pushdown](/wiki/Predicate_pushdown) for the general idea.
+
+| Mix-in on `ScanBuilder` | Pushes down | Since |
+| --- | --- | --- |
+| `SupportsPushDownRequiredColumns` | Column pruning | 3.0.0[^src-req] |
+| `SupportsPushDownFilters` | Filters as V1 `Filter` objects | 3.0.0[^src-f1] |
+| `SupportsPushDownV2Filters` | Filters as V2 `Predicate` expressions; preferred over the V1 variant | 3.3.0[^src-f2] |
+| `SupportsPushDownAggregates` | Aggregates and group-by | 3.2.0[^src-agg] |
+| `SupportsPushDownLimit`, `SupportsPushDownTopN` | `LIMIT`, and `ORDER BY` with `LIMIT` | 3.3.0[^src-lim] |
+| `SupportsPushDownTableSample` | `TABLESAMPLE` | 3.3.0[^src-sample] |
+| `SupportsPushDownOffset` | `OFFSET` | 3.4.0[^src-off] |
+| `SupportsPushDownJoin` | Joins whose two sides the same underlying source can process together (for example two JDBC scans on one server) | 4.1.0[^src-join] |
+
+## How does the write path work?
+
+A table that implements `SupportsWrite` returns a `WriteBuilder`. Mix-ins on the builder select the write mode: `SupportsTruncate`, `SupportsOverwriteV2` (overwrite rows matching a filter) and `SupportsDynamicOverwrite` (overwrite partitions). The builder produces a logical `Write`, which produces a `BatchWrite` or a `StreamingWrite`.[^dsv2doc]
+
+`BatchWrite` uses a two-phase commit. Each task's `DataWriter` commits or aborts its own part and returns a message; after all tasks finish, the driver calls `commit(messages)` or `abort(messages)`. Data from individual tasks should not be visible to readers until the driver commit succeeds.[^dsv2doc] A `Write` that implements `RequiresDistributionAndOrdering` makes Spark insert a shuffle and sort before writing, which table formats use for clustering.[^dsv2doc]
+
+For row-level DML, a table implements `SupportsRowLevelOperations`. Group-based sources (copy-on-write) rewrite whole files or partitions; delta-based sources (merge-on-read) accept a stream of row changes. Simpler deletes can go through `SupportsDeleteV2`, whose `canDeleteWhere` lets Spark fall back to a rewrite when the source cannot drop rows by predicate alone.[^dsv2doc] See [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read).
+
+## Example
+
+The Python Data Source API wraps Data Source V2 for connectors written in Python. This PySpark sketch defines a source with two input partitions, registers it and reads it:[^pyds]
+
+```python
+from pyspark.sql.datasource import DataSource, DataSourceReader, InputPartition
+
+class EvenOddSource(DataSource):
+    @classmethod
+    def name(cls):
+        return "even_odd"
+
+    def schema(self):
+        return "id INT"
+
+    def reader(self, schema):
+        return EvenOddReader(int(self.options.get("n", "10")))
+
+class EvenOddReader(DataSourceReader):
+    def __init__(self, n):
+        self.n = n
+
+    def partitions(self):
+        return [InputPartition(0), InputPartition(1)]   # one Spark task each
+
+    def read(self, partition):
+        for i in range(partition.value, self.n, 2):
+            yield (i,)
+
+spark.dataSource.register(EvenOddSource)
+spark.read.format("even_odd").option("n", "6").load().show()
+```
+
+## Use in an open lakehouse
+
+Open table formats reach Spark through Data Source V2. Iceberg registers `org.apache.iceberg.spark.SparkCatalog` and Delta Lake registers `org.apache.spark.sql.delta.catalog.DeltaCatalog` as Spark catalogs, and the Spark documentation lists both projects as users of the API.[^dsv2doc][^icecfg][^deltabatch] [Unity Catalog](/wiki/Unity_Catalog) OSS connects to Spark through its own catalog class, `io.unitycatalog.spark.UCSingleCatalog`.[^ucspark]
+
+## See also
+
+- [Catalog plugin API (Spark)](/wiki/Catalog_plugin_API_(Spark))
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Time travel (SQL)](/wiki/Time_travel_(SQL))
+- [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^dsv2doc]: [Data Source V2 (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-v2-data-sources.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^cap]: [TableCapability.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/TableCapability.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r230]: [Spark Release 2.3.0](https://spark.apache.org/releases/spark-release-2-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r300]: [Spark Release 3.0.0](https://spark.apache.org/releases/spark-release-3-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^table]: [Table.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/Table.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r330]: [Spark Release 3.3.0](https://spark.apache.org/releases/spark-release-3-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tablejava]: [Table.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/Table.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tablecatalogjava]: [TableCatalog.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/TableCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scanbuilderjava]: [ScanBuilder.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/ScanBuilder.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rowlevel]: [SupportsRowLevelOperations.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/SupportsRowLevelOperations.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^runtimefilter]: [SupportsRuntimeV2Filtering.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsRuntimeV2Filtering.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-req]: [SupportsPushDownRequiredColumns.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownRequiredColumns.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-f1]: [SupportsPushDownFilters.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownFilters.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-f2]: [SupportsPushDownV2Filters.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownV2Filters.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-agg]: [SupportsPushDownAggregates.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownAggregates.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-lim]: [SupportsPushDownTopN.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownTopN.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-sample]: [SupportsPushDownTableSample.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownTableSample.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-off]: [SupportsPushDownOffset.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownOffset.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^src-join]: [SupportsPushDownJoin.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownJoin.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pyds]: [datasource.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/datasource.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icecfg]: [Spark Configuration (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/spark-configuration/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^deltabatch]: [Table batch reads and writes](https://docs.delta.io/latest/delta-batch.html). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^ucspark]: [Unity Catalog Apache Spark integration](https://unitycatalog.io/docs/integrations/unity-catalog-spark/). *Unity Catalog (LF AI & Data)*. Retrieved 2026-11-23.

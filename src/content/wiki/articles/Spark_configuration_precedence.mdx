@@ -1,0 +1,118 @@
+---
+title: "Spark configuration precedence"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark property precedence</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">`spark-defaults.conf`, `--properties-file`, `--conf`, `SparkConf`, session configuration, SQL `SET`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[spark-submit](/wiki/Spark-submit), [Spark Connect](/wiki/Spark_Connect), [Executor](/wiki/Executor)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/configuration.md, docs/submitting-applications.md, docs/sql-migration-guide.md, docs/spark-connect-overview.md, SQLConf.scala, StaticSQLConf.scala, classic/RuntimeConfig.scala, python/pyspark/sql/session.py and conf.py) and SPARK-48392</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **configuration precedence** is the order in which Spark merges property values from the defaults file, the `spark-submit` command line and application code, and the rule that decides which of those values can still change after the application has started.[^config] Values set on a `SparkConf` in code win over `--conf` flags, which win over `spark-defaults.conf`.[^config] Once the application runs, only runtime SQL configurations can be changed per session, with `spark.conf.set` or the SQL `SET` command.[^config]
+
+## What is the order of precedence for Spark properties?
+
+Spark reads properties from several places when an application starts and merges them. The Spark 4.3.0 configuration guide gives this order, highest first:[^config]
+
+| Rank | Source | Example |
+| --- | --- | --- |
+| 1 (highest) | Properties set directly on a `SparkConf` or the `SparkSession` builder in application code | `SparkSession.builder.config("spark.sql.shuffle.partitions", "64")` |
+| 2 | Flags passed to `spark-submit`, `spark-shell` or `pyspark`: `--conf`/`-c`, dedicated flags such as `--master` or `--executor-memory`, and a file given with `--properties-file` | `--conf spark.eventLog.enabled=true` |
+| 3 (lowest) | `conf/spark-defaults.conf` under `SPARK_HOME` or `SPARK_CONF_DIR` | `spark.executor.memory 4g` |
+
+Any property that none of these sources sets keeps its built-in default. The Environment tab of the Spark UI lists only values that were set explicitly through `spark-defaults.conf`, `SparkConf` or the command line.[^config]
+
+When a configuration key has been renamed in a newer Spark version, Spark still accepts the old name, but any value under the new name takes precedence over the old one.[^config]
+
+## How do spark-defaults.conf and --properties-file interact?
+
+By default `spark-submit` reads `conf/spark-defaults.conf`, a file with one whitespace-separated key and value per line.[^config] Setting `SPARK_CONF_DIR` makes Spark read `spark-defaults.conf`, `spark-env.sh` and `log4j2.properties` from another directory instead of `SPARK_HOME/conf`.[^config]
+
+When a file is passed with `--properties-file`, Spark no longer loads `spark-defaults.conf` unless the `--load-spark-defaults` flag is also given. With both, values in the `--properties-file` file take precedence over those in `spark-defaults.conf`.[^submit][^ssargs] The `--load-spark-defaults` flag was added in Spark 4.0.0 by SPARK-48392.[^n1] Within rank 2, `SparkSubmitArguments` at the v4.3.0 tag gives `--conf` values priority over the `--properties-file` file, and that file priority over `spark-defaults.conf`; a dedicated flag such as `--master` wins over the same property passed as `--conf spark.master`.[^ssargs]
+
+To see which source supplied a value, the Spark documentation recommends running `spark-submit` with `--verbose`.[^submit]
+
+## Which properties must be set before the application starts?
+
+Spark's configuration guide divides properties into two kinds. Deploy-related properties, such as `spark.driver.memory` and `spark.executor.instances`, may have no effect when set in code at runtime, so the guide recommends setting them in a configuration file or on the `spark-submit` command line. Runtime-control properties, such as `spark.task.maxFailures`, can be set either way.[^config]
+
+The driver's JVM settings are the most common case. In client deploy mode, `spark.driver.memory` (default `1g`) and `spark.driver.extraJavaOptions` must not be set through `SparkConf` in the application, because the driver JVM has already started when that code runs. They must be given with `--driver-memory`, `--driver-java-options` or the defaults file instead.[^config]
+
+## What can change at runtime?
+
+Spark SQL configurations come in two kinds:[^config]
+
+- **Runtime SQL configurations** are per session and mutable. They take initial values from the defaults file, `--conf` or the `SparkConf` used to build the session, and can then be read and changed with `spark.conf.get`/`spark.conf.set`, the SQL `SET` command, and reset with `RESET`. `spark.sql.shuffle.partitions` (default 200) is an example.[^config][^sqlconf]
+- **Static SQL configurations** are shared by all sessions and fixed once the first session starts. They can be read with `spark.conf.get` or `SET key`, but not set or unset. `spark.sql.extensions` and `spark.sql.warehouse.dir` are static.[^config][^n2]
+
+In Spark 4.3.0, `spark.conf.set` on a static SQL key fails with the error condition `CANNOT_MODIFY_STATIC_CONFIG`, and on a Spark core key (one registered as a `SparkConf` entry, such as `spark.executor.memory`) it fails with `CANNOT_MODIFY_CONFIG`.[^rtconf] The SQL `SET` command has rejected Spark core keys since Spark 3.0; before 3.0 it accepted them silently with no effect. The internal flag `spark.sql.legacy.setCommandRejectsSparkCoreConfs` controls this check: it defaults to `true`, and setting it to `false` restores the old behavior.[^migration][^sqlconf]
+
+PySpark has a method that answers the question directly: `spark.conf.isModifiable(key)`, added in PySpark 2.4.0, returns whether a key can be changed in the current session.[^n3]
+
+## Example
+
+The following PySpark code runs against Spark 4.3.0 in classic mode. It reads one runtime and one static SQL configuration, changes the runtime one in two equivalent ways, and checks which keys can be changed.
+
+```python
+from pyspark.sql import SparkSession
+
+spark = (SparkSession.builder
+         .appName("conf-demo")
+         .config("spark.sql.shuffle.partitions", "64")   # rank 1: code
+         .getOrCreate())
+
+print(spark.conf.get("spark.sql.shuffle.partitions"))   # '64'
+
+spark.conf.set("spark.sql.shuffle.partitions", "32")    # runtime SQL conf: allowed
+spark.sql("SET spark.sql.shuffle.partitions=16")        # same effect in SQL
+
+print(spark.conf.isModifiable("spark.sql.shuffle.partitions"))  # True
+print(spark.conf.isModifiable("spark.sql.extensions"))          # False (static)
+```
+
+The same changes in Spark SQL:
+
+```sql
+SET spark.sql.shuffle.partitions=16;   -- change for this session
+SET spark.sql.shuffle.partitions;      -- show the current value
+RESET spark.sql.shuffle.partitions;    -- back to the value the session started with
+```
+
+The `SET` command sets, shows or lists SQL configuration properties; `SET -v` also prints each property's meaning.[^n4]
+
+## How do sessions share configuration?
+
+In PySpark, `SparkSession.builder.getOrCreate()` returns the existing global default session if there is one, and applies the options given to the builder to that existing session.[^session] `spark.newSession()` returns a session with its own SQL configuration, temporary views and UDFs, sharing the `SparkContext` and the table cache.[^session] Runtime SQL configurations are therefore per session, while Spark core properties belong to the whole application.
+
+## How does Spark Connect change this?
+
+A [Spark Connect](/wiki/Spark_Connect) client gets a session on a remote Spark server and has no access to the static Spark configuration or the `SparkContext`; it cannot change settings that affect every client of that server.[^connect] In practice a Spark Connect client can set runtime SQL configurations for its own session, and cluster-level properties are set where the server is started.
+
+## See also
+
+- [spark-submit](/wiki/Spark-submit)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Executor](/wiki/Executor)
+- [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))
+- [Spark on YARN](/wiki/Spark_on_YARN)
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+
+## References
+
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^submit]: [Submitting Applications (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/submitting-applications.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ssargs]: [SparkSubmitArguments.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/SparkSubmitArguments.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-48392: Load spark-defaults.conf when passing configurations to spark-submit through --properties-file](https://issues.apache.org/jira/browse/SPARK-48392). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [StaticSQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/StaticSQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rtconf]: [classic/RuntimeConfig.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/classic/RuntimeConfig.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: SQL, Datasets and DataFrame (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [python/pyspark/sql/conf.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/conf.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [SET (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-aux-conf-mgmt-set.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^session]: [python/pyspark/sql/session.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/session.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.

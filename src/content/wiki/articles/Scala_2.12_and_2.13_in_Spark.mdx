@@ -1,0 +1,88 @@
+---
+title: "Scala 2.12 and 2.13 in Spark"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Scala binary version; Scala cross-build</Field>
+  <Field name="field">Build and dependency management</Field>
+  <Field name="introduced">Scala 2.12 builds in Spark 2.4.0; Scala 2.13 builds in Spark 3.2.0</Field>
+  <Field name="key_parts">Scala binary version, artifact suffix (`_2.12`, `_2.13`), Maven profiles</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">pom.xml at the v2.4.0, v3.0.0, v3.2.0, v3.5.0, v4.0.0 and v4.3.0 tags of apache/spark, docs/index.md and docs/building-spark.md at v3.5.0 and v4.3.0, the Spark 3.2.0, 3.5.0 and 4.0.0 release notes, SPARK-14220, SPARK-26132, SPARK-25075, SPARK-34218, SPARK-43836 and SPARK-45314, gradle.properties at apache-iceberg-1.12.0, and the Scala binary compatibility documentation</Verified>
+
+<Status level="removed">Removed in Apache Spark 4.0.0. Use Scala 2.13 instead. This status is for Scala 2.12 support. Spark 3.5.0 announced the removal, and from Spark 4.0.0 Scala 2.13 is the only Scala version Spark is built for.[^s45314]</Status>
+
+**Scala 2.12 and 2.13 in Spark** refers to the two Scala versions that [Apache Spark](/wiki/Apache_Spark) was built for during the Spark 3 series, and to the requirement that Scala and Java applications, libraries and connectors use the same Scala version as the Spark build they run on.[^index43] Spark 3.2.0 to 3.5.x published artifacts for both Scala 2.12 and 2.13, with 2.12 as the default build. Spark 4.0.0 removed Scala 2.12, so every Spark 4 release is built only for Scala 2.13.[^s45314] The version shows up in artifact names such as `spark-sql_2.13`, and it has to match for every jar that contains Scala code, including connectors and table format runtimes.
+
+## Status
+
+Scala 2.12 support was removed in Spark 4.0.0 by SPARK-45314, "Drop Scala 2.12 and make Scala 2.13 by default".[^s45314][^r400] The Spark 3.5.0 release notes had announced it in an "Upcoming Removal" section, which said that support for Scala 2.12 would be removed in the next major release and that the minimum Scala version would be 2.13.[^r350] An earlier proposal to make 2.13 the default already in Spark 3.5 (SPARK-43836) was closed as Won't Do.[^s43836]
+
+At the v4.3.0 tag, the root `pom.xml` sets Scala 2.13.18 with binary version 2.13 and defines only a `scala-2.13` profile; there is no Scala 2.12 or Scala 3 build.[^pom430] The Spark 4.3.0 documentation says that Spark runs on Scala 2.13 and that applications using the Scala API must use the Scala version Spark was compiled for, which since Spark 4.0.0 is 2.13.[^index43]
+
+## History
+
+| Spark release | Default Scala build | Other Scala build | Change |
+| --- | --- | --- | --- |
+| 2.4.0 | 2.11 | 2.12 | Scala 2.12 build added (SPARK-14220)[^s14220][^pom240] |
+| 3.0.0 | 2.12 | None published (2.13 artifacts came in 3.2.0) | Scala 2.11 removed (SPARK-26132)[^s26132] |
+| 3.2.0 | 2.12 | 2.13 | Scala 2.13 build and published artifacts (SPARK-25075, SPARK-34218)[^s25075][^r320] |
+| 3.5.0 | 2.12 | 2.13 | Removal of 2.12 announced for the next major release[^r350] |
+| 4.0.0 | 2.13 | None | Scala 2.12 removed (SPARK-45314)[^s45314] |
+| 4.3.0 | 2.13 | None | No change; Scala 2.13.18[^pom430] |
+
+In the Spark 3 series the 2.13 build was an alternative, not the default. The Spark 3.5.0 build documentation lists Scala 2.12 and 2.13 as supported and explains that switching requires `./dev/change-scala-version.sh 2.13` and the `scala-2.13` Maven or sbt profile.[^build350][^pom350]
+
+## Why the Scala version matters
+
+Scala's binary compatibility guarantee covers releases within one series, such as 2.13.x, and not across series, so code compiled for Scala 2.12 is not guaranteed to run with the Scala 2.13 library.[^scalabc] For that reason Scala libraries are published once per Scala binary version, with the version appended to the artifact name, and Spark follows the same convention: `spark-core_2.12` and `spark-core_2.13` are separate artifacts.[^pom350] The Spark 3.5.0 documentation gives the rule directly: when using Scala 2.13, use Spark compiled for 2.13 and compile applications for 2.13 as well.[^index350]
+
+The rule reaches beyond user code. Connector and table format jars that contain Scala code are built per Scala version too. For example, the [Apache Iceberg](/wiki/Apache_Iceberg) documentation lists Spark runtime jars such as `iceberg-spark-runtime-3.5_2.12` and `iceberg-spark-runtime-3.5_2.13`, where the first number is the Spark version and the suffix is the Scala version; at apache-iceberg-1.12.0 the build knows Scala 2.12 and 2.13 and Spark 3.5, 4.0, 4.1 and 4.2.[^icegradle] Adding a `_2.12` connector to a Spark 4 cluster is a mismatch, because no Spark 4 build uses Scala 2.12.
+
+Python users of PySpark and clients of [Spark Connect](/wiki/Spark_Connect) do not compile against Spark's Scala classes, so the Scala version is mostly invisible to them. It still matters when they add JVM packages to the server or session, for example with `--packages`, because those jars load into the Scala 2.13 JVM.
+
+## Example
+
+A Maven dependency for Spark SQL 4.3.0 names the Scala binary version in the artifact ID:[^pom430]
+
+```xml
+<dependency>
+  <groupId>org.apache.spark</groupId>
+  <artifactId>spark-sql_2.13</artifactId>
+  <version>4.3.0</version>
+  <scope>provided</scope>
+</dependency>
+```
+
+The equivalent sbt line is `"org.apache.spark" %% "spark-sql" % "4.3.0" % "provided"` with `scalaVersion` set to a 2.13 release; the `%%` operator appends the project's Scala binary version to the artifact name.[^sbt]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+
+## References
+
+[^s45314]: [SPARK-45314: Drop Scala 2.12 and make Scala 2.13 by default](https://issues.apache.org/jira/browse/SPARK-45314). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^index43]: [Overview (docs/index.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/index.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^s43836]: [SPARK-43836: Make Scala 2.13 as default Scala version in Spark 3.5](https://issues.apache.org/jira/browse/SPARK-43836). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^pom430]: [pom.xml (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/pom.xml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^s14220]: [SPARK-14220: Build and test Spark against Scala 2.12](https://issues.apache.org/jira/browse/SPARK-14220). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^pom240]: [pom.xml (Apache Spark v2.4.0)](https://github.com/apache/spark/blob/v2.4.0/pom.xml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^s26132]: [SPARK-26132: Remove support for Scala 2.11 in Spark 3.0.0](https://issues.apache.org/jira/browse/SPARK-26132). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^s25075]: [SPARK-25075: Build and test Spark against Scala 2.13](https://issues.apache.org/jira/browse/SPARK-25075). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^r320]: [Spark Release 3.2.0](https://spark.apache.org/releases/spark-release-3-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^build350]: [Building Spark (docs/building-spark.md at v3.5.0)](https://github.com/apache/spark/blob/v3.5.0/docs/building-spark.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^pom350]: [pom.xml (Apache Spark v3.5.0)](https://github.com/apache/spark/blob/v3.5.0/pom.xml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^scalabc]: [Binary Compatibility of Scala Releases](https://docs.scala-lang.org/overviews/core/binary-compatibility-of-scala-releases.html). *Scala Center / EPFL*. Retrieved 2026-11-22.
+[^index350]: [Overview (docs/index.md at v3.5.0)](https://github.com/apache/spark/blob/v3.5.0/docs/index.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icegradle]: [gradle.properties (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/gradle.properties). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sbt]: [Library Dependencies](https://www.scala-sbt.org/1.x/docs/Library-Dependencies.html). *sbt*. Retrieved 2026-11-22.

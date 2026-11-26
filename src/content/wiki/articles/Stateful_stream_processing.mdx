@@ -1,0 +1,86 @@
+---
+title: "Stateful stream processing"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Stateful streaming</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Keyed state, timers, time-to-live (TTL), [watermark](/wiki/Watermark), fault-tolerant state storage</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) (built-in stateful operators, [transformWithState](/wiki/TransformWithState)), [Apache Flink](/wiki/Apache_Flink) (keyed state, `KeyedProcessFunction`), Kafka Streams</Field>
+  <Field name="related">[State store](/wiki/State_store), [RocksDB state store](/wiki/RocksDB_state_store), [Streaming checkpoint](/wiki/Streaming_checkpoint), [mapGroupsWithState and flatMapGroupsWithState](/wiki/MapGroupsWithState_and_flatMapGroupsWithState)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (arbitrary stateful operations, unsupported operations) and transformWithState guide, `SQLConf.scala` at tag v4.3.0 of apache/spark, SPARK-40925, the Databricks "What is stateful streaming?" page, and the Apache Flink 2.3 "Working with State", "Process Function", "State Backends" and "State Schema Evolution" pages</Verified>
+
+**Stateful stream processing** is stream processing in which the result for a record depends on information kept from earlier records, such as a running count, the last value seen for a key, or rows waiting for a join partner. The engine stores this **state**, usually partitioned by key, saves it to durable storage so it survives failures, and removes it when it is no longer needed. In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), state is held in a [state store](/wiki/State_store) and used by built-in operators (aggregations, deduplication, stream-stream joins) and by the [transformWithState](/wiki/TransformWithState) operator for custom logic.[^ss-store][^tws]
+
+## What is the difference between stateless and stateful streaming?
+
+A stateless query handles each record on its own: filters, projections, parsing, and joins with a static table. The only thing a stateless Structured Streaming query tracks is which input has been processed. A stateful query updates intermediate state in every batch.[^db-stateful] State makes results possible that depend on history, but it costs memory and storage, adds checkpointing time, and fixes parts of the query for the life of its checkpoint.
+
+## What are state, timers and TTL?
+
+**State** is data kept per key between records. In Spark's built-in operators, the engine decides what to keep: partial aggregates per group and window, the keys already seen for deduplication, or buffered rows for a join.[^ss-store]
+
+A **timer** is a callback that the application registers for a future time, so that it can act when nothing arrives, for example to close a session or raise an alert after silence. An event-time timer fires when the [watermark](/wiki/Watermark) passes its time; a processing-time timer fires when the wall clock does.[^flink-pf]
+
+**Time-to-live (TTL)** makes state expire a set time after it was written, so that state for keys that go quiet does not stay forever. Both Spark and Flink measure state TTL in processing time.[^tws][^flink-state]
+
+## How does Structured Streaming handle state?
+
+Most stateful Spark queries use built-in operators, and Spark manages their state. Streaming aggregations, `dropDuplicates` and stream-stream joins keep state per key in the state store and use the watermark to drop state that can no longer change; see [Watermark](/wiki/Watermark), [Streaming deduplication](/wiki/Streaming_deduplication) and [Stream-stream join](/wiki/Stream-stream_join).[^ss-store]
+
+For logic that does not fit them, Spark has arbitrary stateful operators. `mapGroupsWithState` and `flatMapGroupsWithState` date from Spark 2.2 and are now called legacy; since Spark 4.0, the guide encourages `transformWithState` instead.[^ss-arb] In transformWithState, a stateful processor class declares named state variables of three types, **ValueState**, **ListState** and **MapState**, registers timers, sets optional TTL per variable and can be seeded with an initial state DataFrame. It is available in Scala, Java and Python.[^tws]
+
+transformWithState timers can be listed, added and removed; a key can have several; and timers are checkpointed, so they can fire after a restart. TTL works only with `TimeMode.ProcessingTime`.[^tws] The operator requires the [RocksDB state store](/wiki/RocksDB_state_store).
+
+Since Spark 3.4.0, a query can chain several stateful operators, for example an aggregation followed by a stream-stream join, in append mode. Late records are then filtered against the watermark of the previous micro-batch; `spark.sql.streaming.statefulOperator.allowMultiple=false` restores the earlier behavior with a single stateful operator.[^jira40925][^sqlconf] Chaining stateful operators is not supported in update or complete [output mode](/wiki/Output_mode).[^ss-unsup]
+
+## How does Flink handle state?
+
+[Apache Flink](/wiki/Apache_Flink)'s **keyed state** is scoped to the key of the current record and is available only on a `KeyedStream`, created with `keyBy`. The state primitives are `ValueState`, `ListState`, `ReducingState`, `AggregatingState` and `MapState`, each created from a state descriptor.[^flink-state]
+
+Flink timers are registered through the `TimerService` of a `KeyedProcessFunction`. When a timer fires, `onTimer` runs with state scoped to the key that set the timer.[^flink-pf]
+
+Flink TTL is configured with a `StateTtlConfig` on any keyed state type, with per-entry TTL for list elements and map entries. The update type (by default `OnCreateAndWrite`) decides when the TTL is refreshed, and the visibility setting decides whether expired values that have not been cleaned up yet can still be read. Only processing-time TTL is supported.[^flink-state] Flink keeps state in a state backend: the heap-based `HashMapStateBackend` by default, or the `EmbeddedRocksDBStateBackend`.[^flink-sb]
+
+## transformWithState vs Flink keyed state
+
+|  | Spark `transformWithState` | Flink keyed state with `KeyedProcessFunction` |
+| --- | --- | --- |
+| Programming model | A `StatefulProcessor` class with `init`, `handleInputRows`, `handleExpiredTimer`, `handleInitialState` and `close`[^tws] | A `KeyedProcessFunction` with `processElement` and `onTimer`[^flink-pf] |
+| Input per call | All rows of a key in the micro-batch (one row in Real-time Mode)[^tws] | One record[^flink-pf] |
+| State types | ValueState, ListState, MapState[^tws] | ValueState, ListState, ReducingState, AggregatingState, MapState[^flink-state] |
+| Timers | Processing-time and event-time, several per key, checkpointed[^tws] | Processing-time and event-time through the `TimerService`[^flink-pf] |
+| TTL | Per state variable, processing time only[^tws] | Per state descriptor with `StateTtlConfig`, processing time only, per entry for collections[^flink-state] |
+| Storage | RocksDB state store, required[^tws] | Heap (`HashMapStateBackend`, default) or RocksDB[^flink-sb] |
+| State schema changes | State variables can be added or removed; value fields can evolve with Avro encoding[^tws] | Migrated automatically when a job is restored from a savepoint with changed state types, for serializers that support it[^flink-se] |
+
+## What does state cost?
+
+State has to be stored, checkpointed and restored. Databricks advises setting the number of shuffle partitions to one to two times the number of cluster cores for stateful queries, and notes that the partition count is fixed when the checkpoint is created.[^db-stateful] In open source Spark, `spark.sql.shuffle.partitions` and the state store provider cannot change between restarts from the same checkpoint.[^misc] See [Streaming checkpoint](/wiki/Streaming_checkpoint) for what else is fixed.
+
+## See also
+
+- [transformWithState](/wiki/TransformWithState)
+- [State store](/wiki/State_store)
+- [RocksDB state store](/wiki/RocksDB_state_store)
+- [Watermark](/wiki/Watermark)
+- [Stream-stream join](/wiki/Stream-stream_join)
+- [Streaming deduplication](/wiki/Streaming_deduplication)
+
+## References
+
+[^ss-store]: [Structured Streaming: State Store (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#state-store). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tws]: [Structured Streaming: transformWithState (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-transform-with-state.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^db-stateful]: [What is stateful streaming?](https://docs.databricks.com/aws/en/structured-streaming/stateful-streaming). *Databricks*. Retrieved 2026-11-23.
+[^flink-pf]: [Process Function (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/dev/datastream/operators/process_function/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-state]: [Working with State (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/dev/datastream/fault-tolerance/state/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-arb]: [Structured Streaming: Arbitrary Stateful Operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#arbitrary-stateful-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira40925]: [SPARK-40925: Fix late record filtering to support chaining of stateful operators](https://issues.apache.org/jira/browse/SPARK-40925). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-unsup]: [Structured Streaming: Unsupported Operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#unsupported-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-sb]: [State Backends (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/ops/state/state_backends/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-se]: [State Schema Evolution (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/dev/datastream/fault-tolerance/serialization/schema_evolution/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^misc]: [Structured Streaming: Miscellaneous Notes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/additional-information.html). *Apache Software Foundation*. Retrieved 2026-11-23.

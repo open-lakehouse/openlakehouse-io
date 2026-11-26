@@ -1,0 +1,97 @@
+---
+title: "Encoder (Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">`Encoder[T]`, Dataset encoder</Field>
+  <Field name="field">Serialization in distributed data processing</Field>
+  <Field name="introduced">Spark 1.6.0</Field>
+  <Field name="key_parts">A schema (`StructType`), a class tag, generated serializer and deserializer code</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (Scala and Java APIs)</Field>
+  <Field name="related">[Dataset (Spark)](/wiki/Dataset_(Spark)), [DataFrame](/wiki/DataFrame), [Project Tungsten](/wiki/Project_Tungsten), [Spark Connect](/wiki/Spark_Connect), [Apache Arrow](/wiki/Apache_Arrow)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (Encoder.scala, Encoders.scala, AgnosticEncoder.scala, ExpressionEncoder.scala, Dataset.scala, sql/connect/common/.../client/arrow/ArrowSerializer.scala and ArrowDeserializer.scala, docs/sql-getting-started.md, docs/sql-programming-guide.md)</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), an **encoder** is the object that converts a JVM object of type `T` to and from Spark SQL's internal row representation; every typed [Dataset](/wiki/Dataset_(Spark)) needs one for its element type.[^encoder] The encoder tells Spark the schema of `T` and lets it generate code at runtime that serializes objects into a compact binary format.[^dataset] Encoders are part of the Scala and Java APIs; PySpark has no Dataset API and so no encoders.[^guide]
+
+## What does an encoder do?
+
+An encoder maps the type `T` to Spark's internal type system. For a class `Person` with a string field `name` and an integer field `age`, the encoder tells Spark to generate code that writes each `Person` into a binary structure, which usually takes less memory than the objects and is laid out for efficient processing.[^dataset]
+
+The public interface is small. `trait Encoder[T]`, available since Spark 1.6.0, has two members: `schema`, the `StructType` that a `T` becomes as a row, and `clsTag`, a `ClassTag` used to build arrays of `T`. Encoders must be thread-safe.[^encoder]
+
+## How is an encoder different from Java or Kryo serialization?
+
+[RDDs](/wiki/RDD) serialize their elements with Java serialization or Kryo. Both encoders and those serializers turn objects into bytes, but encoders are generated dynamically and use a format that lets Spark filter, sort and hash the data without deserializing it back into objects.[^started] Because the encoder also gives Spark a schema, a Dataset of case classes shows up with ordinary named columns that Spark SQL can query.[^encoder]
+
+## How do you get an encoder?
+
+In Scala, encoders are usually provided implicitly by `import spark.implicits._`, which covers primitive types such as `Int` and `String` and product types such as case classes. If no encoder is found, compilation fails with the message "Unable to find encoder for type T", which points to that import.[^encoder]
+
+```scala
+import org.apache.spark.sql.{Encoder, Encoders}
+
+case class Order(id: Long, customer: String, amount: Double)
+
+import spark.implicits._
+val orders = Seq(Order(1L, "acme", 120.0), Order(2L, "globex", 75.5)).toDS()
+orders.printSchema()     // id: long, customer: string, amount: double
+
+val enc: Encoder[Order] = Encoders.product[Order]
+println(enc.schema.simpleString)   // struct<id:bigint,customer:string,amount:double>
+```
+
+In Java, encoders are passed explicitly, taken from static methods on `Encoders`, for example `spark.createDataset(data, Encoders.STRING())`. Encoders can be combined into tuples with `Encoders.tuple` or derived from a Java Bean with `Encoders.bean(MyClass.class)`.[^encoder]
+
+## Which encoders does the Encoders object provide?
+
+| Method | Encodes | Since |
+| --- | --- | --- |
+| `BOOLEAN`, `INT`, `LONG`, `DOUBLE`, `STRING`, `DECIMAL`, `DATE`, `TIMESTAMP` and other primitives | Boxed Java types and `java.sql` date and time types, one column each | 1.6.0 |
+| `BINARY` | `Array[Byte]` | 1.6.1 |
+| `LOCALDATE`, `INSTANT` | `java.time.LocalDate`, `java.time.Instant` | 3.0.0 |
+| `DURATION`, `PERIOD` | `java.time.Duration`, `java.time.Period` (interval types) | 3.2.0 |
+| `LOCALDATETIME` | `java.time.LocalDateTime` | 3.4.0 |
+| `row(schema)` | A generic `Row` with the given schema | 3.5.0 |
+| `CHAR(n)`, `VARCHAR(n)` | Strings with a length limit | 4.0.0 |
+| `LOCALTIME`, `GEOMETRY`, `GEOGRAPHY` | `java.time.LocalTime` and geospatial types | 4.1.0 |
+| `bean(Class)` | A Java Bean, field by field | 1.6.0 |
+| `kryo`, `javaSerialization` | Any public type, as a single binary column | 1.6.0 |
+
+The methods and versions are taken from the `@since` tags in `Encoders.scala` at v4.3.0.[^encoders]
+
+The `kryo` and `javaSerialization` encoders store the whole object as one binary field, so Spark cannot see or prune its fields. The source describes Java serialization as extremely inefficient and to be used only as a last resort.[^encoders]
+
+## How do encoders work inside Spark?
+
+At v4.3.0 the encoders returned by `Encoders`, such as `StringEncoder` behind `Encoders.STRING`, are `AgnosticEncoder` instances.[^encoders] An `AgnosticEncoder` holds all the information about a type, such as its fields, options, arrays and maps, without fixing how the conversion is done, so different implementations can be generated from it.[^agnostic]
+
+In classic Spark, the engine builds an `ExpressionEncoder` from it: a serializer and a deserializer written as Catalyst expressions, which convert an object to an `InternalRow` and back and take part in code generation.[^expr] In the [Spark Connect](/wiki/Spark_Connect) Scala client, the same `AgnosticEncoder` drives an `ArrowSerializer` and `ArrowDeserializer` that convert user objects to and from [Apache Arrow](/wiki/Apache_Arrow) batches.[^n1][^n2]
+
+## Why does PySpark have no encoders?
+
+PySpark has no typed Dataset, so it has nothing for an encoder to describe. Spark's documentation explains that compile-time type safety is not a feature of Python, and that the DataFrame, a Dataset of `Row`, is the main abstraction there.[^guide][^n3] A PySpark [DataFrame](/wiki/DataFrame) carries a schema of named, typed columns instead; Python logic over rows runs in [user-defined functions](/wiki/User-defined_function_(Spark)).
+
+## See also
+
+- [Dataset (Spark)](/wiki/Dataset_(Spark))
+- [DataFrame](/wiki/DataFrame)
+- [RDD](/wiki/RDD)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Project Tungsten](/wiki/Project_Tungsten)
+- [User-defined function (Spark)](/wiki/User-defined_function_(Spark))
+
+## References
+
+[^encoder]: [Encoder.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Encoder.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dataset]: [Dataset.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Dataset.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^guide]: [Spark SQL, DataFrames and Datasets Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^started]: [Getting Started (Spark SQL, Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-getting-started.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^encoders]: [Encoders.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Encoders.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^agnostic]: [AgnosticEncoder.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/catalyst/encoders/AgnosticEncoder.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^expr]: [ExpressionEncoder.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/encoders/ExpressionEncoder.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [ArrowSerializer.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/client/arrow/ArrowSerializer.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [ArrowDeserializer.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/client/arrow/ArrowDeserializer.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [Migration Guide: SQL, Datasets and DataFrame (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.

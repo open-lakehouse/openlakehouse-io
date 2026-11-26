@@ -1,0 +1,118 @@
+---
+title: "Spark 3 to Spark 4 migration"
+categories: ["Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Upgrading from Spark 3.5 to 4.0</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">ANSI SQL mode by default, Java 17 and Scala 2.13 only, Python 3.9 minimum, removed Mesos support, deprecated SparkR</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) 4.0.0 (released 2025-05-23)</Field>
+  <Field name="related">[Spark Connect](/wiki/Spark_Connect), [SparkR](/wiki/SparkR), [Apache Mesos support in Spark](/wiki/Apache_Mesos_support_in_Spark), [Scala 2.12 and 2.13 in Spark](/wiki/Scala_2.12_and_2.13_in_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v3.5.0, v4.0.0, v4.1.0, v4.2.0 and v4.3.0 tags of apache/spark (docs/index.md, docs/sql-migration-guide.md, docs/core-migration-guide.md, python/docs/source/migration_guide/pyspark_upgrade.rst, SQLConf.scala), the Spark 4.0.0 release notes, the Spark news page and the Spark versioning policy</Verified>
+
+**Spark 3 to Spark 4 migration** is the work of moving [Apache Spark](/wiki/Apache_Spark) applications from the 3.x line (in practice 3.5) to Spark 4.0 or later, the first major release since 3.0. Spark 4.0.0 was released on 23 May 2025.[^news] The changes most likely to break an upgrade are platform minimums (Java 17, Scala 2.13 only, Python 3.9) and the switch of Spark SQL to ANSI mode by default, which turns many silent nulls and overflows into runtime errors.[^r400] Spark 4.0 also removed Apache Mesos support and deprecated SparkR. This page summarizes those changes from the official migration guides; it does not replace them.
+
+## Platform requirements
+
+|  | Spark 3.5 | Spark 4.0 | Spark 4.3 |
+| --- | --- | --- | --- |
+| Java | 8, 11, 17 | 17, 21 | 17, 21, 25 |
+| Scala | 2.12, 2.13 | 2.13 | 2.13 |
+| Python | 3.8+ | 3.9+ | 3.11+ |
+| R (SparkR) | 3.5+ | 3.5+ (deprecated) | 4.0+ (deprecated) |
+
+Sources: the "Spark runs on" line of `docs/index.md` at each tag.[^idx350][^idx400][^idx430] Spark 4.1 raised the Python minimum to 3.10, and Spark 4.2 added Java 25.[^n1][^n2]
+
+- **Java.** SPARK-45315 dropped JDK 8 and 11 and made JDK 17 the default.[^r400] Hive metastore clients older than Hive 2.0.0 are no longer supported, because they need JDK 8.[^sqlmig]
+- **Scala.** SPARK-45314 dropped Scala 2.12 and made 2.13 the default. Applications and libraries compiled for Scala 2.12 must be rebuilt for 2.13.[^r400][^idx400] See [Scala 2.12 and 2.13 in Spark](/wiki/Scala_2.12_and_2.13_in_Spark).
+- **Python.** SPARK-47993 dropped Python 3.8. PySpark 4.0 also raised the minimum versions of pandas to 2.0.0, NumPy to 1.21 and PyArrow to 11.0.0.[^pymig]
+
+## ANSI SQL mode by default
+
+SPARK-44444 made Spark SQL use ANSI mode by default.[^r400] In Spark 4.0, `spark.sql.ansi.enabled` defaults to true unless the environment variable `SPARK_ANSI_SQL_MODE` is set to `false`.[^conf] In ANSI mode Spark throws an error at runtime, instead of returning null, when the inputs to a SQL operator or function are invalid; examples are integer overflow and invalid casts from string to a number.[^conf][^n3]
+
+```sql
+-- Spark 3.5 default: returns NULL.  Spark 4.0 default: fails with a CAST_INVALID_INPUT error.
+SELECT CAST('abc' AS INT);
+
+-- Works in both: try_cast returns NULL for invalid input.
+SELECT try_cast('abc' AS INT);
+
+-- Restore the Spark 3 behaviour for a session.
+SET spark.sql.ansi.enabled = false;
+```
+
+Pipelines that relied on silent nulls should move to the `try_*` functions or fix the data, rather than turning ANSI mode off everywhere. The pandas API on Spark is a special case: in Spark 4.0.0 it fails with a `PANDAS_API_ON_SPARK_FAIL_ON_ANSI_MODE` error when ANSI mode is on, unless the pandas-on-Spark option `compute.fail_on_ansi_mode` is set to `False` (SPARK-52026).[^n4]
+
+## Other SQL behaviour changes
+
+The Spark 3.5 to 4.0 section of the SQL migration guide lists many changes. Among those most likely to matter in a lakehouse:[^sqlmig]
+
+| Change in Spark 4.0 | Setting to restore the old behaviour |
+| --- | --- |
+| `CREATE TABLE` without `USING` or `STORED AS` uses `spark.sql.sources.default` (Parquet by default) instead of Hive. | `spark.sql.legacy.createHiveTableByDefault=true` |
+| The default ORC compression codec changed from `snappy` to `zstd`. | `spark.sql.orc.compression.codec=snappy` |
+| `spark.sql.maxSinglePartitionBytes` defaults to `128m` instead of `Long.MaxValue`. | Set it to `9223372036854775807` |
+| The `spark.sql.legacy.*` datetime rebase configs for Parquet and Avro were removed. | Use the same names without `legacy.`, for example `spark.sql.parquet.int96RebaseModeInWrite` |
+| `spark.sql.legacy.timeParserPolicy` defaults to `CORRECTED` instead of `EXCEPTION`. | Set it back to `EXCEPTION` |
+| Views tolerate column type changes in the underlying query and compensate with casts. | `spark.sql.legacy.viewSchemaCompensation=false` |
+| JDBC type mappings changed for PostgreSQL, MySQL, Oracle, SQL Server and DB2 (for example timestamps and small integer types). | Per-database `spark.sql.legacy.*` flags listed in the guide |
+
+## Core and cluster changes
+
+From the core migration guide for 3.5 to 4.0:[^coremig]
+- Support for Apache Mesos as a resource manager was removed (SPARK-44442).[^r400] See [Apache Mesos support in Spark](/wiki/Apache_Mesos_support_in_Spark).
+- Internal servlet API references moved from `javax` to `jakarta`, which affects custom UI and servlet code.
+- Event logs are rolled and compressed by default (`spark.eventLog.rolling.enabled`, `spark.eventLog.compress`).
+- Speculative execution is less aggressive: `spark.speculation.multiplier=3` and `spark.speculation.quantile=0.9`.
+- On Kubernetes, executor pods are allocated in batches of 10, and persistent volume claims use `ReadWriteOncePod`.
+- The default Ivy user directory is `~/.ivy2.5.2`.
+
+## Removed and deprecated APIs
+
+| Item | Status in Spark 4.0 | Source |
+| --- | --- | --- |
+| Apache Mesos resource manager | Removed | SPARK-44442[^r400] |
+| Scala 2.12 builds | Removed | SPARK-45314[^r400] |
+| Java 8 and 11 | No longer supported | SPARK-45315[^r400] |
+| [SparkR](/wiki/SparkR) | Deprecated, still shipped (the `R` directory is present at the v4.3.0 tag) | SPARK-49347[^r400][^idx430] |
+| Hive metastore versions before 2.0.0 | Removed | SPARK-45328[^r400] |
+| Deprecated pandas API on Spark methods (for example `DataFrame.append`, `iteritems`, `to_koalas`) | Removed | PySpark migration guide[^pymig] |
+| `pyspark.ml.connect` | Deprecated in favour of `pyspark.ml` on Spark Connect | SPARK-50828[^r400] |
+
+## Spark Connect in Spark 4
+
+Spark 4.0 is the first major release in which [Spark Connect](/wiki/Spark_Connect) is close to the classic API. The release notes list Scala client parity with the Dataset and DataFrame API, `pyspark.ml` support on Connect, a lightweight `pyspark-client` Python package, an extra release tarball with Connect enabled by default, and the `spark.api.mode` setting to switch an application between classic and Connect.[^r400] A migration is therefore a natural point to check whether code uses APIs that Connect does not have, such as RDDs and `SparkContext`.
+
+## Timing
+
+Spark 3.5 has an extended long-term support period that ends in November 2027, during which only security fixes are released.[^policy] Non-LTS release branches are generally maintained with bug fix releases for six months, and the policy names Spark 4.5.0 as the planned LTS release of the 4.x line.[^policy] Later 4.x releases have their own migration sections (4.0 to 4.1, 4.1 to 4.2, 4.2 to 4.3) in the same guide.[^n5]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Connect](/wiki/Spark_Connect)
+- [SparkR](/wiki/SparkR)
+- [Apache Mesos support in Spark](/wiki/Apache_Mesos_support_in_Spark)
+- [Scala 2.12 and 2.13 in Spark](/wiki/Scala_2.12_and_2.13_in_Spark)
+
+## References
+
+[^news]: [News](https://spark.apache.org/news/index.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^idx350]: [docs/index.md at v3.5.0](https://github.com/apache/spark/blob/v3.5.0/docs/index.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^idx400]: [docs/index.md at v4.0.0](https://github.com/apache/spark/blob/v4.0.0/docs/index.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^idx430]: [docs/index.md at v4.3.0](https://github.com/apache/spark/blob/v4.3.0/docs/index.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^n1]: [docs/index.md at v4.1.0](https://github.com/apache/spark/blob/v4.1.0/docs/index.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^n2]: [docs/index.md at v4.2.0](https://github.com/apache/spark/blob/v4.2.0/docs/index.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^sqlmig]: [Migration Guide: SQL, Datasets and DataFrame (docs/sql-migration-guide.md at v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/docs/sql-migration-guide.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^pymig]: [Upgrading PySpark (pyspark_upgrade.rst at v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/python/docs/source/migration_guide/pyspark_upgrade.rst). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^conf]: [SQLConf.scala at v4.0.0](https://github.com/apache/spark/blob/v4.0.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^n3]: [ANSI Compliance (docs/sql-ref-ansi-compliance.md at v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/docs/sql-ref-ansi-compliance.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^n4]: [SPARK-52026: Block pandas API on Spark on ANSI mode by default](https://issues.apache.org/jira/browse/SPARK-52026). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^coremig]: [Migration Guide: Spark Core (docs/core-migration-guide.md at v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/docs/core-migration-guide.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.
+[^policy]: [Versioning policy](https://spark.apache.org/versioning-policy.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n5]: [docs/sql-migration-guide.md at v4.3.0](https://github.com/apache/spark/blob/v4.3.0/docs/sql-migration-guide.md). *GitHub (apache/spark)*. Retrieved 2026-11-22.

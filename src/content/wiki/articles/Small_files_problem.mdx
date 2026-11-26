@@ -1,0 +1,97 @@
+---
+title: "Small files problem"
+categories: ["Concepts", "Glossary terms", "Table formats"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Small file problem; file fragmentation</Field>
+  <Field name="field">Data storage, table maintenance</Field>
+  <Field name="key_parts">Target file size, compaction, write-time file sizing, clustering</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi), [Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read), [Deletion vector](/wiki/Deletion_vector), [Partition](/wiki/Partition), [Structured Streaming](/wiki/Structured_Streaming)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Iceberg 1.12.0 documentation (configuration, maintenance, Spark procedures, Spark writes, Spark Structured Streaming), the Delta Lake optimizations documentation, the Apache Hudi file sizing, clustering and configuration documentation (version 1.2.1), and Apache Spark 4.3.0 (SQLConf.scala and the 4.3.0 documentation)</Verified>
+
+The **small files problem** is the slowdown and extra cost that occur when a table's data is spread across many files that are much smaller than the size the storage and query engines work best with. Every file adds metadata to track, a request to open it, and planning and scheduling work, so a table with many small files is slower to query and maintain than the same data in fewer, larger files.[^hudi-size][^ice-proc] In an [open lakehouse](/wiki/Open_lakehouse), small files come mostly from frequent small writes, and every major [open table format](/wiki/Open_table_format) provides compaction and write-time sizing to control them.
+
+## Causes
+
+**Streaming and micro-batch writes.** Each batch commits its own files. The Iceberg documentation notes that the amount of data written by a streaming process is typically small, which makes the table metadata track many small files.[^ice-stream] Hudi's clustering documentation describes the same tension: ingestion prefers small files for parallelism and freshness, while queries degrade with many small files.[^hudi-cluster]
+
+**Many partitions per write task.** A file cannot span a table partition, and in Spark a file cannot be larger than the task that writes it. When one Spark task writes to several Iceberg partitions, each partition gets its own, smaller file.[^ice-writes] High-cardinality [partitioning](/wiki/Partition) multiplies the number of files per commit.
+
+**Compression and columnar encoding.** The size on disk is much smaller than the in-memory size of the task's rows, because the data is compressed and columnar. The Iceberg documentation gives the example that a 100 MB Spark task produces a file much smaller than 100 MB.[^ice-writes]
+
+**Row-level changes.** Merge-on-read writes add small delete files. Iceberg's maintenance guide recommends compacting small position delete files because of the metadata and file-open overhead they add.[^ice-maint]
+
+## Costs
+
+- **Metadata.** Iceberg tracks every data file in manifests, so more files means more metadata, and small files cause an unnecessary amount of it.[^ice-proc]
+- **File open and request cost.** Hudi's documentation points out that object stores such as S3 rate-limit requests per prefix, and that each file needs at least one request regardless of size, plus fixed costs to open and close it.[^hudi-size] Spark models this fixed cost with `spark.sql.files.openCostInBytes` (default 4 MB) when packing files into read partitions.[^sparkconf]
+- **Planning and scheduling.** More files mean more tasks, which adds scheduling overhead and memory pressure to Spark, Flink or Hive jobs.[^hudi-size]
+- **Storage efficiency.** Many small files can compress less well and need more index and statistics metadata.[^hudi-size]
+
+## Remedies by project
+
+### Apache Iceberg
+
+Iceberg writers roll over to a new file when it reaches `write.target-file-size-bytes`, default 536870912 bytes (512 MB); delete files have a separate target, `write.delete.target-file-size-bytes`, default 64 MB.[^ice-conf] Because a Spark task may be too small to reach the target, the Iceberg documentation advises controlling what data each task receives with `write.distribution-mode` or an explicit repartition.[^ice-writes]
+
+For existing files, the `rewrite_data_files` procedure compacts small files into larger ones, using bin-packing by default or a sort. Its options include `target-file-size-bytes` (defaulting to the table's target), `min-file-size-bytes` (75% of the target), `max-file-size-bytes` (180% of the target) and `min-input-files` (5).[^ice-proc] The `rewrite_manifests` procedure addresses the matching problem in metadata, since fast appends in streaming workloads can leave many small manifest files.[^ice-stream]
+
+```sql
+-- Apache Iceberg (Spark SQL): compact one day's files toward 512 MB
+CALL catalog.system.rewrite_data_files(
+  table   => 'db.events',
+  where   => 'event_date = "2026-11-21"',
+  options => map('target-file-size-bytes', '536870912')
+);
+```
+
+### Delta Lake
+
+Delta Lake's `OPTIMIZE` command (from 1.2.0) coalesces small files into larger ones by bin-packing and can be limited to a partition predicate with `WHERE`.[^delta-opt]
+
+Auto compaction (from 3.1.0) runs synchronously after a successful write and compacts small files in the affected partitions. It is enabled with the table property `delta.autoOptimize.autoCompact` or the session setting `spark.databricks.delta.autoCompact.enabled`, uses a 128 MB target by default, and is tuned with `spark.databricks.delta.autoCompact.maxFileSize` and `spark.databricks.delta.autoCompact.minNumFiles`.[^delta-opt]
+
+Optimized writes (from 3.1.0) shuffle data before writing so that each partition receives fewer, larger files, at the cost of extra write latency. The feature is off by default and is enabled with the table property `delta.autoOptimize.optimizeWrite`, the setting `spark.databricks.delta.optimizeWrite.enabled`, or the writer option `optimizeWrite`; `spark.databricks.delta.optimizeWrite.binSize` (default 512 MiB) sets the target in-memory size of each output file.[^delta-opt]
+
+### Apache Hudi
+
+Hudi sizes files during writes. On insert and upsert, it adds records to existing files smaller than `hoodie.parquet.small.file.limit` (default 104857600 bytes, 100 MB) until they approach `hoodie.parquet.max.file.size` (default 125829120 bytes, 120 MB). The `bulk_insert` operation does not size files this way.[^hudi-size] For merge-on-read tables, `hoodie.merge.small.file.group.candidates.limit` (default 1) limits how many small file groups an upsert may expand, to limit rewriting.[^hudi-size]
+
+After writes, Hudi's clustering table service stitches small files into larger ones and can sort data for locality. It runs inline after each write when `hoodie.clustering.inline` is true, or asynchronously with `hoodie.clustering.async.enabled`; both default to false.[^hudi-cluster][^hudi-conf] Files under `hoodie.clustering.plan.strategy.small.file.limit` (default 314572800 bytes) are candidates.[^hudi-conf]
+
+### Apache Spark
+
+Spark settings shape how many files a write produces, independent of the table format.
+
+- `spark.sql.files.maxRecordsPerFile` caps the rows in one output file; the default 0 means no limit.[^sparkconf]
+- The `COALESCE`, `REPARTITION`, `REBALANCE` and `REBALANCE_BY_SIZE` SQL hints, and the matching `coalesce` and `repartition` Dataset methods, control the number of output files. `REBALANCE` asks adaptive query execution (AQE) for output partitions of reasonable size, to avoid files that are too small or too big, and is ignored when AQE is disabled.[^spark-hints]
+- With AQE (`spark.sql.adaptive.enabled`, default true), `spark.sql.adaptive.coalescePartitions.enabled` (default true) merges small shuffle partitions toward `spark.sql.adaptive.advisoryPartitionSizeInBytes`.[^spark-tuning][^sparkconf] The Iceberg documentation notes that this advisory size measures shuffle data, not the compressed columnar file, so it must be set larger than the desired file size.[^ice-writes]
+- On the read side, `spark.sql.files.maxPartitionBytes` (default 128 MB) and `spark.sql.files.openCostInBytes` control how many small files are packed into one read partition.[^sparkconf]
+
+## See also
+
+- [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read)
+- [Deletion vector](/wiki/Deletion_vector)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Partition](/wiki/Partition)
+- [Shuffle](/wiki/Shuffle)
+- [Open table format](/wiki/Open_table_format)
+
+## References
+
+[^hudi-size]: [File Sizing (version 1.2.1)](https://hudi.apache.org/docs/file_sizing). *Apache Hudi*. Retrieved 2026-11-22.
+[^ice-proc]: [Spark Procedures](https://iceberg.apache.org/docs/latest/spark-procedures/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^ice-stream]: [Spark Structured Streaming](https://iceberg.apache.org/docs/latest/spark-structured-streaming/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^hudi-cluster]: [Clustering (version 1.2.1)](https://hudi.apache.org/docs/clustering). *Apache Hudi*. Retrieved 2026-11-22.
+[^ice-writes]: [Spark Writes](https://iceberg.apache.org/docs/latest/spark-writes/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^ice-maint]: [Maintenance](https://iceberg.apache.org/docs/latest/maintenance/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^sparkconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ice-conf]: [Configuration](https://iceberg.apache.org/docs/latest/configuration/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^delta-opt]: [Optimizations](https://docs.delta.io/optimizations-oss/). *Delta Lake*. Retrieved 2026-11-22.
+[^hudi-conf]: [All Configurations](https://hudi.apache.org/docs/configurations). *Apache Hudi*. Retrieved 2026-11-22.
+[^spark-hints]: [Hints (Spark 4.3.0 documentation)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-hints.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^spark-tuning]: [Performance Tuning (Spark 4.3.0 documentation)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-22.

@@ -1,0 +1,89 @@
+---
+title: "INT96 timestamp"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">INT96; Impala timestamp</Field>
+  <Field name="field">Data storage formats</Field>
+  <Field name="introduced">Physical type in [Apache Parquet](/wiki/Apache_Parquet); written for timestamps by Impala, Hive and Spark</Field>
+  <Field name="key_parts">12 bytes: nanoseconds within the day (8 bytes) and a Julian day number (4 bytes)</Field>
+  <Field name="implementations">[Apache Parquet](/wiki/Apache_Parquet), [Apache Spark](/wiki/Apache_Spark), [Apache Iceberg](/wiki/Apache_Iceberg) (read only)</Field>
+  <Field name="related">[Logical type](/wiki/Logical_type), [Apache Parquet](/wiki/Apache_Parquet), [Apache Hive](/wiki/Apache_Hive)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">parquet.thrift at parquet-format tags 2.4.0, 2.5.0, 2.12.0 and 2.14.0, the parquet-format 2.5.0 changelog, PARQUET-323 and PARQUET-1065, Apache Spark SQLConf.scala at v3.1.1, v3.5.0, v4.0.0 and v4.3.0, ParquetSchemaConverter.scala and DateTimeUtils.scala at v4.3.0, the Spark 3.5 to 4.0 SQL migration guide, SPARK-46440 and SPARK-46447, and the Apache Iceberg spec at apache-iceberg-1.12.0</Verified>
+
+<Status level="deprecated" since="parquet-format 2.5.0">Use an `INT64` column with the Parquet `TIMESTAMP` [logical type](/wiki/Logical_type) instead. Apache Spark 4.3.0 still writes timestamps as INT96 by default.[^pq323]</Status>
+
+An **INT96 timestamp** is a timestamp stored in the 12-byte `INT96` physical type of [Apache Parquet](/wiki/Apache_Parquet): 8 bytes of nanoseconds within the day followed by 4 bytes of day number.[^thrift] The encoding was introduced for nanosecond timestamps in Impala, and [Apache Spark](/wiki/Apache_Spark) originally used the same timestamp type as Impala and Hive.[^sparkconv] INT96 carries no [logical type](/wiki/Logical_type) annotation, so a reader has to know the convention to treat it as a timestamp. The Parquet format has marked INT96 as deprecated since parquet-format 2.5.0, but the type is still common because Spark writes it by default.[^pq323][^conf]
+
+## Status
+
+**Parquet format.** PARQUET-323, "INT96 should be marked as deprecated", was fixed in parquet-format 2.5.0, together with PARQUET-1065, which deprecated type-defined sort ordering for INT96 statistics.[^pq323][^changes] In `parquet.thrift`, the `INT96` entry has no comment at 2.4.0, is commented "deprecated, only used by legacy implementations" from 2.5.0, and since 2.12.0 reads "deprecated, new Parquet writers should not write data in INT96".[^thrift240][^thrift250][^thrift2120] The type has not been removed: parquet-format 2.14.0 added an `INT96_TIMESTAMP_ORDER` column order, which tells readers that INT96 statistics are ordered chronologically, and the thrift file notes that INT96 is still used in many legacy systems.[^thrift]
+
+**Apache Spark.** Spark has not deprecated writing INT96. In Spark 4.3.0, `spark.sql.parquet.outputTimestampType` still defaults to `INT96`, as it has since the setting was added in Spark 2.3.0.[^conf] A comment in Spark's Parquet schema converter says that `TIMESTAMP_MICROS` is recommended but INT96 stays the default to keep earlier behaviour.[^sparkconv]
+
+## How it works
+
+An INT96 value is 12 bytes. The thrift definition describes the legacy ordering rule: the last 4 bytes are the day as a little-endian 32-bit signed integer, and the first 8 bytes are nanoseconds as a little-endian 64-bit signed integer.[^thrift] Spark interprets the day as a Julian day number and converts the value to microseconds since the Unix epoch, dividing the nanoseconds by 1,000, so sub-microsecond precision is lost on read.[^dtu]
+
+Because the type has no logical type, nothing in the file says whether a value is UTC-normalized or local time. Spark's `spark.sql.parquet.int96TimestampConversion` (default `false`) applies a time zone adjustment for INT96 data written by Impala, which the setting's documentation says uses a different offset than Hive and Spark.[^conf] Spark reads INT96 as a timestamp only while `spark.sql.parquet.int96AsTimestamp` is `true`, the default; otherwise it rejects the column.[^conf][^sparkconv]
+
+## Calendar rebasing in Spark
+
+Spark 3.0 moved from the hybrid Julian and Gregorian calendar to the Proleptic Gregorian calendar, which changes the meaning of very old dates and timestamps.[^mig30] Spark 3.1 added `spark.sql.legacy.parquet.int96RebaseModeInRead` and `InWrite`, defaulting to `EXCEPTION`, so that reading or writing INT96 timestamps before 1900-01-01 failed instead of silently shifting.[^conf311][^mig40]
+
+Spark 4.0.0 changed the defaults of these rebase settings to `CORRECTED`, which reads and writes values as they are (SPARK-46440), and removed the `spark.sql.legacy` names in favour of `spark.sql.parquet.int96RebaseModeInRead` and `spark.sql.parquet.int96RebaseModeInWrite` (SPARK-46447).[^s46440][^s46447][^mig40] Both settings are internal in Spark 4.3.0 and default to `CORRECTED`.[^conf]
+
+## INT96 compared with standard Parquet timestamps
+
+|  | INT96 timestamp | INT64 with TIMESTAMP logical type |
+| --- | --- | --- |
+| Status in Parquet | Deprecated since parquet-format 2.5.0[^pq323] | Current |
+| Size | 12 bytes | 8 bytes |
+| Precision | Nanoseconds in storage; Spark keeps microseconds[^dtu] | Unit stated in the annotation: `MILLIS`, `MICROS` or `NANOS`[^lt] |
+| UTC or local time | Not recorded in the file | Recorded by `isAdjustedToUTC`[^lt] |
+| Spark write setting | `spark.sql.parquet.outputTimestampType=INT96` (default)[^conf] | `TIMESTAMP_MICROS` or `TIMESTAMP_MILLIS`[^conf] |
+| Apache Iceberg | Not used in the spec's Parquet type mapping; readable in imported data files[^icespec][^ice6962] | The spec's mapping for `timestamp` and `timestamptz`[^icespec] |
+
+## Example
+
+In Spark, setting the output type before writing produces standard `INT64` timestamps instead of INT96:[^conf]
+
+```python
+spark.conf.set("spark.sql.parquet.outputTimestampType", "TIMESTAMP_MICROS")
+
+df = spark.sql("SELECT TIMESTAMP '2026-11-22 10:00:00' AS ts")
+df.write.mode("overwrite").parquet("/tmp/ts_micros")
+```
+
+The setting changes only new files. Files already written with INT96 keep that encoding until they are rewritten.
+
+## See also
+
+- [Logical type](/wiki/Logical_type)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Apache Hive](/wiki/Apache_Hive)
+
+## References
+
+[^pq323]: [PARQUET-323: INT96 should be marked as deprecated](https://issues.apache.org/jira/browse/PARQUET-323). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^thrift]: [parquet.thrift (parquet-format 2.14.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.14.0/src/main/thrift/parquet.thrift). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkconv]: [ParquetSchemaConverter.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/parquet/ParquetSchemaConverter.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^conf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^changes]: [CHANGES.md (parquet-format 2.5.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.5.0/CHANGES.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^thrift240]: [parquet.thrift (parquet-format 2.4.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.4.0/src/main/thrift/parquet.thrift). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^thrift250]: [parquet.thrift (parquet-format 2.5.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.5.0/src/main/thrift/parquet.thrift). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^thrift2120]: [parquet.thrift (parquet-format 2.12.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.12.0/src/main/thrift/parquet.thrift). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^dtu]: [DateTimeUtils.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/util/DateTimeUtils.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^mig30]: [Spark SQL Migration Guide (docs/sql-migration-guide.md at v3.0.0)](https://github.com/apache/spark/blob/v3.0.0/docs/sql-migration-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^conf311]: [SQLConf.scala (Apache Spark v3.1.1)](https://github.com/apache/spark/blob/v3.1.1/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^mig40]: [Spark SQL Migration Guide (docs/sql-migration-guide.md at v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/docs/sql-migration-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^s46440]: [SPARK-46440: Set the rebase configs to the CORRECTED mode by default](https://issues.apache.org/jira/browse/SPARK-46440). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^s46447]: [SPARK-46447: Remove the legacy datetime rebasing SQL configs](https://issues.apache.org/jira/browse/SPARK-46447). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^lt]: [Parquet Logical Type Definitions (LogicalTypes.md, parquet-format 2.14.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.14.0/LogicalTypes.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec (format/spec.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ice6962]: [Arrow: Support vectorized read of INT96 timestamp in imported data (#6962)](https://github.com/apache/iceberg/pull/6962). *GitHub, apache/iceberg*. Retrieved 2026-11-22.

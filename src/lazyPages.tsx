@@ -25,6 +25,7 @@ function lazyWithPreload(factory: () => Promise<{ default: ComponentType }>) {
 }
 
 export const SparkMatrix = lazyWithPreload(() => import("./pages/projects/SparkMatrix.tsx"));
+export const Wiki = lazyWithPreload(() => import("./pages/wiki/WikiPage.tsx"));
 
 /** Load the chunk for a path before the first render. */
 export function preloadFor(pathname: string): Promise<unknown> {
@@ -33,5 +34,10 @@ export function preloadFor(pathname: string): Promise<unknown> {
   // prerendered article isn't replaced by an empty one on a direct visit.
   const episode = pathname.match(/^\/podcast\/([a-z0-9-]+)\/?$/);
   if (episode) return loadWriteup(episode[1]);
+  // Wiki pages: the wiki chunk plus the page's own body.
+  const wiki = pathname.match(/^\/wiki\/(.+?)\/?$/);
+  if (wiki) {
+    return Promise.all([Wiki.preload(), import("@/content/wiki").then((m) => m.loadWikiBodyFor(wiki[1]))]);
+  }
   return Promise.resolve();
 }

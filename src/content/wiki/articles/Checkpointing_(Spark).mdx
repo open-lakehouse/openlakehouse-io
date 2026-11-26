@@ -1,0 +1,77 @@
+---
+title: "Checkpointing (Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Lineage checkpoint, streaming checkpoint</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">RDD and DataFrame checkpoints, local checkpoints, checkpoint directory, Structured Streaming `checkpointLocation`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Caching and persistence](/wiki/Caching_and_persistence), [Structured Streaming](/wiki/Structured_Streaming), [Exactly-once semantics](/wiki/Exactly-once_semantics), [RDD](/wiki/RDD), [Delta Lake](/wiki/Delta_Lake)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (core RDD.scala, sql/api Dataset.scala, python/pyspark/sql/dataframe.py, docs/configuration.md, docs/streaming/apis-on-dataframes-and-datasets.md) and the Delta Lake protocol at tag v4.4.1</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **checkpointing** is saving data or query progress to storage so that later work can start from the saved copy instead of recomputing it, and the word names two different features. **Lineage checkpointing** saves the data of an [RDD](/wiki/RDD) or DataFrame to storage and cuts its lineage or query plan, so that later work starts from the saved data instead of recomputing everything. **Streaming checkpoints** are the progress and state that a [Structured Streaming](/wiki/Structured_Streaming) query writes to its `checkpointLocation` so it can restart where it stopped.[^rdd][^ss] The two share a name but not a purpose, a format, or an API. This page is a short guide to which is which.
+
+## Kinds of checkpoint
+
+| Kind | API | What it saves | Why |
+| --- | --- | --- | --- |
+| RDD checkpoint | `sc.setCheckpointDir(dir)`, then `rdd.checkpoint()` | The RDD's partitions, in the checkpoint directory; references to parent RDDs are removed[^rdd] | Cut long lineage, for example in iterative algorithms |
+| RDD local checkpoint | `rdd.localCheckpoint()` | The RDD's partitions in executor storage, through the caching layer[^rdd] | Cut lineage without the cost of a reliable file system; not fault tolerant |
+| DataFrame checkpoint | `df.checkpoint(eager=True)` | The DataFrame's data in the checkpoint directory; the logical plan is truncated[^dataset] | Stop a query plan from growing in loops |
+| DataFrame local checkpoint | `df.localCheckpoint(eager=True)` | The data in executor storage[^dataset] | Faster, but executor loss can fail the job |
+| Structured Streaming checkpoint | `.option("checkpointLocation", path)` on `writeStream` | Offsets processed in each trigger, and running state such as aggregates[^ss] | Restart a query after failure or shutdown |
+| [DStreams](/wiki/Spark_Streaming_(DStreams)) checkpoint | `StreamingContext.checkpoint(dir)` | Metadata defining the computation, and generated RDDs saved to reliable storage[^dstreams] | Recovery for the DStreams API, deprecated since Spark 3.4.0[^spark42075] |
+
+## Lineage checkpointing (RDD and DataFrame)
+
+An RDD checkpoint is lazy. `rdd.checkpoint()` only marks the RDD, and the data is written at the end of the first action on it. The Spark source recommends persisting the RDD first, because writing the checkpoint otherwise recomputes it.[^rdd]
+
+A DataFrame checkpoint is eager by default: `df.checkpoint()` runs a job right away and returns a new DataFrame whose plan starts from the saved data.[^dataset] With `eager=False`, the saved data may differ from what the job used if the plan is non-deterministic and tasks are retried, so the Spark docs recommend `eager=True` for a deterministic snapshot.[^dataset] DataFrame checkpointing has been in the Dataset API since Spark 2.1.0 and works with [Spark Connect](/wiki/Spark_Connect) since Spark 4.0.0.[^pydf]
+
+The checkpoint directory comes from `SparkContext.setCheckpointDir` or, since Spark 4.0.0, the `spark.checkpoint.dir` configuration. Spark does not delete checkpoint files when the checkpointed data goes out of scope unless `spark.cleaner.referenceTracking.cleanCheckpoints` (default false) is set.[^config]
+
+```python
+# spark.checkpoint.dir is set when the session starts, for example
+#   --conf spark.checkpoint.dir=s3a://bucket/checkpoints
+
+df = spark.read.table("main.ml.features")
+for i in range(20):
+    df = update_step(df)          # user function; each step adds to the plan
+    if i % 5 == 4:
+        df = df.checkpoint()      # cut the plan every five iterations
+```
+
+Local checkpoints are faster because they skip the reliable file system, but executor loss makes the data unreachable and can fail the job. The Spark source warns that local checkpointing is not safe with [dynamic allocation](/wiki/Dynamic_allocation), which removes executors together with their cached blocks.[^rdd] Lineage checkpointing is also different from [caching](/wiki/Caching_and_persistence), which keeps lineage and recomputes lost partitions.
+
+## Streaming checkpoints
+
+A Structured Streaming query with a `checkpointLocation` saves its progress (the range of offsets processed in each trigger) and its running state to that path, using checkpoints and write-ahead logs. On restart with the same location, the query continues where it left off. The location has to be a path in an HDFS-compatible file system.[^ss] Streaming checkpoints are needed for the end-to-end guarantees described in [Exactly-once semantics](/wiki/Exactly-once_semantics).
+
+A streaming checkpoint is tied to one query. Deleting it, or pointing a changed query at it, changes what the query reprocesses; the Structured Streaming guide's section "Recovery Semantics after Changes in a Streaming Query" lists which changes are allowed between restarts.[^ss]
+
+## Delta Lake checkpoints
+
+[Delta Lake](/wiki/Delta_Lake) uses the word for a third thing: a **checkpoint** in the Delta transaction log is a Parquet file that summarizes the table's state at a version, so readers can rebuild a snapshot without replaying every JSON commit, and old log entries can be cleaned up.[^delta] Delta checkpoints are written by the table format, not by Spark's checkpoint APIs.
+
+## See also
+
+- [Caching and persistence](/wiki/Caching_and_persistence)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [RDD](/wiki/RDD)
+- [Delta Lake](/wiki/Delta_Lake)
+
+## References
+
+[^rdd]: [RDD.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/rdd/RDD.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss]: [Structured Streaming: Recovering from Failures with Checkpointing (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#recovering-from-failures-with-checkpointing). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dataset]: [Dataset.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Dataset.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dstreams]: [Spark Streaming Programming Guide: Checkpointing (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming-programming-guide.html#checkpointing). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^spark42075]: [SPARK-42075: Deprecate DStream API](https://issues.apache.org/jira/browse/SPARK-42075). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^pydf]: [dataframe.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta]: [Delta Transaction Log Protocol: Checkpoints (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md#checkpoints). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.

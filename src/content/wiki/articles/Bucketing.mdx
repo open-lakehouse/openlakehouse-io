@@ -1,0 +1,117 @@
+---
+title: "Bucketing"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Bucketed tables, CLUSTERED BY ... INTO n BUCKETS, bucket join</Field>
+  <Field name="field">Data layout; query optimization</Field>
+  <Field name="key_parts">Bucket columns, number of buckets, hash function, optional sort columns, catalog metadata</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Apache Hive](/wiki/Apache_Hive), [Apache Iceberg](/wiki/Apache_Iceberg) (bucket partition transform)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Partition](/wiki/Partition), [Storage partitioned join](/wiki/Storage_partitioned_join), [Liquid clustering](/wiki/Liquid_clustering), [Sort-merge join](/wiki/Sort-merge_join)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SQLConf.scala, DataFrameWriter.scala, V1Writes.scala, partitioning.scala, DataSourceScanExec.scala, docs/sql-data-sources-load-save-functions.md, docs/sql-performance-tuning.md), Spark JIRA, the Apache Iceberg 1.12.0 spec and Spark configuration docs, and AbstractDeltaCatalog.scala at Delta Lake v4.4.1</Verified>
+
+**Bucketing** is a table layout in which rows are assigned to a fixed number of logical buckets by hashing the values of one or more bucket columns, so that all rows with the same key land in the same bucket; each bucket is stored as one or more files, whose names carry the bucket ID.[^fdw] In [Apache Spark](/wiki/Apache_Spark), a bucketed table lets a join or aggregation on the bucket columns skip the [shuffle](/wiki/Shuffle), because the data is already grouped the way the operator needs it. Spark's file layout for buckets follows the bucketing scheme of [Apache Hive](/wiki/Apache_Hive);[^writer] in [Apache Iceberg](/wiki/Apache_Iceberg) the same idea is the `bucket[N]` partition transform, and [Delta Lake](/wiki/Delta_Lake) does not support bucketed tables.
+
+## How does bucketing work in Apache Spark?
+
+Spark writes a bucketed table with `DataFrameWriter.bucketBy` (optionally with `sortBy`), available since Spark 2.0, or with `CLUSTERED BY ... INTO n BUCKETS` in SQL. Bucketing and sorting apply only to persistent tables written with `saveAsTable`, because the bucket specification is stored in the catalog.[^loadsave][^writer]
+
+```python
+(orders.write
+    .bucketBy(64, "customer_id")
+    .sortBy("customer_id")
+    .format("parquet")
+    .saveAsTable("sales.orders_bucketed"))
+```
+
+```sql
+CREATE TABLE sales.customers_bucketed
+USING parquet
+CLUSTERED BY (customer_id) INTO 64 BUCKETS
+AS SELECT * FROM sales.customers;
+```
+
+A bucket is not a single file. Every write task that holds rows for a bucket writes its own file for that bucket, and a task starts a new file when it reaches `maxRecordsPerFile`; Spark appends the bucket ID and a file counter to each file name.[^fdw]
+
+For Spark's own bucketed tables, the bucket ID is the same expression Spark uses for hash partitioning during a shuffle: a Murmur3 hash of the bucket columns, modulo the number of buckets. The source code comment explains why: matching the shuffle's distribution lets Spark shuffle only one side when it joins a bucketed table with a table that is not bucketed.[^v1writes][^partitioning]
+
+## When does bucketing remove a shuffle?
+
+Spark can skip the shuffle when the plan needs data clustered on the bucket columns and the scan already provides it:
+- **Joins.** A [sort-merge join](/wiki/Sort-merge_join) or shuffled hash join of two tables bucketed on the join keys, with the same number of buckets, needs no `Exchange`. If the bucket counts differ and the larger is a multiple of the smaller, `spark.sql.bucketing.coalesceBucketsInJoin.enabled` (default false, since 3.1.0) can merge buckets on the larger side, as long as the ratio is at most `spark.sql.bucketing.coalesceBucketsInJoin.maxBucketRatio` (default 4). The setting's documentation warns that coalescing reduces parallelism.[^sqlconf]
+- **Aggregations and windows** grouped or partitioned by the bucket columns.
+- **One-sided joins.** When only one table is bucketed, Spark shuffles only the other side, because the bucket hash matches the shuffle hash.[^v1writes]
+
+By default `spark.sql.requireAllClusterKeysForCoPartition` (true, since 3.3.0) requires the join keys to cover all the clustering keys before Spark removes the shuffle. This avoids skew that can come from eliminating shuffles.[^sqlconf]
+
+Bucketing also helps filters. A filter on a bucket column with an equality, `IN` or `IS NULL` condition (and `AND` or `OR` combinations of them) lets Spark read only the matching bucket files, which is called **bucket pruning**.[^fss]
+
+## Settings that control bucketing
+
+| Setting | Default | Since | Effect |
+| --- | --- | --- | --- |
+| `spark.sql.sources.bucketing.enabled` | true | 2.0.0 | When false, Spark treats bucketed tables as ordinary tables. |
+| `spark.sql.sources.bucketing.autoBucketedScan.enabled` | true | 3.1.0 | Spark skips the bucketed scan when the query has no operator that uses bucketing, or when an exchange sits between the scan and that operator. |
+| `spark.sql.sources.bucketing.maxBuckets` | 100000 | 2.4.0 | Largest bucket count allowed. |
+| `spark.sql.bucketing.coalesceBucketsInJoin.enabled` | false | 3.1.0 | Merges buckets on the larger side of a join when one count divides the other. |
+
+All values are from `SQLConf.scala` at Spark 4.3.0.[^sqlconf] The automatic choice of bucketed scan was added in SPARK-32859, and bucket coalescing in SPARK-31350 and SPARK-32286, all fixed in 3.1.0.[^n1][^n2]
+
+## How can you tell if bucketing was used?
+
+In `EXPLAIN` output, a file scan that reads buckets lists `Bucketed: true` and `SelectedBucketsCount` (for example "8 out of 64") in its metadata, and there is no `Exchange` between the scan and the join or aggregate.[^scanexec] If the scan does not read buckets, the value gives the reason: `false (disabled by configuration)`, `false (disabled by query planner)` or `false (bucket column(s) not read)`.[^scanexec]
+
+## Spark bucketing vs Hive bucketing
+
+Spark's bucket layout looks like Hive's but uses a different hash function, so Spark-native bucketed tables are not compatible with Hive's bucketing.[^writer] When Spark writes into a Hive-format bucketed table, it uses Hive's hash and Hive's bucket file naming instead, so that Hive and other engines can read the result; SPARK-32709 and SPARK-32712 added this in Spark 3.3.0.[^v1writes][^n3][^n4]
+
+## How does bucketing interact with table formats?
+
+**[Delta Lake](/wiki/Delta_Lake)** rejects bucketed tables: at Delta Lake 4.4.1, creating a Delta table with a bucket specification raises an "operation not supported" error, and combining `CLUSTER BY` with `CLUSTERED BY ... INTO BUCKETS` is rejected with a message to remove the bucketing.[^delta][^n5] Delta tables use partitioning or [liquid clustering](/wiki/Liquid_clustering) for data layout instead.
+
+**[Apache Iceberg](/wiki/Apache_Iceberg)** has bucketing as a partition transform. `bucket[N]` hashes a value with the 32-bit Murmur3 hash (x86 variant, seed 0), drops the sign bit and takes the result modulo N.[^icebergspec] Because it is a partition, a bucket partition gets [partition pruning](/wiki/Partition_pruning) from the table metadata, not from file names. An Iceberg bucket hash does not match Spark's shuffle hash, so Spark removes the shuffle through a [storage partitioned join](/wiki/Storage_partitioned_join) instead, using the partitioning that a Data Source V2 table reports. This needs `spark.sql.sources.v2.bucketing.enabled` (default true, since 3.3.0) on the Spark side and `spark.sql.iceberg.planning.preserve-data-grouping` (default false) on the Iceberg side.[^sqlconf][^perf][^n6]
+
+```sql
+-- Iceberg: bucketing as a partition transform
+CREATE TABLE prod.db.orders (id BIGINT, customer_id BIGINT, amount DECIMAL(10,2))
+USING iceberg
+PARTITIONED BY (bucket(16, customer_id));
+```
+
+## Limitations
+
+- Bucketing is fixed at write time. Changing the number of buckets or the bucket columns means rewriting the table.
+- Spark-native buckets are readable as buckets only by Spark, because of the hash function.[^writer]
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [Partition](/wiki/Partition)
+- [Partition pruning](/wiki/Partition_pruning)
+- [Storage partitioned join](/wiki/Storage_partitioned_join)
+- [Sort-merge join](/wiki/Sort-merge_join)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+
+## References
+
+[^fdw]: [FileFormatDataWriter.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FileFormatDataWriter.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^writer]: [DataFrameWriter.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/DataFrameWriter.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^loadsave]: [Generic Load/Save Functions (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-data-sources-load-save-functions.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^v1writes]: [V1Writes.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/V1Writes.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^partitioning]: [partitioning.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/plans/physical/partitioning.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^fss]: [FileSourceStrategy.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FileSourceStrategy.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-32859: Introduce SQL physical plan rule to decide enable/disable bucketing](https://issues.apache.org/jira/browse/SPARK-32859). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [SPARK-31350: Coalesce bucketed tables for join if applicable](https://issues.apache.org/jira/browse/SPARK-31350). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scanexec]: [DataSourceScanExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/DataSourceScanExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [SPARK-32709: Write Hive ORC/Parquet bucketed table with hivehash (for Hive 1,2)](https://issues.apache.org/jira/browse/SPARK-32709). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [SPARK-32712: Support writing Hive non-ORC/Parquet bucketed table](https://issues.apache.org/jira/browse/SPARK-32712). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta]: [AbstractDeltaCatalog.scala (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/spark/src/main/scala/org/apache/spark/sql/delta/catalog/AbstractDeltaCatalog.scala). *Delta Lake*. Retrieved 2026-11-23.
+[^n5]: [ClusterBySpec.scala (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/spark/src/main/scala/org/apache/spark/sql/delta/skipping/clustering/temp/ClusterBySpec.scala). *Delta Lake*. Retrieved 2026-11-23.
+[^icebergspec]: [Iceberg Table Spec (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n6]: [Spark Configuration (Iceberg 1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/docs/docs/spark-configuration.md). *Apache Software Foundation*. Retrieved 2026-11-23.

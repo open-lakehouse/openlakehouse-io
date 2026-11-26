@@ -1,0 +1,121 @@
+---
+title: "Spark Streaming (DStreams)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark Streaming, DStream API, discretized streams</Field>
+  <Field name="field">Stream processing</Field>
+  <Field name="introduced">Apache Spark 0.7.0 (alpha)</Field>
+  <Field name="key_parts">`StreamingContext`, DStream, receivers, batch interval, checkpointing</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (`streaming` module)</Field>
+  <Field name="related">[Structured Streaming](/wiki/Structured_Streaming), [Stream processing](/wiki/Stream_processing), [Apache Spark](/wiki/Apache_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (streaming module source, PySpark StreamingContext, streaming programming guide), the Spark 0.7.0 and 3.4.0 release notes and SPARK-42075</Verified>
+
+<Status level="deprecated" since="Apache Spark 3.4.0">Use [Structured Streaming](/wiki/Structured_Streaming) instead. Still included in Spark 4.3.0; the documentation calls it a legacy project that receives no further updates.[^jira][^r340]</Status>
+
+**Spark Streaming**, also called the **DStream API**, is the original stream processing library of [Apache Spark](/wiki/Apache_Spark), in which a live data stream is divided into small batches and represented as a **discretized stream** (DStream): a continuous series of RDDs, each holding the data received in one time interval.[^guide] The API has been deprecated since Spark 3.4.0. Spark's documentation calls it the previous generation of Spark's streaming engine and directs all new streaming applications to [Structured Streaming](/wiki/Structured_Streaming).[^guide][^jira]
+
+## Status
+
+The DStream API was deprecated in Apache Spark 3.4.0 under SPARK-42075, "Deprecate DStream API", and the 3.4.0 release notes list the deprecation.[^jira][^r340] At the v4.3.0 tag the deprecation is still in place:
+
+- The Scala `StreamingContext` and the Java `JavaStreamingContext` carry `@deprecated("DStream is deprecated. Migrate to Structured Streaming.", "Spark 3.4.0")`.[^scala]
+- The PySpark `StreamingContext` constructor issues a `FutureWarning`: "DStream is deprecated as of Spark 3.4.0. Migrate to Structured Streaming." Its docstring adds that there are no longer updates to DStream and that it is a legacy project.[^py]
+- The Spark 4.3.0 programming guide opens with a note that Spark Streaming "is the previous generation of Spark's streaming engine", that "there are no longer updates to Spark Streaming and it's a legacy project", and that users should use Structured Streaming.[^guide]
+
+The API has not been removed. The `streaming` module and its programming guide are still part of Spark 4.3.0, and the guide still documents the Kafka and Kinesis integrations.[^guide] No Spark release up to 4.3.0 announces a removal date.
+
+## Programming model
+
+A Spark Streaming application creates a `StreamingContext` with a **batch interval**, such as one second. **Input DStreams** receive data from a source; every input DStream except file streams is associated with a **receiver**, which receives the data and stores it in Spark's memory for processing. Basic sources include sockets and file systems, and advanced sources such as Kafka and Kinesis come from separate artifacts (`spark-streaming-kafka-0-10` and `spark-streaming-kinesis-asl`).[^guide]
+
+Each operation on a DStream becomes an operation on the RDDs underneath it. The API offers RDD-style transformations (`map`, `flatMap`, `reduceByKey`), window operations such as `reduceByKeyAndWindow`, stateful `updateStateByKey`, `transform` for arbitrary RDD-to-RDD functions, and output operations such as `foreachRDD`. Stateful transformations, such as `updateStateByKey` or `reduceByKeyAndWindow` with an inverse function, require a checkpoint directory.[^guide] The window length and sliding interval of a window operation must be multiples of the batch interval.[^guide]
+
+The following PySpark example, adapted from the programming guide, counts words in one-second batches from a socket. On Spark 4.3 it runs but prints the deprecation warning.[^guide][^py]
+
+```python
+from pyspark import SparkContext
+from pyspark.streaming import StreamingContext
+
+sc = SparkContext("local[2]", "NetworkWordCount")
+ssc = StreamingContext(sc, 1)  # 1-second batches; emits a FutureWarning
+
+lines = ssc.socketTextStream("localhost", 9999)
+counts = (lines.flatMap(lambda line: line.split(" "))
+               .map(lambda word: (word, 1))
+               .reduceByKey(lambda a, b: a + b))
+counts.pprint()
+
+ssc.start()
+ssc.awaitTermination()
+```
+
+DStreams are built on RDDs and the `SparkContext`, which the Spark Connect documentation lists as unsupported, so DStream applications cannot run through a [Spark Connect](/wiki/Spark_Connect) client.[^connect]
+
+## History
+
+Spark Streaming first appeared as an alpha in Spark 0.7.0, which described it as an extension adding near-real-time processing, with transformations such as `map`, `filter`, `reduce` and sliding windows.[^n1] Structured Streaming, built on the Spark SQL engine, arrived as an experimental API in Spark 2.0.0.[^n2] The Spark 4.3 documentation recommends it for all new streaming applications and pipelines.[^guide]
+
+## Migration to Structured Streaming
+
+<Hatnote>Main article: [Structured Streaming](/wiki/Structured_Streaming)</Hatnote>
+
+There is no automatic converter. Migration means rewriting the job against the DataFrame API. The table maps DStream concepts to their usual Structured Streaming counterparts in Spark 4.3.[^guide][^ssapis]
+
+| DStream API | Structured Streaming |
+| --- | --- |
+| `StreamingContext` with a batch interval | `SparkSession`; `spark.readStream` to read, `writeStream` with a processing-time trigger to set the micro-batch interval |
+| DStream (series of RDDs) | Streaming DataFrame or Dataset (an unbounded table) |
+| RDD transformations (`map`, `reduceByKey`) | DataFrame operations (`select`, `groupBy`, `agg`) or SQL |
+| `window`, `reduceByKeyAndWindow` (multiples of the batch interval) | `groupBy(window(...))` on an event-time column, with a [watermark](/wiki/Watermark) for late data |
+| `updateStateByKey`, `mapWithState` (Scala and Java)[^n3] | Built-in stateful aggregations, or `transformWithState` (Spark 4.0 and later) for arbitrary state[^tws] |
+| `foreachRDD` | `foreachBatch` or a built-in sink |
+| `ssc.checkpoint(dir)` | `checkpointLocation` option on each query |
+| `spark-streaming-kafka-0-10` | Kafka source and sink in `spark-sql-kafka-0-10`[^n4] |
+
+The word count above becomes the following query, taken from the Structured Streaming quick example.[^ssstart] One semantic difference matters: the DStream version prints counts for each batch, while this query keeps a running count over all data received, because the result table is cumulative and is written in complete mode.
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import explode, split
+
+spark = SparkSession.builder.appName("StructuredNetworkWordCount").getOrCreate()
+
+lines = (spark.readStream.format("socket")
+         .option("host", "localhost").option("port", 9999).load())
+words = lines.select(explode(split(lines.value, " ")).alias("word"))
+counts = words.groupBy("word").count()
+
+query = counts.writeStream.outputMode("complete").format("console").start()
+query.awaitTermination()
+```
+
+Unlike DStreams, Structured Streaming queries run on the optimized Spark SQL engine and provide end-to-end [exactly-once semantics](/wiki/Exactly-once_semantics) through checkpointing and write-ahead logs.[^ssindex] Most of the Structured Streaming API, including `DataStreamReader`, `DataStreamWriter` and `StreamingQuery`, is supported in [Spark Connect](/wiki/Spark_Connect).[^connect]
+
+## See also
+
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Stream processing](/wiki/Stream_processing)
+- [Watermark](/wiki/Watermark)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [GraphX](/wiki/GraphX)
+
+## References
+
+[^jira]: [SPARK-42075: Deprecate DStream API](https://issues.apache.org/jira/browse/SPARK-42075). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^r340]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^guide]: [Spark Streaming Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^scala]: [StreamingContext.scala at v4.3.0](https://github.com/apache/spark/blob/v4.3.0/streaming/src/main/scala/org/apache/spark/streaming/StreamingContext.scala). *GitHub*. Retrieved 2026-11-22.
+[^py]: [pyspark/streaming/context.py at v4.3.0](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/streaming/context.py). *GitHub*. Retrieved 2026-11-22.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Spark Release 0.7.0](https://spark.apache.org/releases/spark-release-0-7-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ssapis]: [Structured Streaming: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [PairDStreamFunctions.scala at v4.3.0](https://github.com/apache/spark/blob/v4.3.0/streaming/src/main/scala/org/apache/spark/streaming/dstream/PairDStreamFunctions.scala). *GitHub*. Retrieved 2026-11-22.
+[^tws]: [Structured Streaming: transformWithState (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-transform-with-state.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [Structured Streaming + Kafka Integration Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-kafka-integration.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ssstart]: [Structured Streaming: Getting Started (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/getting-started.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ssindex]: [Structured Streaming Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/index.html). *Apache Software Foundation*. Retrieved 2026-11-22.

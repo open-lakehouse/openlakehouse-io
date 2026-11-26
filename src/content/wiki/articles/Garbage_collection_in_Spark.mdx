@@ -1,0 +1,77 @@
+---
+title: "Garbage collection in Spark"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">JVM GC in Spark, GC pressure</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">JVM heap generations, GC time metric, G1GC (the JVM default on server configurations since JDK 9), GC tuning flags</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) on the Java Virtual Machine</Field>
+  <Field name="related">[Spark memory management](/wiki/Spark_memory_management), [Executor](/wiki/Executor), [Caching and persistence](/wiki/Caching_and_persistence), [Spill (memory)](/wiki/Spill_(memory)), [Executor memory overhead](/wiki/Executor_memory_overhead)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/tuning.md, docs/web-ui.md, docs/monitoring.md, docs/configuration.md, core/src/main/resources/org/apache/spark/ui/static/executorspage.js), the Spark 4.3.0 overview page and OpenJDK JEP 248</Verified>
+
+**Garbage collection in Spark** is the work the Java Virtual Machine (JVM) does inside each [Apache Spark](/wiki/Apache_Spark) [executor](/wiki/Executor) and driver to find objects that are no longer used and free their memory. Spark runs on the JVM, so every task's objects live on the heap and are cleaned up by the JVM garbage collector (GC). When the heap is under pressure, the GC runs often or for long pauses, and tasks slow down even though they do no extra useful work.[^tuning]
+
+## What does the GC time column in the Spark UI mean?
+
+The Spark UI reports **GC time** in two places.
+
+- **Stage page.** In the task summary and the task table, GC time is the total time the JVM spent in garbage collection while that task ran.[^webui] The REST API exposes it as `jvmGCTime`, in milliseconds.[^monitoring]
+- **Executors tab.** The "Task Time (GC Time)" column shows total task time and GC time per executor.[^webui][^exectpl] The UI shades the cell red when GC time is more than 10% of total task time.[^execjs]
+
+GC time is measured per JVM, and several tasks run in one executor JVM at once. A long collection pauses all of them, so tasks that ran at the same time on one executor often show similar GC time. Executor-level metrics also split GC into minor and major collections (`MinorGCCount`, `MinorGCTime`, `MajorGCCount`, `MajorGCTime`).[^monitoring]
+
+## Symptoms of GC pressure
+
+- GC time is a large share of task time, and the Executors tab shows red cells.[^execjs]
+- The Spark docs single out full GCs: if a full GC runs several times before a task completes, there is not enough memory for executing tasks.[^tuning]
+- Very long pauses can delay the heartbeats that tell the driver an executor is alive. Executors send one every `spark.executor.heartbeatInterval` (default 10s), and `spark.network.timeout` (default 120s) is the default for the block manager heartbeat timeout.[^config]
+- The executor fails with `java.lang.OutOfMemoryError: GC overhead limit exceeded` or a heap OOM. This is different from a container kill; see [Executor memory overhead](/wiki/Executor_memory_overhead).
+
+## What causes GC pressure?
+
+The Spark docs give two main causes. First, the cost of garbage collection is proportional to the number of Java objects, so data structures with many small objects (a `LinkedList` instead of an array of primitives, boxed values, nested collections) cost more. Second, a task's working memory competes with the data cached on the same executor.[^tuning] Large deserialized caches, [skewed](/wiki/Data_skew) tasks that hold a lot of data at once, and user code that collects large collections in memory all add to the live heap.
+
+DataFrame and SQL operations put less load on the GC than RDDs of Java or Python objects, because Spark SQL keeps rows in a compact binary format and allocates its own memory pages for sorting, hashing and shuffle. See [Project Tungsten](/wiki/Project_Tungsten).[^tmm]
+
+## How to reduce GC time
+
+The Spark tuning guide recommends these steps, in this order of effort:[^tuning]
+
+1. **Use serialized caching.** Persisting in serialized form leaves one byte array per partition instead of many objects; the docs call this the first thing to try. (In PySpark, cached RDD data is always serialized.)[^rddguide]
+1. **Cache less.** If the old generation is close to full, lower `spark.memory.fraction`; it is better to cache fewer objects than to slow down task execution.
+1. **Size the young generation.** If there are many minor collections but few major ones, give Eden more memory.
+1. **Use G1GC settings for large heaps.** The JVM that the deployment runs Spark on sets the default collector. Spark 4.3.0 runs on Java 17, 21 or 25,[^overview] and G1 has been the default collector on server configurations since JDK 9.[^jep248] With large executor heaps, raising `-XX:G1HeapRegionSize` can help.[^tuning]
+
+GC flags for executors go in `spark.executor.defaultJavaOptions` or `spark.executor.extraJavaOptions`. The heap size itself cannot be set there; it comes from `spark.executor.memory`.[^tuning][^config]
+
+```
+spark.executor.memory              16g
+spark.executor.extraJavaOptions    -XX:+UseG1GC -XX:G1HeapRegionSize=32m -Xlog:gc*:file=/tmp/gc-{{EXECUTOR_ID}}.log
+```
+
+Spark replaces `{{APP_ID}}` and `{{EXECUTOR_ID}}` in `spark.executor.extraJavaOptions` with the application and executor IDs, which gives each executor its own GC log.[^config]
+
+## See also
+
+- [Spark memory management](/wiki/Spark_memory_management)
+- [Executor](/wiki/Executor)
+- [Executor memory overhead](/wiki/Executor_memory_overhead)
+- [Caching and persistence](/wiki/Caching_and_persistence)
+- [Project Tungsten](/wiki/Project_Tungsten)
+
+## References
+
+[^tuning]: [Tuning Spark (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^exectpl]: [executorspage-template.html (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/resources/org/apache/spark/ui/static/executorspage-template.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^execjs]: [executorspage.js (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/resources/org/apache/spark/ui/static/executorspage.js). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tmm]: [TaskMemoryManager.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/memory/TaskMemoryManager.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rddguide]: [RDD Programming Guide: RDD Persistence (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#rdd-persistence). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^overview]: [Spark Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jep248]: [JEP 248: Make G1 the Default Garbage Collector](https://openjdk.org/jeps/248). *OpenJDK*. Retrieved 2026-11-23.

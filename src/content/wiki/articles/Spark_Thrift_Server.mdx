@@ -1,0 +1,107 @@
+---
+title: "Spark Thrift Server"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Query engines"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 1.1.0 (as the Spark SQL JDBC/ODBC server)</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala, Java</Field>
+  <Field name="type">JDBC/ODBC server for Spark SQL (HiveServer2 protocol)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[Distributed SQL Engine](https://spark.apache.org/docs/4.3.0/sql-distributed-sql-engine.html)</Field>
+  <Field name="repo">[github.com/apache/spark (sql/hive-thriftserver)](https://github.com/apache/spark/tree/v4.3.0/sql/hive-thriftserver)</Field>
+  <Field name="related">[Spark Connect](/wiki/Spark_Connect), [Apache Hive](/wiki/Apache_Hive), [Hive Metastore](/wiki/Hive_Metastore)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-distributed-sql-engine.md, docs/sql-migration-guide.md, sbin/start-thriftserver.sh, SQLConf.scala, sql/connect/client/jdbc), the Spark 1.1.0, 4.1.0 and 4.3.0 release notes, SPARK-53484 and the Databricks Connect and Databricks JDBC Driver documentation</Verified>
+
+The **Spark Thrift Server** is the JDBC/ODBC server of [Apache Spark](/wiki/Apache_Spark) SQL: a long-running Spark application that implements the HiveServer2 Thrift protocol, so that BI tools, SQL clients and the `beeline` shell can run SQL on Spark over standard JDBC or ODBC connections without writing Spark code.[^dse] Each client connection gets its own session on a shared Spark application.[^sqlmig] Since Spark 4.1, [Spark Connect](/wiki/Spark_Connect) also offers a JDBC driver, which gives JDBC clients a second way to reach Spark.[^r410]
+
+## Is the Spark Thrift Server deprecated?
+
+No. The Spark Thrift Server is not deprecated in Spark 4.3.0. It is documented in the Spark 4.3.0 SQL guide, and the Spark 4.3.0 release notes include changes to it, such as making its JDBC metadata operations aware of DataSource V2 catalogs (SPARK-57518, opt-in with `spark.sql.thriftServer.catalogMetadata.enabled`) and disallowing JVM system properties in its sessions (SPARK-57441).[^dse][^r430]
+
+## History
+
+Spark 1.1.0 introduced a JDBC/ODBC server for Spark SQL that let many applications connect to Spark SQL and share cached tables.[^n1] Spark 1.6 made the server multi-session by default.[^sqlmig]
+
+## How does the Spark Thrift Server work?
+
+The Spark Thrift Server corresponds to HiveServer2 in [Apache Hive](/wiki/Apache_Hive), and clients connect to it with Hive JDBC URLs of the form `jdbc:hive2://host:port`.[^dse] The server is a Spark application: `sbin/start-thriftserver.sh` submits the class `org.apache.spark.sql.hive.thriftserver.HiveThriftServer2` with the application name "Thrift JDBC/ODBC Server", and it accepts every [spark-submit](/wiki/Spark-submit) option plus `--hiveconf` for Hive properties.[^dse][^n2] Queries therefore run on the server's own executors, on whatever cluster manager it was started on.
+
+By default the server listens on `localhost:10000`. The port and host can be changed with the environment variables `HIVE_SERVER2_THRIFT_PORT` and `HIVE_SERVER2_THRIFT_BIND_HOST` or the properties `hive.server2.thrift.port` and `hive.server2.thrift.bind.host`.[^dse] Hive configuration comes from `hive-site.xml`, `core-site.xml` and `hdfs-site.xml` in Spark's `conf/` directory.[^dse]
+
+```bash
+# Start the server on YARN, then connect with beeline
+./sbin/start-thriftserver.sh \
+  --master yarn \
+  --conf spark.sql.shuffle.partitions=64 \
+  --hiveconf hive.server2.thrift.port=10000
+
+./bin/beeline -u jdbc:hive2://localhost:10000
+```
+
+```sql
+-- Inside beeline: plain Spark SQL
+SHOW TABLES;
+SET spark.sql.shuffle.partitions=200;   -- affects this session only
+SELECT count(*) FROM sales WHERE region = 'EMEA';
+```
+
+The server can also carry Thrift RPC over HTTP. Setting `hive.server2.transport.mode=http` enables it, by default on port 10001 (`hive.server2.thrift.http.port`) at endpoint `cliservice` (`hive.server2.http.endpoint`); clients add `transportMode=http;httpPath=cliservice` to the JDBC URL.[^dse] `sbin/stop-thriftserver.sh` stops the server.[^dse]
+
+## How do sessions work?
+
+Since Spark 1.6 the Spark Thrift Server runs in multi-session mode: each JDBC/ODBC connection has its own copy of the SQL configuration and its own temporary function registry, while cached tables are shared by all connections. Setting `spark.sql.hive.thriftServer.singleSession=true` restores the older single-session mode.[^sqlmig] Because all sessions share one Spark application, they share its executors and its Spark core configuration; a `SET` in one session changes only runtime SQL configurations for that session (see [Spark configuration precedence](/wiki/Spark_configuration_precedence)).
+
+Several behaviors changed in recent releases:[^sqlmig]
+- Since Spark 3.5, cancelling a running statement interrupts its tasks; `spark.sql.thriftServer.interruptOnCancel=false` restores the old behavior.
+- Since Spark 4.1, `GetColumns` returns a 1-based `ORDINAL_POSITION` instead of the previous 0-based value.
+- Since Spark 4.3, sessions cannot set JVM system properties through the `set:system:` configuration overlay, for example in a JDBC connection string; `spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties=true` restores the old behavior.
+
+## Spark Thrift Server vs Spark Connect
+
+[Spark Connect](/wiki/Spark_Connect) is a gRPC protocol through which a thin client sends unresolved DataFrame plans to a Spark server.[^connect] Spark 4.1.0 added a JDBC driver for Spark Connect (SPARK-53484), and Spark 4.3.0 extended it, for example with support for `ARRAY`, `MAP` and `STRUCT` results (SPARK-57380).[^r410][^r430][^n3] The driver accepts URLs that start with `jdbc:sc://`.[^n4]
+
+|  | Spark Connect | Spark Thrift Server |
+| --- | --- | --- |
+| Protocol | gRPC with Protocol Buffers; results as Apache Arrow batches | HiveServer2 Thrift (binary or HTTP) |
+| Clients | PySpark, Scala and other Spark Connect clients (DataFrame API and SQL); JDBC driver since Spark 4.1.0 | Any HiveServer2-compatible JDBC/ODBC client, such as `beeline` |
+| JDBC URL | `jdbc:sc://host:port` | `jdbc:hive2://host:port` |
+| Default port | 15002 | 10000 (binary), 10001 (HTTP) |
+| Start script | `sbin/start-connect-server.sh` | `sbin/start-thriftserver.sh` |
+| Session isolation | One session per client; no access to static configuration or the `SparkContext` | One session per connection with its own SQL configuration and temporary functions; shared cache |
+
+Sources: the Spark 4.3.0 Spark Connect and distributed SQL engine guides, the standalone guide, the SQL migration guide and the Spark Connect JDBC driver source.[^connect][^dse][^sqlmig][^n5]
+
+The two servers address different clients: the Thrift Server serves tools built for HiveServer2, while Spark Connect also serves DataFrame programs written against the Spark client libraries. On Databricks, Databricks Connect is an extension of Spark Connect for Databricks Runtime 13.3 LTS and above.[^n6] For SQL tools, Databricks publishes the Databricks JDBC Driver under the Apache 2.0 license; it can run queries either through the Statement Execution API or over Thrift.[^n7]
+
+Outside the Spark project, Apache Kyuubi describes itself as a multi-tenant Thrift JDBC/ODBC server and a distributed, multi-tenant gateway that provides serverless SQL on lakehouses.[^n8]
+
+## See also
+
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark configuration precedence](/wiki/Spark_configuration_precedence)
+- [spark-submit](/wiki/Spark-submit)
+- [Apache Hive](/wiki/Apache_Hive)
+- [Hive Metastore](/wiki/Hive_Metastore)
+- [Hive on Spark](/wiki/Hive_on_Spark)
+
+## References
+
+[^dse]: [Distributed SQL Engine (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-distributed-sql-engine.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlmig]: [Migration Guide: SQL, Datasets and DataFrame (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Spark Release 1.1.0](https://spark.apache.org/releases/spark-release-1-1-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [sbin/start-thriftserver.sh (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sbin/start-thriftserver.sh). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [SPARK-53484: SPIP: JDBC Driver for Spark Connect](https://issues.apache.org/jira/browse/SPARK-53484). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n4]: [NonRegisteringSparkConnectDriver.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/client/jdbc/src/main/scala/org/apache/spark/sql/connect/client/jdbc/NonRegisteringSparkConnectDriver.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [Spark Standalone Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-standalone.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n6]: [What is Databricks Connect?](https://docs.databricks.com/aws/en/dev-tools/databricks-connect/). *Databricks*. Retrieved 2026-11-23.
+[^n7]: [Databricks JDBC Driver](https://docs.databricks.com/aws/en/integrations/jdbc-oss/). *Databricks*. Retrieved 2026-11-23.
+[^n8]: [Apache Kyuubi](https://kyuubi.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-23.

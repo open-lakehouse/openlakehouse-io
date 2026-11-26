@@ -1,0 +1,86 @@
+---
+title: "Catalyst optimizer"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Catalyst, Spark SQL optimizer</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="introduced">2014, with Spark SQL (described in a SIGMOD 2015 paper)</Field>
+  <Field name="key_parts">Trees and rules, analyzer, logical optimizer (rule batches), physical planner (strategies), code generation</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan), [Whole-stage code generation](/wiki/Whole-stage_code_generation), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark)), [Predicate pushdown](/wiki/Predicate_pushdown), [Project Tungsten](/wiki/Project_Tungsten)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the SIGMOD 2015 paper "Spark SQL: Relational Data Processing in Spark", the v4.3.0 tag of apache/spark (Optimizer.scala, SparkStrategies.scala, SQLConf.scala, StaticSQLConf.scala, docs/sql-ref-syntax-qry-explain.md, docs/sql-performance-tuning.md), the Spark 3.0.0 release notes, the Delta Lake quickstart, the Apache Iceberg 1.12.0 Spark configuration page and plan change logs and EXPLAIN output from a PySpark 4.3.0 run</Verified>
+
+The **Catalyst optimizer** is the extensible query optimizer of Spark SQL in [Apache Spark](/wiki/Apache_Spark); it turns every SQL query and DataFrame or Dataset program into an optimized physical plan by applying rules to trees in four phases: analysis, logical optimization, physical planning and code generation.[^paper] SQL queries and DataFrame operations, including those written in Python and R, all go through Catalyst.[^paper] The paper that introduced Catalyst, "Spark SQL: Relational Data Processing in Spark", was written by Michael Armbrust, Reynold Xin, Matei Zaharia and others at Databricks, MIT CSAIL and the AMPLab at UC Berkeley, and presented at SIGMOD in 2015; it gives May 2014 as the first release of Spark SQL.[^paper]
+
+## How does Catalyst work?
+
+Catalyst represents a query as a **tree** of immutable nodes, such as expressions (`Add`, `Literal`) and operators (`Filter`, `Join`). A **rule** is a function from one tree to another, usually written with Scala pattern matching; for example, a rule can fold `Add(Literal(1), Literal(2))` into `Literal(3)`. Rules are grouped into **batches**, and each batch runs until the tree stops changing (a fixed point) or a set number of times.[^paper]
+
+The paper describes four phases. In the physical planning phase Catalyst may generate several plans and compare them by cost; the other phases are purely rule-based.[^paper]
+
+| Phase | Input | Output | Examples of what happens |
+| --- | --- | --- | --- |
+| 1. Analysis | Unresolved logical plan from the SQL parser or the DataFrame API | Resolved (analyzed) logical plan | Look up tables in the catalog, resolve column names, assign unique attribute IDs, apply type coercion[^paper] |
+| 2. Logical optimization | Analyzed logical plan | Optimized logical plan | Constant folding, predicate pushdown, column pruning, boolean simplification[^paper][^opt] |
+| 3. Physical planning | Optimized logical plan | Physical plan (`SparkPlan`) | Pick join strategies, pick hash or sort aggregation, push filters into data source scans[^paper][^strategies] |
+| 4. Code generation | Physical plan | Java bytecode for parts of the query | [Whole-stage code generation](/wiki/Whole-stage_code_generation) compiles chains of operators into one function[^paper] |
+
+In Spark 4.3.0 the logical optimizer is a long list of named batches, for example "Operator Optimization before Inferring Filters", "Infer Filters", "Join Reorder" (used by the [cost-based optimizer](/wiki/Cost-based_optimizer_(Spark))) and "RewriteSubquery".[^opt] Since Spark 3.0.0, [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) adds a further round of optimization at run time, using runtime statistics.[^r300][^perf]
+
+## Which Catalyst rules can be seen in EXPLAIN?
+
+Rules do not appear by name in `EXPLAIN` output, but their effects do. `EXPLAIN EXTENDED` (or `df.explain(mode="extended")`) prints the parsed, analyzed and optimized logical plans and the physical plan, so a rule's work shows as a difference between two of them.[^explain] The examples below are from PySpark 4.3.0.
+
+| Rule (Spark 4.3.0 class name) | What it does | How it shows in EXPLAIN |
+| --- | --- | --- |
+| `ConstantFolding` | Evaluates constant expressions at planning time | `(id % cast(2 as bigint))` in the analyzed plan becomes `(id % 2)` in the optimized plan |
+| `PushDownPredicates` | Moves filters below projections and joins, toward the data | A `Filter` written after a join appears under the join, on each input |
+| `InferFiltersFromConstraints` | Derives new filters from join conditions and existing filters | A join on `id` with `id > 10` on one side gets `id > 10 AND isnotnull(id)` on both sides |
+| `ColumnPruning` | Removes columns that no later operator needs | A Parquet scan lists only the needed columns, for example `FileScan parquet [id#42L]` |
+| `BooleanSimplification` | Simplifies boolean expressions | `y > 3 AND true` becomes `y > 3` |
+| Data source pushdown (physical planning) | Hands filters to the data source | `PushedFilters: [IsNotNull(id), GreaterThan(id,10)]` on a `FileScan parquet` node; see [Predicate pushdown](/wiki/Predicate_pushdown) |
+
+To see the rules by name, set `spark.sql.planChangeLog.level` to `WARN`. Spark then logs each rule that changes the plan, with the plan before and after. For the query `spark.range(10).selectExpr("id + (1 + 2) as y").filter("y > 3 and true")`, PySpark 4.3.0 logged `ConstantFolding`, `BooleanSimplification` and `PushDownPredicates` among the optimizer rules, along with analyzer rules such as `ResolveReferences`.[^sqlconf]
+
+```python
+spark.conf.set("spark.sql.planChangeLog.level", "WARN")
+df = spark.range(10).selectExpr("id + (1 + 2) AS y").filter("y > 3 AND true")
+df.explain(mode="extended")
+```
+
+Individual rules can be turned off with `spark.sql.optimizer.excludedRules`, a comma-separated list of rule names (since 2.4.0). Spark does not guarantee that every listed rule is excluded, because some rules are needed for correctness.[^sqlconf]
+
+## Extending Catalyst
+
+Catalyst was built to be extended. The paper names new data sources, including ones that accept pushed-down filters, user-defined types and new optimization rules as extension points.[^paper] In Spark 4.3.0, the static setting `spark.sql.extensions` takes a list of classes that add rules, planner strategies, parsers and functions to every session.[^static] Table formats use this hook: [Delta Lake](/wiki/Delta_Lake) is enabled with `spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension`,[^delta] and [Apache Iceberg](/wiki/Apache_Iceberg)'s SQL extensions with `org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions`.[^icecfg]
+
+## What Catalyst is not
+
+- **Not the execution engine.** Catalyst decides what plan to run. How the chosen operators use memory and CPU is the work of [Project Tungsten](/wiki/Project_Tungsten) and the executors.
+- **Not used by the RDD API.** Programs written with RDDs and arbitrary functions are run as written. Only DataFrame, Dataset and SQL operations, whose structure Spark understands, are optimized by Catalyst.[^paper]
+
+## See also
+
+- [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan)
+- [Whole-stage code generation](/wiki/Whole-stage_code_generation)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Lazy evaluation](/wiki/Lazy_evaluation)
+
+## References
+
+[^paper]: [Spark SQL: Relational Data Processing in Spark (SIGMOD 2015)](https://people.csail.mit.edu/matei/papers/2015/sigmod_spark_sql.pdf). *Armbrust et al., Databricks, MIT CSAIL and AMPLab UC Berkeley*. Retrieved 2026-11-23.
+[^opt]: [Optimizer.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/Optimizer.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^strategies]: [SparkStrategies.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r300]: [Spark Release 3.0.0](https://spark.apache.org/releases/spark-release-3-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^explain]: [EXPLAIN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-explain.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^static]: [StaticSQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/StaticSQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta]: [Quickstart (Delta Lake documentation)](https://docs.delta.io/latest/quick-start.html). *Delta Lake project, Linux Foundation*. Retrieved 2026-11-23.
+[^icecfg]: [Spark Configuration (Apache Iceberg 1.12.0 documentation)](https://iceberg.apache.org/docs/latest/spark-configuration/). *Apache Software Foundation*. Retrieved 2026-11-23.

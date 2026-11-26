@@ -1,0 +1,105 @@
+---
+title: "Caching and persistence"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">`cache()`, `persist()`, `CACHE TABLE`, storage levels</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Storage levels, storage memory, in-memory columnar cache, LRU eviction, `unpersist()`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Spark memory management](/wiki/Spark_memory_management), [Checkpointing (Spark)](/wiki/Checkpointing_(Spark)), [RDD](/wiki/RDD), [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/rdd-programming-guide.md, docs/sql-performance-tuning.md, docs/sql-ref-syntax-aux-cache-cache-table.md, docs/tuning.md, docs/job-scheduling.md, sql/api Dataset.scala, python/pyspark/sql/dataframe.py)</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **caching** or **persistence** keeps the computed partitions of a DataFrame, table or [RDD](/wiki/RDD) in executor memory or on local disk, so that later actions reuse them instead of recomputing them from the source. `persist()` takes a storage level that says where and how the data is kept; `cache()` is `persist()` with the default level.[^rddguide] A cache is fault tolerant: a lost partition is recomputed from its lineage.[^rddguide]
+
+## Cache vs persist
+
+`cache()` and `persist()` differ only in the storage level. The default is different for DataFrames and RDDs:
+
+| API | `cache()` uses | Source |
+| --- | --- | --- |
+| DataFrame / Dataset (Scala, Java) | `MEMORY_AND_DISK` | [^dataset] |
+| DataFrame (PySpark) | `MEMORY_AND_DISK_DESER`, changed to match Scala in 3.0 | [^pydf] |
+| SQL `CACHE TABLE` | `MEMORY_AND_DISK`, unless set with `OPTIONS ('storageLevel' ...)` | [^cachetable] |
+| RDD | `MEMORY_ONLY` | [^rddguide] |
+
+Caching is lazy. `cache()` only marks the DataFrame; the data is stored the first time an action computes it.[^rddguide] `CACHE TABLE` is the exception: it caches immediately unless written as `CACHE LAZY TABLE`.[^cachetable]
+
+DataFrames and tables are cached in Spark SQL's in-memory columnar format. Spark then scans only the needed columns and picks a compression codec per column (`spark.sql.inMemoryColumnarStorage.compressed`, default true).[^perf] Spark 4.3.0 also documents an Apache Arrow based cache format as an alternative.[^perf] Cached data is shared by all Spark sessions on the cluster.[^cachetable]
+
+## Storage levels
+
+| Level | Where | If it does not fit |
+| --- | --- | --- |
+| `MEMORY_ONLY` | Memory, deserialized | Partitions that do not fit are not cached and are recomputed when needed |
+| `MEMORY_AND_DISK` | Memory, deserialized | Partitions that do not fit go to disk |
+| `MEMORY_ONLY_SER`, `MEMORY_AND_DISK_SER` (Java and Scala) | Memory, serialized (one byte array per partition) | As above; smaller in memory but more CPU to read |
+| `DISK_ONLY` | Local disk only | n/a |
+| `..._2` variants, for example `MEMORY_AND_DISK_2` | As above, replicated on two nodes | As above |
+| `OFF_HEAP` (experimental) | Off-heap memory, serialized; requires off-heap memory to be enabled | n/a |
+
+<small>Source: RDD Programming Guide, Spark 4.3.0.[^rddguide]</small>
+
+In Python, stored objects are always serialized with Pickle, so the serialized and deserialized levels behave the same for RDDs.[^rddguide]
+
+## How to cache in PySpark and SQL
+
+```python
+from pyspark import StorageLevel
+
+dim = spark.read.table("main.sales.dim_customer").filter("active")
+dim.persist(StorageLevel.MEMORY_AND_DISK)
+dim.count()          # action that fills the cache
+
+# ... several queries that reuse dim ...
+
+dim.unpersist()
+```
+
+```sql
+CACHE TABLE active_customers AS SELECT * FROM main.sales.dim_customer WHERE active;
+UNCACHE TABLE active_customers;
+```
+
+The Storage tab of the Spark UI lists everything cached in the application with its size in memory and on disk.[^perf]
+
+## Where cached data lives
+
+Cached blocks use **storage memory** in the executor's unified memory region. Storage and execution borrow from each other, and execution can evict cached blocks down to `spark.memory.storageFraction` (default 0.5) of the region.[^tuning] When memory is short, Spark drops old partitions in least-recently-used order. `unpersist()` removes data at once; it does not block unless called with `blocking=True`.[^rddguide] See [Spark memory management](/wiki/Spark_memory_management).
+
+## When does caching hurt?
+
+- **The data is used once.** The RDD guide describes the gain from persisting as reuse: each node keeps the partitions it computes and reuses them in other actions on that dataset or datasets derived from it.[^rddguide] If no later action reads the cached data, nothing is reused, and storing the partitions is extra work and memory with no gain.
+- **It takes memory from execution.** Cached data competes with the working memory of tasks; more cache can mean more [spill](/wiki/Spill_(memory)) for joins and aggregations.[^tuning]
+- **It adds GC pressure.** The Spark docs name interference between tasks' working memory and cached data as one cause of garbage collection problems, and recommend caching less when the old generation is nearly full: "it is better to cache fewer objects than to slow down task execution".[^tuning] See [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark).
+- **It blocks executor scale-down.** With [dynamic allocation](/wiki/Dynamic_allocation), executors that hold cached data are not removed by default (`spark.dynamicAllocation.cachedExecutorIdleTimeout` is infinite).[^jobsched]
+- **Recomputing is cheap.** The RDD guide advises not to spill to disk unless the functions that computed the data are expensive or filter a lot of it; otherwise recomputing a partition may be as fast as reading it from disk.[^rddguide]
+
+## Caching compared with checkpointing
+
+|  | Caching / persistence | [Checkpointing](/wiki/Checkpointing_(Spark)) |
+| --- | --- | --- |
+| Keeps lineage? | Yes; lost partitions are recomputed from the source[^rddguide] | No; the plan is cut and the data is read back from the checkpoint[^dataset] |
+| Where | Executor memory or local disk | Reliable storage set with `setCheckpointDir` (or executor storage for local checkpoints)[^dataset] |
+| Survives executor loss? | Recomputed (or read from a replica with `_2` levels) | Yes for reliable checkpoints |
+
+## See also
+
+- [Spark memory management](/wiki/Spark_memory_management)
+- [Checkpointing (Spark)](/wiki/Checkpointing_(Spark))
+- [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark)
+- [RDD](/wiki/RDD)
+- [Dynamic allocation](/wiki/Dynamic_allocation)
+
+## References
+
+[^rddguide]: [RDD Programming Guide: RDD Persistence (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#rdd-persistence). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dataset]: [Dataset.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Dataset.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pydf]: [dataframe.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^cachetable]: [CACHE TABLE (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-aux-cache-cache-table.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tuning]: [Tuning Spark (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.

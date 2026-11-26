@@ -1,0 +1,94 @@
+---
+title: "Apache Gluten"
+categories: ["Query engines", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">Apache Software Foundation; initiated by Intel and Kyligence</Field>
+  <Field name="initial_release">2022 (project start); entered the Apache Incubator on 2023-12-15</Field>
+  <Field name="latest_release">1.7.0</Field>
+  <Field name="latest_release_date">2026-08-26</Field>
+  <Field name="written_in">Scala, C++, Java</Field>
+  <Field name="type">Native execution plugin for Apache Spark SQL</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[gluten.apache.org](https://gluten.apache.org)</Field>
+  <Field name="repo">[github.com/apache/gluten](https://github.com/apache/gluten)</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Velox](/wiki/Velox), [Apache DataFusion Comet](/wiki/Apache_DataFusion_Comet), [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)), [Project Tungsten](/wiki/Project_Tungsten)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Apache Incubator status page for Gluten, the ASF graduation announcement of 2026-03-05, the ASF board history page for Gluten, the GitHub releases of apache/gluten (v1.7.0 and v1.8.0-rc0), the Gluten downloads page, and README.md, docs/Configuration.md and docs/backends/velox/get-started/Velox.md on the main branch and the v1.7.0 tag</Verified>
+
+**Apache Gluten** is an open source plugin for [Apache Spark](/wiki/Apache_Spark) that converts Spark SQL physical plans into plans for a native engine, such as [Velox](/wiki/Velox) or ClickHouse, and runs the supported parts of a query in native code instead of in the Java virtual machine (JVM).[^readme] Gluten keeps Spark's scheduling, fault tolerance and APIs, so DataFrame code and SQL queries do not change; only the cluster configuration does.[^readme] Gluten is a top-level project of the Apache Software Foundation (ASF) since 2026, and it is one of the [native execution engines](/wiki/Native_execution_engine_(Spark)) available for Spark.[^incubator]
+
+## What is Apache Gluten?
+
+Apache Gluten is a middle layer between Spark and a native SQL engine. Its README describes the design principle as reusing Spark's control flow while offloading compute-intensive data processing to the native side. The name is Latin for "glue".[^readme]
+
+Apache Gluten converts the Spark physical plan into a [Substrait](https://substrait.io) plan, passes it to the native side through the Java Native Interface (JNI), and builds a chain of native operators from it. Results come back as Spark `ColumnarBatch` objects through Spark's columnar API, and Gluten uses the Apache Arrow data format as its in-memory representation.[^readme]
+
+Apache Gluten supports two backends. The Velox backend uses [Velox](/wiki/Velox), a C++ library of data processing components. The ClickHouse backend uses a ClickHouse fork maintained by Kyligence. The design allows more backends to be added.[^readme] The ASF graduation announcement also mentions future integration with Apache DataFusion as a goal of the extensible design.[^asfnews]
+
+## History and status
+
+Apache Gluten was initiated by Intel and Kyligence in 2022; its README lists BIGO, Meituan, Alibaba Cloud, NetEase, Baidu, Microsoft, IBM and Google among other contributing companies.[^readme] Releases up to 1.1.1 were made before the project joined the ASF and are marked "non-Apache release" on the downloads page.[^downloads]
+
+Apache Gluten entered the Apache Incubator on 2023-12-15. Its first Apache release in the incubator was 1.2.0 on 2024-09-03, followed by 1.3.0, 1.4.0 and 1.5.0 (2025-10-29).[^incubator] The project graduated on 2026-02-18, the date the ASF board established it as a top-level project, and the ASF announced the graduation on 2026-03-05.[^incubator][^asfnews][^board] Gluten is therefore no longer incubating.
+
+The latest Apache Gluten release is 1.7.0, published on GitHub on 2026-08-26.[^rel170] A release candidate for 1.8.0 (v1.8.0-rc0) was tagged on 2026-11-17 but is not a release.[^releases]
+
+## Which Spark versions does Gluten support?
+
+Apache Gluten uses a shim layer to support several Spark versions at once, and its README says it supports the latest three to four Spark releases during a development cycle.[^readme] The Gluten 1.7.0 binary release is built for Spark 3.3, 3.4, 3.5, 4.0 and 4.1.[^downloads][^readme170] On the main branch the list is Spark 3.4, 3.5, 4.0 and 4.1.[^readme] No Gluten release lists Spark 4.2 or 4.3. The Spark 4.0 and 4.1 builds of the Velox backend need JDK 17 or later and Scala 2.13.[^velox]
+
+## How does Gluten work with Apache Spark?
+
+Apache Gluten is enabled through Spark's plugin interface. A basic configuration from the project README sets the plugin class, turns on Spark off-heap memory, puts the Gluten JAR on the driver and executor class paths, and switches to Gluten's columnar shuffle manager:[^readme]
+
+```bash
+spark-shell \
+  --conf spark.plugins=org.apache.gluten.GlutenPlugin \
+  --conf spark.memory.offHeap.enabled=true \
+  --conf spark.memory.offHeap.size=20g \
+  --conf spark.driver.extraClassPath=${GLUTEN_JAR} \
+  --conf spark.executor.extraClassPath=${GLUTEN_JAR} \
+  --conf spark.shuffle.manager=org.apache.spark.shuffle.sort.ColumnarShuffleManager
+```
+
+Apache Gluten needs off-heap memory because native operators allocate memory outside the JVM heap. The configuration guide says Gluten uses `spark.memory.offHeap.size` to size native memory even when off-heap is disabled, and recommends a larger value if the plugin runs out of memory.[^config] Spark's own default for `spark.memory.offHeap.enabled` is false.[^sparkconf]
+
+Apache Gluten's columnar shuffle reuses the shuffle service of Spark core but adds a columnar exchange operator, so that data stays in columnar form between stages.[^readme] The Velox backend also works with the remote shuffle services Apache Celeborn and Apache Uniffle.[^velox]
+
+Apache Gluten has a `spark.gluten.enabled` setting (default true), but the configuration guide calls it experimental and recommends enabling or disabling Gluten through `spark.plugins`. With `spark.gluten.ui.enabled` (default true), Gluten adds its own page to the Spark web UI.[^config]
+
+## What runs natively and what falls back?
+
+Apache Gluten offloads only the operators and expressions that the chosen backend supports. For anything else it falls back to vanilla Spark, and it inserts ColumnarToRow and RowToColumnar conversions where the plan moves between Gluten's columnar data and Spark's internal row format.[^readme] Because each conversion has a cost, Gluten has settings that send larger parts of a plan back to Spark, for example `spark.gluten.sql.columnar.wholeStage.fallback.threshold` and `spark.gluten.sql.columnar.query.fallback.threshold`, which count ColumnarToRow transitions and vanilla leaf nodes (both default -1, off).[^config]
+
+Some fallbacks are on by default for correctness. `spark.gluten.sql.ansiFallback.enabled` (default true) makes Gluten fall back to Spark when ANSI mode is on, and `spark.gluten.sql.fallbackRegexpExpressions` can send all regular expressions to Spark because the native engine uses RE2, which differs from `java.util.regex` in a few cases.[^config] In Spark 4.3.0, `spark.sql.ansi.enabled` defaults to true, so this setting applies to queries that run with Spark's default configuration.[^sparkconf]
+
+## Which table formats does the Velox backend read?
+
+The Velox backend of Apache Gluten can scan [Delta Lake](/wiki/Delta_Lake) tables (including column mapping), [Apache Iceberg](/wiki/Apache_Iceberg) tables in both copy-on-write and merge-on-read form, [Apache Hudi](/wiki/Apache_Hudi) copy-on-write tables and Apache Paimon tables without a primary key. Each format needs a build profile (for example `-Pdelta` or `-Piceberg`) that adds it to the Velox bundle JAR.[^velox] The 1.7.0 release notes include a native statistics tracker for Delta writes.[^rel170]
+
+## See also
+
+- [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))
+- [Velox](/wiki/Velox)
+- [Apache DataFusion Comet](/wiki/Apache_DataFusion_Comet)
+- [GPU acceleration in Spark](/wiki/GPU_acceleration_in_Spark)
+- [Project Tungsten](/wiki/Project_Tungsten)
+- [Shuffle](/wiki/Shuffle)
+
+## References
+
+[^readme]: [Apache Gluten README](https://github.com/apache/gluten/blob/main/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^incubator]: [Apache Gluten Project Incubation Status](https://incubator.apache.org/projects/gluten.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^asfnews]: [The Apache Software Foundation Graduates Two Open Source Projects from Incubator](https://news.apache.org/foundation/entry/the-apache-software-foundation-graduates-two-open-source-projects-from-incubator). *The ASF Blog*, 2026-03-05. Retrieved 2026-11-23.
+[^downloads]: [Downloads](https://gluten.apache.org/downloads/). *Apache Gluten*. Retrieved 2026-11-23.
+[^board]: [Board history: Gluten](https://www.apache.org/foundation/board/minutes/Gluten.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rel170]: [Release v1.7.0](https://github.com/apache/gluten/releases/tag/v1.7.0). *Apache Software Foundation (GitHub)*. Retrieved 2026-11-23.
+[^releases]: [Releases: apache/gluten](https://github.com/apache/gluten/releases). *Apache Software Foundation (GitHub)*. Retrieved 2026-11-23.
+[^readme170]: [Apache Gluten README (v1.7.0)](https://github.com/apache/gluten/blob/v1.7.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^velox]: [Gluten with Velox Backend](https://github.com/apache/gluten/blob/main/docs/backends/velox/get-started/Velox.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Gluten Configuration](https://github.com/apache/gluten/blob/main/docs/Configuration.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sparkconf]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.

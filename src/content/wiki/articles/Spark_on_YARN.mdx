@@ -1,0 +1,97 @@
+---
+title: "Spark on YARN"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Running Spark on Hadoop YARN</Field>
+  <Field name="field">Cluster resource management</Field>
+  <Field name="key_parts">YARN ResourceManager, NodeManagers, containers, the Spark application master, queues</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) with Apache Hadoop YARN</Field>
+  <Field name="related">[Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager), [Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [spark-submit](/wiki/Spark-submit), [Executor](/wiki/Executor)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/running-on-yarn.md, docs/submitting-applications.md, docs/configuration.md, docs/job-scheduling.md, docs/cluster-overview.md, docs/core-migration-guide.md) and the Spark 0.6.0 release notes</Verified>
+
+**Spark on YARN** is the deployment of [Apache Spark](/wiki/Apache_Spark) applications on Apache Hadoop YARN (Yet Another Resource Negotiator), where the YARN ResourceManager grants containers on cluster nodes and Spark runs its application master, its driver (in cluster mode) and its [executors](/wiki/Executor) inside those containers.[^yarn] It lets Spark share a Hadoop cluster with other YARN workloads under the same queues and Kerberos security.[^yarn] YARN is one of the three cluster managers supported in Spark 4.3.0, with the [standalone manager](/wiki/Spark_standalone_cluster_manager) and [Kubernetes](/wiki/Spark_on_Kubernetes).[^overview]
+
+## Is Spark on YARN deprecated?
+
+No. YARN support is not deprecated in Spark 4.3.0; the cluster mode overview lists Hadoop YARN as a supported cluster manager.[^overview] Individual YARN settings have been deprecated: since Spark 3.5, `spark.yarn.max.executor.failures` and `spark.yarn.executor.failuresValidityInterval` are replaced by `spark.executor.maxNumFailures` and `spark.executor.failuresValidityInterval`.[^coremig]
+
+## History
+
+Spark 0.6.0 added experimental support for running on YARN, then in a separate branch; the Spark documentation dates YARN support to that release.[^n1][^yarn]
+
+## How does Spark run on YARN?
+
+Every Spark application on YARN has an **application master** (AM), a process managed by YARN that requests executor containers from the ResourceManager; in cluster mode the driver also runs inside it. In YARN terminology, both executors and the AM run inside **containers**.[^yarn]
+
+Spark does not take the ResourceManager address from `--master`. The master URL is simply `yarn`, and Spark reads the cluster location from the Hadoop configuration directory given by `HADOOP_CONF_DIR` or `YARN_CONF_DIR`; that configuration is also shipped to every container.[^yarn]
+
+## What is the difference between client and cluster mode on YARN?
+
+|  | Cluster mode | Client mode |
+| --- | --- | --- |
+| Where the driver runs | Inside the YARN application master container | In the client process that ran `spark-submit` |
+| Role of the AM | Runs the driver and requests executors | Only requests executors |
+| Can the client exit? | Yes, after the application starts | No, the driver lives in it |
+| AM sizing | `spark.driver.memory`, `spark.driver.cores` | `spark.yarn.am.memory` (default `512m`), `spark.yarn.am.cores` (default 1) |
+| Local directories of the driver | YARN's `yarn.nodemanager.local-dirs` | `spark.local.dir` |
+
+Source: Running Spark on YARN (Spark 4.3.0).[^yarn]
+
+The Spark documentation runs interactive shells such as `spark-shell` in client mode, where the console stays attached to the driver. In cluster mode, local files that the driver needs must be shipped with `--jars`, `--files` or `--archives`, because the driver runs on another machine.[^yarn]
+
+```bash
+export HADOOP_CONF_DIR=/etc/hadoop/conf
+./bin/spark-submit \
+  --master yarn \
+  --deploy-mode cluster \
+  --queue analytics \
+  --driver-memory 4g \
+  --executor-memory 8g \
+  --executor-cores 4 \
+  --num-executors 20 \
+  etl_job.py
+```
+
+## How do queues work?
+
+YARN schedules applications into queues defined by the cluster's YARN scheduler configuration. A Spark application chooses its queue with `--queue` or `spark.yarn.queue`, which defaults to `default`.[^yarn] Whether YARN honors the number of cores requested when placing containers depends on which YARN scheduler is in use and how it is configured.[^yarn] `spark.yarn.tags` attaches YARN application tags that can be used to filter applications.[^yarn]
+
+## How is container memory sized?
+
+Each executor container on YARN holds the executor heap (`spark.executor.memory`) plus non-heap overhead (`spark.executor.memoryOverhead`), which defaults to the executor memory times `spark.executor.memoryOverheadFactor` with a minimum of `spark.executor.minMemoryOverhead`. The overhead covers JVM overheads, interned strings and other native memory, and includes PySpark worker memory unless `spark.executor.pyspark.memory` is set.[^config] In client mode the AM has its own overhead, `spark.yarn.am.memoryOverhead`, which defaults to 10% of the AM memory with a minimum of 384 MiB.[^yarn] The [Executor](/wiki/Executor) article covers the memory layout inside the heap.
+
+On YARN, `spark.executor.cores` defaults to 1 and `spark.executor.instances` (`--num-executors`) to 2.[^config][^yarn]
+
+## What still matters when running Spark on YARN?
+
+- **Java version.** Spark 4.0.0 and later need at least Java 17, and Hadoop supports Java 17 from 3.5.0. On a YARN cluster with an older Hadoop, the Spark documentation says to configure a separate JDK for Spark by setting `JAVA_HOME` for the AM (`spark.yarn.appMasterEnv.JAVA_HOME`) and executors (`spark.executorEnv.JAVA_HOME`).[^yarn]
+- **Spark JARs.** Unless `spark.yarn.archive` or `spark.yarn.jars` points to a prepared copy, Spark zips every JAR under `$SPARK_HOME/jars` and uploads it to the distributed cache for each application.[^yarn]
+- **Hadoop classpath.** A Spark distribution built with Hadoop does not add YARN's classpath to the application by default (since Spark 3.1), to avoid dependency conflicts; `spark.yarn.populateHadoopClasspath=true` changes this.[^yarn][^coremig]
+- **Dynamic allocation and shuffle files.** To remove executors without losing their shuffle files, Spark needs an external shuffle service, shuffle tracking, shuffle block migration on decommission, or a reliable shuffle storage plugin.[^jobsched] On YARN the external shuffle service runs inside each NodeManager as the auxiliary service `spark_shuffle`, implemented by `org.apache.spark.network.yarn.YarnShuffleService` from the `spark-<version>-yarn-shuffle.jar`.[^yarn]
+- **Kerberos.** On YARN, Spark obtains delegation tokens for the default Hadoop file system and for the service that hosts the application's staging directory; an application can log in to the Kerberos KDC with `--principal` and `--keytab`.[^yarn][^ssargs]
+- **Logs.** With YARN log aggregation (`yarn.log-aggregation-enable`), container logs are copied to HDFS after the application ends and can be read with `yarn logs -applicationId <app ID>`.[^yarn]
+- **Retries.** `spark.yarn.maxAppAttempts` sets how many times YARN attempts the application, and must not exceed YARN's own `yarn.resourcemanager.am.max-attempts`.[^yarn]
+
+## See also
+
+- [spark-submit](/wiki/Spark-submit)
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [Spark standalone cluster manager](/wiki/Spark_standalone_cluster_manager)
+- [Spark configuration precedence](/wiki/Spark_configuration_precedence)
+- [Executor](/wiki/Executor)
+- [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))
+- [Hive on Spark](/wiki/Hive_on_Spark)
+
+## References
+
+[^yarn]: [Running Spark on YARN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-yarn.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^overview]: [Cluster Mode Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/cluster-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^coremig]: [Migration Guide: Spark Core (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/core-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Spark Release 0.6.0](https://spark.apache.org/releases/spark-release-0-6-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ssargs]: [SparkSubmitArguments.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/SparkSubmitArguments.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

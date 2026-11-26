@@ -1,0 +1,122 @@
+---
+title: "Catalog plugin API (Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Catalogs"]
+---
+
+<Infobox type="concept" name="Catalog plugin API">
+  <Field name="also_known_as">CatalogPlugin, Spark multi-catalog API, DSV2 catalog API</Field>
+  <Field name="field">Metadata management in query engines</Field>
+  <Field name="key_parts">CatalogPlugin, TableCatalog, SupportsNamespaces, StagingTableCatalog, FunctionCatalog, ViewCatalog, ProcedureCatalog, CatalogExtension</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark); catalogs from [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Unity Catalog](/wiki/Unity_Catalog)</Field>
+  <Field name="related">[Data Source V2](/wiki/Data_Source_V2), [Data catalog](/wiki/Data_catalog), [Hive Metastore](/wiki/Hive_Metastore), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (CatalogPlugin.java, TableCatalog.java, CatalogExtension.java, DelegatingCatalogExtension.java, SQLConf.scala, docs/sql-v2-data-sources.md), the Spark 3.0.0 release notes, Apache Iceberg 1.12.0 Spark docs and source, Delta Lake v4.4.1 source and docs, the Unity Catalog 0.7.0 Spark connector docs and source, and the Spark versions supported by Delta Lake 4.4.1 and Unity Catalog 0.7.0 (release notes) and Apache Iceberg 1.12.0 (Maven Central runtime artifacts)</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), the **catalog plugin API** is the part of [Data Source V2](/wiki/Data_Source_V2) that lets an external catalog register under a name and serve namespaces, tables, views, functions and procedures to Spark SQL; its root interface is `org.apache.spark.sql.connector.catalog.CatalogPlugin`.[^plugin] It is how [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) and [Unity Catalog](/wiki/Unity_Catalog) plug into Spark,[^icecfg][^deltabatch][^ucspark] and it allows one Spark session to query tables from several catalogs with three-part names such as `catalog.schema.table`.
+
+## What is CatalogPlugin?
+
+`CatalogPlugin` is a marker interface with three methods: `initialize(name, options)`, `name()` and a default `defaultNamespace()`. Spark loads the class through a required public no-argument constructor and then calls `initialize` once.[^plugin] The interface has been part of Spark since 3.0.0 and is annotated `@Evolving`.[^plugin] The Spark 3.0.0 release notes list it as "Catalog plugin API" (SPARK-31121).[^r300]
+
+## How is a catalog registered?
+
+A catalog is registered with the configuration key `spark.sql.catalog.<name>`, whose value is the implementing class. Every key of the form `spark.sql.catalog.<name>.<key>` is passed to `initialize` in a case-insensitive map with the prefix removed.[^plugin] For example, `spark.sql.catalog.lake.type=rest` reaches the catalog named `lake` as the option `type=rest`.
+
+Two settings control defaults. `spark.sql.defaultCatalog` names the current catalog when none has been set, and defaults to `spark_catalog`.[^sqlconf] `spark.sql.catalog.spark_catalog` sets the implementation of the built-in session catalog; its default, `builtin`, is Spark's own `V2SessionCatalog`, and a replacement must stay consistent with the built-in catalog, typically by extending `CatalogExtension`.[^sqlconf]
+
+## What does TableCatalog add?
+
+A plugin gains abilities by implementing more interfaces. `TableCatalog` extends `CatalogPlugin` with `listTables`, `loadTable`, `createTable`, `alterTable`, `dropTable` and related methods, and returns `Table` objects that Spark reads and writes through Data Source V2.[^dsv2doc]
+
+`TableCatalog` also carries [time travel](/wiki/Time_travel_(SQL)). Overloads `loadTable(ident, String version)` and `loadTable(ident, long timestamp)`, with the timestamp in microseconds since the Unix epoch, return a table at a past state; the default implementations throw a "no such table" error, so a catalog supports time travel only if it overrides them.[^tablecatalog] An overload that receives the write privileges a statement needs was added in 3.5.3.[^tablecatalog]
+
+| Interface | Adds | Since |
+| --- | --- | --- |
+| `TableCatalog` | Table lifecycle: list, load, create, alter, drop | 3.0.0[^tablecatalog] |
+| `SupportsNamespaces` | Namespace (database or schema) DDL | 3.0.0[^ns] |
+| `StagingTableCatalog` | Atomic `CREATE TABLE AS SELECT` and `REPLACE TABLE AS SELECT` through staged tables | 3.0.0[^staging] |
+| `CatalogExtension`, `DelegatingCatalogExtension` | Wrap the built-in session catalog and delegate to it | 3.0.0[^ext] |
+| `FunctionCatalog` | List and load user-defined functions | 3.2.0[^func] |
+| `ProcedureCatalog` | Stored procedures called with `CALL` | 4.0.0[^proc] |
+| `ViewCatalog` | View DDL and view reads | 4.2.0[^view] |
+
+The built-in session catalog is not a `ViewCatalog`; views in `spark_catalog` still use the V1, Hive-compatible code path, and V2 view support applies to catalogs registered under their own names.[^dsv2doc]
+
+## How do Iceberg, Delta Lake and Unity Catalog register catalogs?
+
+**Apache Iceberg** provides two classes. `org.apache.iceberg.spark.SparkCatalog` is a standalone catalog backed by a Hive, Hadoop, REST, Glue, JDBC or Nessie catalog, selected with an option such as `type=rest`. `org.apache.iceberg.spark.SparkSessionCatalog` replaces `spark_catalog`, serves Iceberg tables itself and delegates other tables to Spark's built-in catalog.[^icecfg] In the Iceberg 1.12.0 source, `SparkSessionCatalog` implements `CatalogExtension`, and the shared base class of both implements `StagingTableCatalog`, `ProcedureCatalog` and `SupportsNamespaces`.[^icessc][^icebase]
+
+**Delta Lake** replaces the session catalog. Its documentation sets `spark.sql.catalog.spark_catalog` to `org.apache.spark.sql.delta.catalog.DeltaCatalog`, together with `spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension`.[^deltabatch] In the Delta Lake v4.4.1 source, `DeltaCatalog` derives from `AbstractDeltaCatalog`, which extends Spark's `DelegatingCatalogExtension`, so non-Delta tables fall through to the built-in catalog.[^deltasrc]
+
+**Unity Catalog** OSS registers a named catalog with `io.unitycatalog.spark.UCSingleCatalog`, plus `uri` and authentication options under the same prefix, and its guide makes that catalog the default with `spark.sql.defaultCatalog`. The same guide also configures Delta Lake's extension and `DeltaCatalog`.[^ucspark] In the 0.7.0 source, `UCSingleCatalog` implements `StagingTableCatalog` and `SupportsNamespaces`.[^ucsrc]
+
+## Example
+
+The connector releases cited on this page do not all support Spark 4.3. Delta Lake 4.4.1 is built for Spark 4.0.1, 4.1.0 and 4.2.0,[^delta441] Unity Catalog 0.7.0 publishes Spark connectors for Spark 4.0.x, 4.1.x and 4.2.x,[^uc070] and Iceberg 1.12.0 publishes Spark runtimes for Spark 3.5, 4.0 and 4.1.[^icemvn] The newest Spark line that all three support is therefore 4.1.
+
+The following PySpark session targets Spark 4.1 with Scala 2.13. It puts Delta Lake in the session catalog and adds an Iceberg REST catalog named `lake` and a Unity Catalog catalog named `unity`. Class names and option keys follow the cited project docs.[^icecfg][^deltabatch][^ucspark]
+
+```python
+from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder
+    # Spark 4.1, Scala 2.13
+    .config("spark.jars.packages", ",".join([
+        "io.delta:delta-spark_4.1_2.13:4.4.1",
+        "org.apache.iceberg:iceberg-spark-runtime-4.1_2.13:1.12.0",
+        "io.unitycatalog:unitycatalog-spark_4.1_2.13:0.7.0",
+    ]))
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+    .config("spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    .config("spark.sql.catalog.lake", "org.apache.iceberg.spark.SparkCatalog")
+    .config("spark.sql.catalog.lake.type", "rest")
+    .config("spark.sql.catalog.lake.uri", "http://localhost:8181")  # Iceberg REST server
+    .config("spark.sql.catalog.unity", "io.unitycatalog.spark.UCSingleCatalog")
+    .config("spark.sql.catalog.unity.uri", "http://localhost:8080")
+    .config("spark.sql.catalog.unity.auth.type", "static")
+    .config("spark.sql.catalog.unity.auth.token", "<token>")
+    .getOrCreate()
+)
+
+spark.sql("SELECT * FROM lake.sales.orders LIMIT 10").show()
+spark.sql("SHOW NAMESPACES IN unity").show()
+```
+
+## Catalog plugin vs. Hive Metastore
+
+The catalog plugin API is an interface inside Spark; a [Hive Metastore](/wiki/Hive_Metastore) is a metadata service. Spark's built-in `spark_catalog` can be backed by a Hive Metastore, and plugins such as Iceberg's `SparkCatalog` with `type=hive` can use one as their store, but the plugin decides how names map to tables.[^icecfg] See [Data catalog](/wiki/Data_catalog) for the broader term.
+
+## See also
+
+- [Data Source V2](/wiki/Data_Source_V2)
+- [Unity Catalog](/wiki/Unity_Catalog)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Hive Metastore](/wiki/Hive_Metastore)
+- [Data catalog](/wiki/Data_catalog)
+
+## References
+
+[^plugin]: [CatalogPlugin.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/CatalogPlugin.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icecfg]: [Spark Configuration (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/spark-configuration/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^deltabatch]: [Table batch reads and writes](https://docs.delta.io/latest/delta-batch.html). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^ucspark]: [Unity Catalog Apache Spark integration](https://unitycatalog.io/docs/integrations/unity-catalog-spark/). *Unity Catalog (LF AI & Data)*. Retrieved 2026-11-23.
+[^r300]: [Spark Release 3.0.0](https://spark.apache.org/releases/spark-release-3-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dsv2doc]: [Data Source V2 (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-v2-data-sources.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tablecatalog]: [TableCatalog.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/TableCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ns]: [SupportsNamespaces.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/SupportsNamespaces.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^staging]: [StagingTableCatalog.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/StagingTableCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ext]: [CatalogExtension.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/CatalogExtension.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^func]: [FunctionCatalog.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/FunctionCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^proc]: [ProcedureCatalog.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/ProcedureCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^view]: [ViewCatalog.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/catalog/ViewCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icessc]: [SparkSessionCatalog.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/spark/v4.1/spark/src/main/java/org/apache/iceberg/spark/SparkSessionCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icebase]: [BaseCatalog.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/spark/v4.1/spark/src/main/java/org/apache/iceberg/spark/BaseCatalog.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^deltasrc]: [AbstractDeltaCatalog.scala (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/spark/src/main/scala/org/apache/spark/sql/delta/catalog/AbstractDeltaCatalog.scala). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^ucsrc]: [UCSingleCatalog.scala (v0.7.0)](https://github.com/unitycatalog/unitycatalog/blob/v0.7.0/connectors/spark/src/main/scala/io/unitycatalog/spark/UCSingleCatalog.scala). *Unity Catalog (LF AI & Data)*. Retrieved 2026-11-23.
+[^delta441]: [Delta Lake 4.4.1](https://github.com/delta-io/delta/releases/tag/v4.4.1). *delta-io on GitHub*. Retrieved 2026-11-23.
+[^uc070]: [Unity Catalog v0.7.0](https://github.com/unitycatalog/unitycatalog/releases/tag/v0.7.0). *unitycatalog on GitHub*. Retrieved 2026-11-23.
+[^icemvn]: [iceberg-spark-runtime-4.1_2.13 1.12.0](https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-4.1_2.13/1.12.0/). *Maven Central*. Retrieved 2026-11-23.

@@ -1,0 +1,98 @@
+---
+title: "Salting"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Key salting, salted join</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Random salt column on the skewed side, replicated (exploded) other side, join on key plus salt</Field>
+  <Field name="implementations">Applies to any shuffle-based engine; usually written by hand in [Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Data skew](/wiki/Data_skew), [Shuffle](/wiki/Shuffle), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Join strategy hints](/wiki/Join_strategy_hints)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-performance-tuning.md, adaptive/OptimizeSkewedJoin.scala, python/pyspark/sql/functions, docs/rdd-programming-guide.md), SPARK-29544 and the Databricks skew and spill guide</Verified>
+
+**Salting** is a manual technique for [data skew](/wiki/Data_skew) in which a random number, the salt, is added to a hot join or grouping key so that the rows for that key are spread over several tasks instead of one. In [Apache Spark](/wiki/Apache_Spark) before 3.0 the engine had no automatic skew join handling, so salting was done by hand; since Spark 3.0, [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) (AQE) splits most skewed joins automatically, and salting is kept for the cases AQE does not cover.[^perf][^spark29544]
+
+## How salting works
+
+A [shuffle](/wiki/Shuffle) sends all rows with the same key to the same partition. If one key holds most of the rows, one task does most of the work.[^shuffle] The Databricks guide to skew describes the remedy as appending a random bucket suffix to the skewed keys, and, for an aggregation, grouping and aggregating in two stages.[^dbxskew] For a join, salting changes the shuffle key from `key` to `(key, salt)`, where `salt` is an integer from 0 to N - 1:
+
+1. On the large, skewed side, add a column with a random salt for each row.
+1. On the other side, replicate each row N times, once per salt value (for example with `explode` over a sequence, which returns one row per array element).[^pyfuncs]
+1. Join on both the original key and the salt.
+
+Each hot key is now split across N shuffle partitions. Because each salted row carries exactly one salt value and the other side has a copy for every value, each salted row still meets every matching row from the other side exactly once. The cost is that the other side grows N times, so N is kept as small as the skew allows.
+
+The result is unchanged only when no row of the replicated side has to appear on its own. That holds for an inner join, a left outer join that preserves the salted side, and a left semi or left anti join with the salted side on the left. It does not hold when the join must keep unmatched rows of the replicated side, as a right outer join that preserves the replicated side or a full outer join does: an unmatched replicated row then appears once per salt value, N times instead of once.
+
+## Example in PySpark
+
+```python
+from pyspark.sql import functions as F
+
+N = 8  # number of salt values
+
+orders_salted = orders.withColumn("salt", (F.rand() * N).cast("int"))
+
+customers_salted = customers.withColumn(
+    "salt", F.explode(F.sequence(F.lit(0), F.lit(N - 1)))
+)
+
+joined = orders_salted.join(customers_salted, ["customer_id", "salt"]).drop("salt")
+```
+
+`rand()`, `sequence()` and `explode()` are built-in functions of `pyspark.sql.functions`.[^pyfuncs] A variant salts only the known hot keys and leaves other keys unsalted, which keeps the replicated side small.
+
+### Salting a full outer join
+
+A full outer join can be rebuilt from parts that salt correctly: a salted left outer join that keeps every row of the skewed side, plus the rows of the other side that have no match, found with an unsalted left anti join against the distinct keys of the skewed side.
+
+```python
+matched_or_left = orders_salted.join(customers_salted, ["customer_id", "salt"], "left").drop("salt")
+
+order_keys = orders.select("customer_id").distinct()
+right_only = customers.join(order_keys, "customer_id", "left_anti")
+
+full = matched_or_left.unionByName(right_only, allowMissingColumns=True)
+```
+
+### Salting an aggregation
+
+For a skewed `GROUP BY`, salting runs the aggregation in two steps: first group by `(key, salt)`, then group the partial results by `key`.[^dbxskew] This works for aggregates that can be combined, such as `sum`, `count`, `min` and `max`; an average is computed from a salted sum and a salted count.
+
+## When does AQE make salting unnecessary?
+
+AQE skew join handling, added in Spark 3.0.0 and on by default whenever AQE is on (the default since Spark 3.2.0), detects a skewed shuffle partition at runtime and splits it into smaller tasks, replicating the matching partition of the other side. That is the same idea as salting, done by the engine and only for the partitions that need it.[^perf][^spark29544] A partition counts as skewed when it is over 5 times the median size and over 256 MB, by default.[^perf]
+
+For an inner join, a left or right outer join on the side that can be split, or a semi or anti join, AQE usually makes salting unnecessary.[^rule] Salting is still used when:
+
+- **The join type cannot be split.** In Spark 4.3.0, AQE splits the left side only for inner, cross, left semi, left anti and left outer joins, and the right side only for inner, cross and right outer joins. A full outer join, or a left outer join whose right side is skewed, is not split.[^rule]
+- **The skew is in an aggregation or window.** The AQE skew rule targets sort-merge and shuffled hash joins, not aggregations.[^rule]
+- **AQE is off** (`spark.sql.adaptive.enabled=false`) or skew join handling is off (`spark.sql.adaptive.skewJoin.enabled=false`).[^perf]
+- **The skew is below the thresholds** but still slows the stage. Lowering `spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes` or `skewedPartitionFactor` is often simpler than salting in that case.[^perf]
+
+## Salting compared with other skew remedies
+
+| Remedy | Who does it | Cost | Join types |
+| --- | --- | --- | --- |
+| AQE skew join (Spark) | The engine, at runtime | Replicates only the matching partition of the other side | Splittable sides only (see above)[^rule] |
+| [Broadcast join](/wiki/Broadcast_join) | The planner, or a `BROADCAST` hint | The small side is copied to every executor[^perf] | Most join types; which side can be broadcast depends on the join type |
+| Salting | The user, in the query | Replicates the whole other side N times | Inner joins; left outer, left semi and left anti joins with the salted side on the left; full outer joins only when rebuilt as above; also aggregations |
+
+## See also
+
+- [Data skew](/wiki/Data_skew)
+- [Shuffle](/wiki/Shuffle)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Join strategy hints](/wiki/Join_strategy_hints)
+
+## References
+
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^spark29544]: [SPARK-29544: Optimize skewed join at runtime with new Adaptive Execution](https://issues.apache.org/jira/browse/SPARK-29544). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^shuffle]: [RDD Programming Guide: Shuffle operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#shuffle-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dbxskew]: [Skew and spill](https://docs.databricks.com/aws/en/optimizations/spark-ui-guide/long-spark-stage-page). *Databricks*. Retrieved 2026-11-23.
+[^pyfuncs]: [Functions (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/reference/pyspark.sql/functions.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rule]: [OptimizeSkewedJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/OptimizeSkewedJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

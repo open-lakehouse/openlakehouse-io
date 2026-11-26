@@ -1,0 +1,99 @@
+---
+title: "Pandas UDF"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Vectorized UDF, `pandas_udf`</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 2.3.0</Field>
+  <Field name="key_parts">`pandas_udf` decorator, Python type hints, Arrow record batches, Python worker</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (PySpark)</Field>
+  <Field name="related">[User-defined function (Spark)](/wiki/User-defined_function_(Spark)), [Arrow-optimized Python UDF](/wiki/Arrow-optimized_Python_UDF), [Apache Arrow](/wiki/Apache_Arrow), [DataFrame](/wiki/DataFrame)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (python/pyspark/sql/pandas/functions.py, the "Apache Arrow in PySpark" tutorial, examples/src/main/python/sql/arrow.py, SQLConf.scala, the PySpark migration guide), the Spark 2.3.0 and 4.2.0 release notes and the 2017 Databricks blog post that introduced the feature</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **pandas UDF** (also called a **vectorized UDF**) is a Python [user-defined function](/wiki/User-defined_function_(Spark)) that Spark runs on batches of rows: Spark sends each batch to a Python worker as [Apache Arrow](/wiki/Apache_Arrow) data, the function receives and returns pandas `Series` or `DataFrame` objects, and the results are sent back to the JVM.[^arrow] Pandas UDFs are defined with `pyspark.sql.functions.pandas_udf`, need no extra configuration, and are called like any other PySpark column function.[^arrow] They were added in Spark 2.3.0 to cut the serialization and per-row call overhead of row-at-a-time Python UDFs.[^api][^blog]
+
+## How does a pandas UDF work?
+
+Spark splits the input columns of a pandas UDF into Arrow record batches, calls the Python function once per batch with the batch as pandas objects, and concatenates the results.[^arrow] The maximum number of rows in one batch is `spark.sql.execution.arrow.maxRecordsPerBatch`, which defaults to 10,000; the PySpark guide advises lowering it when a table has many columns, to avoid out-of-memory errors in the JVM.[^arrow][^sqlconf]
+
+The pandas UDF was announced by Databricks engineers in 2017 for the Spark 2.3 release. Their post explained that row-at-a-time Python UDFs suffer from high serialization and invocation overhead, and reported a benchmark in which pandas UDFs were 3 to over 100 times faster than row-at-a-time UDFs.[^blog] The Spark 2.3.0 release notes list "fast data serialization and vectorized execution" for PySpark (SPARK-22216).[^n1]
+
+## Which pandas UDF types exist?
+
+Since Spark 3.0, the Python type hints of the function decide the kind of pandas UDF. The older `functionType` argument with `PandasUDFType` is still accepted, but PySpark 4.3.0 emits a `UserWarning` saying that it "will be deprecated in the future releases" (SPARK-28264).[^arrow][^api]
+
+| Type | Type hints | Output length | Typical use |
+| --- | --- | --- | --- |
+| Series to Series | `pd.Series, ... -> pd.Series` | Same as input | Column transformations |
+| Iterator of Series to Iterator of Series | `Iterator[pd.Series] -> Iterator[pd.Series]` | Same as input, in total | Expensive set-up (for example loading a model) done once per partition |
+| Iterator of multiple Series to Iterator of Series | `Iterator[Tuple[pd.Series, ...]] -> Iterator[pd.Series]` | Same as input, in total | As above, with several input columns |
+| Series to Scalar | `pd.Series, ... -> Any` (a scalar) | One value per group or window | Aggregations in `groupBy().agg()` and window functions |
+
+Source for the table: the PySpark 4.3.0 Arrow guide.[^arrow] A `pandas.DataFrame` hint replaces `pandas.Series` when an input or output column is a `StructType`.[^arrow]
+
+Series-to-Scalar pandas UDFs do not support partial aggregation: all data for a group or window is loaded into memory.[^arrow] Spark 4.2.0 added an iterator form for grouped aggregation.[^api]
+
+## What are pandas function APIs?
+
+Pandas function APIs apply a Python function to a whole PySpark [DataFrame](/wiki/DataFrame) instead of to a column. They use the same Arrow transfer as pandas UDFs.[^arrow]
+
+- `DataFrame.mapInPandas` maps an iterator of `pandas.DataFrame` to another iterator, and the output can have any length.
+- `DataFrame.groupBy().applyInPandas()` applies a function to each group as one `pandas.DataFrame` (the split-apply-combine pattern). It replaces the grouped map pandas UDF of Spark 2.x.
+- `DataFrame.groupBy().cogroup().applyInPandas()` applies a function to two DataFrames that share a key.
+
+For grouped and cogrouped maps, all data for a group is loaded into memory before the function runs, and `maxRecordsPerBatch` is not applied, so skewed groups can cause out-of-memory errors.[^arrow]
+
+## Example
+
+The following PySpark example works on Spark 4.3.0 with pandas and PyArrow installed. It defines a Series-to-Series UDF and a Series-to-Scalar UDF.
+
+```python
+import pandas as pd
+from pyspark.sql.functions import pandas_udf
+
+@pandas_udf("long")
+def multiply(a: pd.Series, b: pd.Series) -> pd.Series:
+    return a * b
+
+@pandas_udf("double")
+def mean_udf(v: pd.Series) -> float:
+    return v.mean()
+
+df = spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0)], ["id", "v"])
+df.select(multiply("id", "id")).show()
+df.groupBy("id").agg(mean_udf("v")).show()
+```
+
+## What are the requirements and type rules?
+
+In PySpark 4.3.0 the minimum supported versions are pandas 2.2.0 and PyArrow 18.0.0.[^arrow] All Spark SQL data types are supported by Arrow-based conversion except an `ArrayType` of `TimestampType`.[^arrow]
+
+Timestamps passed to a pandas UDF are converted to nanosecond precision and localized to the session time zone (`spark.sql.session.timeZone`); timestamps returned are converted to UTC microseconds.[^arrow]
+
+Since Spark 4.2, a nullable integer column whose batch contains nulls arrives as a pandas nullable integer extension type (`Int8` to `Int64`) instead of `float64`.[^upgrade] Since Spark 4.1, `spark.sql.execution.pandas.convertToArrowArraySafely` is on by default, so unsafe conversions in returned data, such as integer overflow, raise errors.[^upgrade]
+
+## Pandas UDF vs Arrow UDF and Arrow-optimized Python UDF
+
+An [Arrow-optimized Python UDF](/wiki/Arrow-optimized_Python_UDF) also uses Arrow for transfer, but the function still runs once per row on Python objects.[^arrow] An Arrow UDF (`arrow_udf`, Spark 4.1.0 and later) is vectorized like a pandas UDF, but the function receives `pyarrow.Array` objects instead of pandas objects and avoids the pandas conversion.[^n2] Pandas UDFs have supported [Spark Connect](/wiki/Spark_Connect) since Spark 3.4.0.[^api] See [User-defined function (Spark)](/wiki/User-defined_function_(Spark)) for a comparison of all UDF types.
+
+## See also
+
+- [User-defined function (Spark)](/wiki/User-defined_function_(Spark))
+- [Arrow-optimized Python UDF](/wiki/Arrow-optimized_Python_UDF)
+- [Python UDTF](/wiki/Python_UDTF)
+- [Apache Arrow](/wiki/Apache_Arrow)
+- [DataFrame](/wiki/DataFrame)
+
+## References
+
+[^arrow]: [Apache Arrow in PySpark (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/tutorial/sql/arrow_pandas.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^api]: [python/pyspark/sql/pandas/functions.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/functions.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^blog]: [Introducing Pandas UDF for PySpark](https://www.databricks.com/blog/2017/10/30/introducing-vectorized-udfs-for-pyspark.html). *Databricks*, 2017-10-30. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Spark Release 2.3.0](https://spark.apache.org/releases/spark-release-2-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^upgrade]: [Upgrading PySpark (PySpark 4.3.0 migration guide)](https://spark.apache.org/docs/4.3.0/api/python/migration_guide/pyspark_upgrade.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [Arrow Python UDFs (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/tutorial/sql/arrow_python_udf.html). *Apache Software Foundation*. Retrieved 2026-11-23.

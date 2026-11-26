@@ -1,0 +1,116 @@
+---
+title: "Spark Connect server"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark Connect endpoint, Spark Connect service</Field>
+  <Field name="field">Distributed data processing, client-server protocols</Field>
+  <Field name="introduced">Apache Spark 3.4.0</Field>
+  <Field name="key_parts">gRPC service in the Spark driver, session manager, execution manager, interceptors, `sbin/start-connect-server.sh`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (`org.apache.spark.sql.connect.service.SparkConnectServer`)</Field>
+  <Field name="related">[Spark Connect](/wiki/Spark_Connect), [Spark Connect client](/wiki/Spark_Connect_client), [Spark Connect plugin](/wiki/Spark_Connect_plugin), [Executor](/wiki/Executor)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (sbin/start-connect-server.sh, sql/connect/server config/Connect.scala, SparkConnectService.scala, SparkConnectSessionManager.scala, PreSharedKeyAuthenticationInterceptor.scala, SparkConnectPlugin.scala, sql/connect/docs/client-connection-string.md, python/pyspark/sql/connect/client/core.py), the Spark 4.3.0 configuration, monitoring and Spark Connect overview pages, and the Apache Spark 4.3.0 download directory</Verified>
+
+The **Spark Connect server** is the server side of [Spark Connect](/wiki/Spark_Connect) in [Apache Spark](/wiki/Apache_Spark): a gRPC service that runs inside a Spark driver, accepts unresolved logical plans from remote clients, runs them in per-client Spark sessions and streams the results back as Apache Arrow batches.[^overview] Spark implements the server as a driver plugin, so any Spark application can host it, and ships a launcher script that starts a standalone server. By default it listens on port 15002 without TLS, and Spark's only built-in authentication is an optional pre-shared bearer token.[^connectconf][^service]
+
+## How is a Spark Connect server deployed?
+
+The usual way to start a Spark Connect server is `sbin/start-connect-server.sh` from a Spark distribution.[^overview] The script runs the class `org.apache.spark.sql.connect.service.SparkConnectServer` through `spark-submit` as a daemon named "Spark Connect server", and it accepts the normal `spark-submit` options such as `--master` and `--conf`. With `--wait` as the first argument it runs in the foreground instead of as a daemon. `sbin/stop-connect-server.sh` stops it.[^startsh][^stopsh]
+
+Because the server is a Spark driver, it runs on any cluster manager that the driver supports, and its queries run on ordinary [executors](/wiki/Executor). Inside the driver, the server is started by the driver plugin `org.apache.spark.sql.connect.SparkConnectPlugin`. Spark's source describes this design as a way to decouple the build of Spark Connect from Spark core: the server is enabled by putting its JAR on the classpath and loading the plugin through `spark.plugins`.[^plugin] PySpark uses the same plugin when `SparkSession.builder.remote("local[*]")` starts a local server for the current process.[^pysession]
+
+The Spark 4.3.0 release is published both as the usual `spark-4.3.0-bin-hadoop3.tgz` and as `spark-4.3.0-bin-hadoop3-connect.tgz`, the variant with Spark Connect enabled by default that Spark 4.0.0 introduced.[^dl][^r400]
+
+## Which configuration keys does the server use?
+
+The main Spark Connect server settings are static configurations, set when the driver starts:[^config][^connectconf]
+
+| Key | Default | Meaning | Since |
+| --- | --- | --- | --- |
+| `spark.connect.grpc.binding.address` | (none) | Address to bind | 4.0.0 |
+| `spark.connect.grpc.binding.port` | 15002 | Port to bind | 3.4.0 |
+| `spark.connect.grpc.port.maxRetries` | 0 | Port retry attempts; 0 fails fast on a port conflict | 4.0.0 |
+| `spark.connect.grpc.interceptor.classes` | (none) | Comma-separated `io.grpc.ServerInterceptor` classes | 3.4.0 |
+| `spark.connect.grpc.maxInboundMessageSize` | 134217728 | Largest accepted gRPC request, in bytes | 3.4.0 |
+| `spark.connect.grpc.keepAlive.enabled` | true | Server keepalive pings to detect dead client connections | 4.3.0 |
+| `spark.connect.grpc.keepAlive.time` / `.timeout` | 60s / 20s | Idle time before a ping, and wait for its acknowledgement | 4.3.0 |
+| `spark.connect.extensions.relation.classes`, `.expression.classes`, `.command.classes` | (none) | [Spark Connect plugin](/wiki/Spark_Connect_plugin) classes | 3.4.0 |
+| `spark.sql.connect.ui.retainedSessions` / `retainedStatements` | 200 / 200 | Sessions and statements kept in the Spark Connect UI | 3.5.0 |
+
+## How are client sessions isolated?
+
+The Spark Connect server keeps one server-side Spark session for each pair of user ID and session ID sent by the client. A new pair gets a new session created with `SparkSession.newSession()` on the server's base session; the session ID must be a UUID, and an ID that was already closed cannot be reused.[^sessmgr] Clients set these values with the `user_id` and `session_id` parameters of the connection string; by default the session ID is a random UUID, and reusing one lets several clients, even in different languages, share a session.[^connstr]
+
+Session isolation in the Spark Connect server covers session state, not the whole application. The Spark documentation states that temporary views, runtime SQL configurations and session artifacts are per session, while state backed by the shared `SparkContext`, such as the persistent catalog, global temporary views and cached datasets, is shared by all sessions.[^overview] The server starts its base session with artifact session isolation enabled, so JARs and files uploaded by one client are kept apart from other sessions.[^server] All sessions run on the same driver and executors.
+
+## What timeouts apply to sessions and operations?
+
+The Spark Connect server removes idle sessions and abandoned operations with internal settings:[^connectconf]
+- `spark.connect.session.manager.defaultSessionTimeout` (default 60 minutes, since 4.0.0) removes a session that has received no RPC for that long; `-1` keeps sessions forever.[^connectconf]
+- `spark.connect.execute.manager.detachedTimeout` (default 5 minutes, since 3.5.0) removes an execution that no RPC is attached to.[^connectconf]
+- Reattachable execution (`spark.connect.execute.reattachable.enabled`, default true, since 3.5.0) lets a client reconnect to a running query; the server ends one response stream after `spark.connect.execute.reattachable.senderMaxStreamDuration` (default 2 minutes) or `spark.connect.execute.reattachable.senderMaxStreamSize` (default 1g), and the client reattaches.[^connectconf]
+
+These keys are marked internal in the source, so they do not appear in the configuration page and may change without notice.[^connectconf] Spark 4.3.0 added REST endpoints under `/applications/[app-id]/connect/` that list and describe sessions and operations.[^monitoring][^r430]
+
+## How are Spark Connect clients authenticated?
+
+The Spark Connect overview states that Spark Connect has no built-in authentication and is designed to work with authenticating proxies in front of its gRPC HTTP/2 interface.[^overview] In the 4.3.0 source, the server has three layers to consider:
+
+| Mechanism | Shipped with Spark? | What it does |
+| --- | --- | --- |
+| Pre-shared token (`spark.connect.authenticate.token` or the `SPARK_CONNECT_AUTHENTICATE_TOKEN` environment variable) | Yes; internal setting added in 4.0.0 | Rejects any call whose `Authorization` header is not `Bearer` plus the token, with gRPC status `UNAUTHENTICATED`. One shared secret; no users or roles.[^connectconf][^psk] |
+| Custom interceptors (`spark.connect.grpc.interceptor.classes`) | Hook only; the user supplies the classes | Runs `io.grpc.ServerInterceptor` code on every call, for example to validate a JWT or map a caller to a user. When the token check is on, it runs first, so interceptors see only authenticated calls.[^config][^service] |
+| TLS and identity-aware proxy | No; external | The server's gRPC builder sets no TLS context, so encryption and single sign-on are added by a proxy or gateway in front of it.[^service][^overview] |
+
+On the client side, the `token` parameter of the connection string sends a standard gRPC bearer token, and the connection string reference states that setting it enables TLS.[^connstr] The PySpark client makes one exception: for `localhost` without `use_ssl=true`, it sends the token over gRPC local channel credentials instead of TLS.[^core] When PySpark starts a local server itself, it generates a random token unless one is set.[^pysession] For a remote server, a token therefore needs a TLS-terminating proxy in front of the plaintext gRPC port.
+
+## Example
+
+The following commands start a server on a local master that requires a token and binds only to the loopback interface, then connect with PySpark:
+
+```bash
+export SPARK_CONNECT_AUTHENTICATE_TOKEN="$(openssl rand -hex 32)"
+$SPARK_HOME/sbin/start-connect-server.sh --master "local[*]" \
+  --conf spark.connect.grpc.binding.address=127.0.0.1 \
+  --conf spark.connect.grpc.binding.port=15002
+```
+
+```python
+import os
+from pyspark.sql import SparkSession
+
+token = os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"]
+spark = SparkSession.builder.remote(f"sc://localhost:15002/;token={token}").getOrCreate()
+spark.range(5).show()
+```
+
+## See also
+
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark Connect client](/wiki/Spark_Connect_client)
+- [Spark Connect plugin](/wiki/Spark_Connect_plugin)
+- [Executor](/wiki/Executor)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^overview]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connectconf]: [Connect.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/config/Connect.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^service]: [SparkConnectService.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/service/SparkConnectService.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^startsh]: [start-connect-server.sh (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sbin/start-connect-server.sh). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^stopsh]: [stop-connect-server.sh (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sbin/stop-connect-server.sh). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^plugin]: [SparkConnectPlugin.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/SparkConnectPlugin.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^pysession]: [pyspark/sql/connect/session.py (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/session.py). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^dl]: [Index of /spark/spark-4.3.0](https://downloads.apache.org/spark/spark-4.3.0/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sessmgr]: [SparkConnectSessionManager.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/service/SparkConnectSessionManager.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^connstr]: [Connecting to Spark Connect using Clients (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/docs/client-connection-string.md). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^server]: [SparkConnectServer.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/service/SparkConnectServer.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^psk]: [PreSharedKeyAuthenticationInterceptor.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/service/PreSharedKeyAuthenticationInterceptor.scala). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^core]: [pyspark/sql/connect/client/core.py (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/client/core.py). *Apache Spark on GitHub*. Retrieved 2026-11-23.

@@ -1,0 +1,150 @@
+---
+title: "Logical plan and physical plan"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Query plan, execution plan, EXPLAIN output</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="key_parts">Parsed (unresolved) logical plan, analyzed logical plan, optimized logical plan, physical plan, `EXPLAIN` modes</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Catalyst optimizer](/wiki/Catalyst_optimizer), [Whole-stage code generation](/wiki/Whole-stage_code_generation), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-ref-syntax-qry-explain.md, docs/web-ui.md, python/pyspark/sql/dataframe.py, WholeStageCodegenExec.scala), the SIGMOD 2015 Spark SQL paper and EXPLAIN output from a PySpark 4.3.0 run</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **logical plan** is a tree that describes what a query computes (which tables, filters, joins and aggregates) without saying how, and a **physical plan** is the tree of executable operators, such as `SortMergeJoin` or `HashAggregate`, that Spark actually runs on the cluster.[^explain][^paper] The [Catalyst optimizer](/wiki/Catalyst_optimizer) produces three logical plans and one physical plan for every SQL query or DataFrame. `EXPLAIN` in SQL and `DataFrame.explain()` in PySpark print them, and reading them is the main way to find out why a query is slow.
+
+## What are the four plans?
+
+| Plan | Produced by | What it contains | Marker in EXPLAIN EXTENDED |
+| --- | --- | --- | --- |
+| Parsed logical plan | The SQL parser or the DataFrame API | The query as written; table and column names are not yet checked. Unresolved names start with an apostrophe, for example `'sum('id)` | `== Parsed Logical Plan ==` |
+| Analyzed logical plan | The analyzer | Names resolved against the catalog and turned into typed attributes with IDs, such as `id#0L`; the output schema is printed first | `== Analyzed Logical Plan ==` |
+| Optimized logical plan | The logical optimizer | The analyzed plan after optimization rules: constants folded, filters pushed down, columns pruned | `== Optimized Logical Plan ==` |
+| Physical plan | The planner, then [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) at run time | Concrete operators, exchanges (shuffles) and code generation stages | `== Physical Plan ==` |
+
+The Spark documentation describes the steps in the same terms: the parsed logical plan is an unresolved plan extracted from the query; analysis translates unresolved attributes and relations into fully typed objects; and the optimized logical plan goes through a set of optimization rules, resulting in the physical plan.[^explain]
+
+## How do you read EXPLAIN EXTENDED?
+
+This PySpark 4.3.0 example filters and sums a range of numbers:
+
+```python
+df = spark.range(1000).filter("id % 2 = 0").selectExpr("sum(id)")
+df.explain(mode="extended")
+```
+
+```
+== Parsed Logical Plan ==
+'Project [unresolvedalias('sum('id))]
++- Filter ((id#0L % cast(2 as bigint)) = cast(0 as bigint))
+   +- Range (0, 1000, step=1, splits=Some(2))
+
+== Analyzed Logical Plan ==
+sum(id): bigint
+Aggregate [sum(id#0L) AS sum(id)#5L]
++- Filter ((id#0L % cast(2 as bigint)) = cast(0 as bigint))
+   +- Range (0, 1000, step=1, splits=Some(2))
+
+== Optimized Logical Plan ==
+Aggregate [sum(id#0L) AS sum(id)#5L]
++- Filter ((id#0L % 2) = 0)
+   +- Range (0, 1000, step=1, splits=Some(2))
+
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- HashAggregate(keys=[], functions=[sum(id#0L)], output=[sum(id)#5L])
+   +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=15]
+      +- HashAggregate(keys=[], functions=[partial_sum(id#0L)], output=[sum#7L])
+         +- Filter ((id#0L % 2) = 0)
+            +- Range (0, 1000, step=1, splits=2)
+```
+
+Plans are trees printed with the root at the top; data flows from the bottom (the scan) up. Each line is one operator, and `+-` and `:-` mark its children. The differences between sections show Catalyst's work:
+
+- **Parsed to analyzed.** `'sum('id)` became `sum(id#0L)` of type `bigint`, and the projection with an aggregate became an `Aggregate` node. The number after `#` is the attribute ID that the analyzer assigned.
+- **Analyzed to optimized.** `cast(2 as bigint)` was folded into the literal `2`; this is the `ConstantFolding` rule.
+- **Optimized to physical.** The single logical `Aggregate` became two `HashAggregate` operators around an `Exchange`: a `partial_sum` in each task, a shuffle into one partition, then the final `sum`.
+
+The physical plan starts with `AdaptiveSparkPlan isFinalPlan=false` because [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) is on by default; the plan printed before the query runs is the initial plan, and AQE may change it during execution. Calling `explain()` after an action prints both a `Final Plan` and the `Initial Plan`, with the final plan showing query stages and nodes such as `AQEShuffleRead coalesced`.
+
+## EXPLAIN modes
+
+`EXPLAIN` takes one optional mode; `df.explain(mode=...)` accepts the same names in lowercase.[^explain][^pydf]
+
+| SQL | PySpark `mode` | Output |
+| --- | --- | --- |
+| `EXPLAIN` | `"simple"` (default) | Physical plan only |
+| `EXPLAIN EXTENDED` | `"extended"` | Parsed, analyzed and optimized logical plans and the physical plan |
+| `EXPLAIN FORMATTED` | `"formatted"` | Two sections: a short physical plan outline and the details of each node |
+| `EXPLAIN CODEGEN` | `"codegen"` | Physical plan and the generated Java code, if any (see [Whole-stage code generation](/wiki/Whole-stage_code_generation)) |
+| `EXPLAIN COST` | `"cost"` | Optimized logical plan with statistics, if available (see [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))) |
+
+## How do you read EXPLAIN FORMATTED?
+
+`EXPLAIN FORMATTED` prints the physical plan as a short outline with a number in brackets for each node, followed by one block of details per number. Operators inside a [whole-stage code generation](/wiki/Whole-stage_code_generation) stage are marked with `*` in the outline and with `[codegen id : n]` in their block.[^explain] This PySpark 4.3.0 example reads a Parquet file, filters it and counts rows per group, with [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) turned off:
+
+```python
+df = spark.read.parquet("/data/pf").filter("id > 10").groupBy("g").count()
+df.explain(mode="formatted")
+```
+
+```
+== Physical Plan ==
+* HashAggregate (7)
++- Exchange (6)
+   +- * HashAggregate (5)
+      +- * Project (4)
+         +- * Filter (3)
+            +- * ColumnarToRow (2)
+               +- Scan parquet  (1)
+
+(1) Scan parquet
+Output [2]: [id#2L, g#3L]
+Batched: true
+Location: InMemoryFileIndex [file:/data/pf]
+PushedFilters: [IsNotNull(id), GreaterThan(id,10)]
+ReadSchema: struct<id:bigint,g:bigint>
+
+(3) Filter [codegen id : 1]
+Input [2]: [id#2L, g#3L]
+Condition : (isnotnull(id#2L) AND (id#2L > 10))
+
+(6) Exchange
+Input [2]: [g#3L, count#10L]
+Arguments: hashpartitioning(g#3L, 200), ENSURE_REQUIREMENTS, [plan_id=48]
+```
+
+Blocks (2), (4), (5) and (7) are left out above, and the file path is shortened. The outline shows the shape at a glance: two code generation stages (1 and 2) separated by one shuffle. The detail blocks hold the long argument lists, such as the filters pushed to the Parquet reader (see [Predicate pushdown](/wiki/Predicate_pushdown)) and the schema actually read, which would make a single-line tree hard to read.
+
+## Physical plan operators worth recognizing
+
+| Operator | Meaning |
+| --- | --- |
+| `Exchange hashpartitioning(...)`, `rangepartitioning`, `SinglePartition` | A [shuffle](/wiki/Shuffle), and therefore a stage boundary (see [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations)) |
+| `BroadcastExchange` | The small side of a [broadcast join](/wiki/Broadcast_join), collected and sent to every executor |
+| `BroadcastHashJoin`, `SortMergeJoin`, `ShuffledHashJoin` | The join strategy chosen (see [Broadcast join](/wiki/Broadcast_join), [Sort-merge join](/wiki/Sort-merge_join), [Shuffle hash join](/wiki/Shuffle_hash_join)) |
+| `HashAggregate` with `partial_` functions | The map-side half of a two-phase aggregation |
+| `FileScan parquet` with `PushedFilters` | A Parquet scan and the filters handed to the reader (see [Predicate pushdown](/wiki/Predicate_pushdown)) |
+| `*(n)` prefix | The operator is compiled into whole-stage code generation stage *n*[^wscg] |
+| `ReusedExchange` | The output of an identical exchange elsewhere in the plan is reused instead of being computed twice |
+
+The Spark web UI shows the same plans. On the SQL / DataFrame tab, each query's detail page draws the physical plan as a graph with runtime metrics, and a "Details" link expands the parsed, analyzed and optimized logical plans and the physical plan.[^webui]
+
+## See also
+
+- [Catalyst optimizer](/wiki/Catalyst_optimizer)
+- [Whole-stage code generation](/wiki/Whole-stage_code_generation)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))
+- [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+
+## References
+
+[^explain]: [EXPLAIN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-explain.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^paper]: [Spark SQL: Relational Data Processing in Spark (SIGMOD 2015)](https://people.csail.mit.edu/matei/papers/2015/sigmod_spark_sql.pdf). *Armbrust et al., Databricks, MIT CSAIL and AMPLab UC Berkeley*. Retrieved 2026-11-23.
+[^pydf]: [dataframe.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^wscg]: [WholeStageCodegenExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/WholeStageCodegenExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.

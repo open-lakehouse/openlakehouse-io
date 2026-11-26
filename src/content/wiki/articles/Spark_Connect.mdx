@@ -1,0 +1,96 @@
+---
+title: "Spark Connect"
+categories: ["Query engines", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 3.4.0 (2023)</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala, Python</Field>
+  <Field name="type">Client-server protocol for Apache Spark</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[Spark Connect overview](https://spark.apache.org/docs/latest/spark-connect-overview.html)</Field>
+  <Field name="repo">[github.com/apache/spark (sql/connect)](https://github.com/apache/spark/tree/v4.3.0/sql/connect)</Field>
+  <Field name="related">[Apache Spark](/wiki/Apache_Spark), [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Spark 4.3.0 Spark Connect documentation and source at tag v4.3.0, Spark release notes 3.4.0, 3.5.0 and 4.0.0, and PyPI</Verified>
+
+**Spark Connect** is a client-server interface for [Apache Spark](/wiki/Apache_Spark) in which a thin client library sends DataFrame operations to a remote Spark server as unresolved logical plans and receives the results over the network.[^overview] Spark Connect separates the application process from the Spark driver, so an application can run in an IDE, a notebook or a service without sharing a process or dependencies with the cluster. It was introduced in Spark 3.4.[^overview]
+
+## How it works
+
+The Spark Connect client translates DataFrame operations into unresolved logical query plans, encodes them with Protocol Buffers and sends them to the server with gRPC.[^overview]
+
+The Spark Connect endpoint on the server translates the received plans into Spark's logical plan operators, much as Spark parses a SQL query, and then runs them through the normal Spark optimizer and execution engine. Results return to the client over gRPC as Apache Arrow-encoded row batches.[^overview]
+
+By default, a Spark Connect server listens on port 15002. The port is set by the static configuration `spark.connect.grpc.binding.port`, which has existed since Spark 3.4.0.[^overview][^n1] Clients address the server with a connection string that starts with `sc://`, for example `sc://localhost:15002`, given either in code or in the `SPARK_REMOTE` environment variable.[^overview]
+
+## Differences from classic Spark
+
+Spark Connect changes what an application can reach, because the client runs outside the driver process:[^overview]
+
+- The client cannot access the driver JVM. In PySpark, the client does not use Py4J, so private fields such as `df._jdf` are not available.
+- The protocol describes work as logical plans, so it does not support every Spark execution API. Most importantly, RDDs are not supported.
+- Each client gets its own session. The client cannot change cluster-wide settings, and it has no access to the static Spark configuration or to the `SparkContext`.
+
+The Spark documentation names stability, upgradability and debuggability as operational reasons for this split: an application that uses too much memory affects only its own process, the server can be upgraded independently of client applications, and applications can be debugged in a local IDE.[^overview]
+
+## Using Spark Connect
+
+A server is started from a Spark distribution with the `sbin/start-connect-server.sh` script. A PySpark application then connects by passing a remote address when it builds the session:[^overview]
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
+spark.range(10).filter("id % 2 = 0").show()
+```
+
+The shells accept the same address with `--remote`, for example `./bin/pyspark --remote "sc://localhost"`.[^overview] Scala applications use the `spark-connect-client-jvm` artifact and the same `remote` builder method. Scala code that contains user-defined functions must upload its class files and JAR dependencies to the server, for example with `SparkSession#addArtifact`.[^overview]
+
+For Python, the `pyspark-client` package on PyPI contains only the Spark Connect client, without the JVM parts of PySpark.[^overview] Its latest version on 22 November 2026 is 4.3.0.[^n2]
+
+Since Spark 4.0, the `spark.api.mode` configuration (values `classic` or `connect`, default `classic`) lets an existing classic application run through Spark Connect without code changes, by starting a local Spark Connect server for it.[^n3][^n4]
+
+## Clients
+
+| Client | Where it lives | Notes |
+| --- | --- | --- |
+| Python (PySpark) | apache/spark | First released in Spark 3.4.0[^r340] |
+| Scala | apache/spark | First released in Spark 3.5.0[^r350] |
+| Go | [apache/spark-connect-go](https://github.com/apache/spark-connect-go) | Announced with Spark 3.5.0[^r350] |
+| Swift | [apache/spark-connect-swift](https://github.com/apache/spark-connect-swift) | Announced with Spark 4.0.0[^r400] |
+| Rust | [apache/spark-connect-rust](https://github.com/apache/spark-connect-rust) | [^n5] |
+
+## History
+
+Spark Connect was proposed in the Spark Project Improvement Proposal (SPIP) tracked as SPARK-39375, filed in June 2022.[^n6] Spark 3.4.0 shipped the Python client.[^r340] Spark 3.5.0 added the Scala client, Structured Streaming support in Python and Scala, and pandas API on Spark support for the Python client.[^r350] Spark 4.0.0 added the `pyspark-client` package, an extra release tarball with Spark Connect enabled by default, the `spark.api.mode` setting and machine learning on Spark Connect.[^r400] Spark 4.3.0 added REST endpoints for inspecting sessions and operations, operation IDs for request attribution, and a more complete JDBC driver.[^n7]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Spark Connect lets light clients such as notebooks, services and AI agents run queries on a shared Spark cluster that holds the catalog and table format configuration. [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines) depends on it: in Spark 4.3 the `spark-pipelines` launcher requires `spark.api.mode` to be `connect` and rejects any other value.[^n8]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Agentic lakehouse](/wiki/Agentic_lakehouse)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^overview]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Connect.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/config/Connect.scala). *Apache Spark on GitHub*. Retrieved 2026-11-22.
+[^n2]: [pyspark-client](https://pypi.org/project/pyspark-client/). *Python Package Index*. Retrieved 2026-11-22.
+[^n3]: [Application Development with Spark Connect (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/app-dev-spark-connect.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r340]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n5]: [apache/spark-connect-rust](https://github.com/apache/spark-connect-rust). *GitHub*. Retrieved 2026-11-22.
+[^n6]: [SPARK-39375: SPIP: Spark Connect - A client and server interface for Apache Spark](https://issues.apache.org/jira/browse/SPARK-39375). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n7]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n8]: [SparkPipelines.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/SparkPipelines.scala). *Apache Spark on GitHub*. Retrieved 2026-11-22.

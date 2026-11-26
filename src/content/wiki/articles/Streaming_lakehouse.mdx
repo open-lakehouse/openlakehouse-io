@@ -1,0 +1,121 @@
+---
+title: "Streaming lakehouse"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Real-time lakehouse, streaming into the lakehouse</Field>
+  <Field name="field">Data engineering, [stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Streaming writers, [Open table formats](/wiki/Open_table_format), incremental and change-data reads, table maintenance</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi), [Apache Paimon](/wiki/Apache_Paimon), [Structured Streaming](/wiki/Structured_Streaming), [Apache Flink](/wiki/Apache_Flink), [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)</Field>
+  <Field name="related">[Open lakehouse](/wiki/Open_lakehouse), [Medallion architecture](/wiki/Medallion_architecture), [Exactly-once semantics](/wiki/Exactly-once_semantics), [Small files problem](/wiki/Small_files_problem)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Iceberg 1.12.0 Spark and Flink documentation, the Delta Lake streaming, change data feed and optimization documentation, the Apache Hudi 1.2.1 documentation, the Apache Paimon 1.4 documentation and 2024 graduation announcement, the Apache Fluss 0.9 documentation and the Spark 4.3.0 Declarative Pipelines guide</Verified>
+
+A **streaming lakehouse** is a data architecture in which streaming jobs write directly into tables in an [open table format](/wiki/Open_table_format), so that the same tables serve both streaming readers, which consume new changes incrementally, and batch readers, which query a consistent snapshot. It applies the [open lakehouse](/wiki/Open_lakehouse) idea to continuously arriving data: instead of keeping a separate real-time store next to the lake, the table itself is the hand-off point between pipeline stages.
+
+## Terminology
+
+The term is used loosely and has no single defining paper or specification. Some projects use it as a name for their own design:
+
+- [Apache Paimon](/wiki/Apache_Paimon), formerly Flink Table Store, describes itself as "a lake format for building Lakehouse Architecture for both streaming and batch operations".[^paimon-tlp][^paimon-docs] The Apache Software Foundation's announcement of Paimon's graduation to a top-level project, on 16 April 2024, calls it "a streaming data lake platform" and a format that enables real-time lakehouse architectures.[^paimon-tlp]
+- Apache Fluss, a streaming storage project (incubating at its 0.9 release), uses "Streaming Lakehouse" as the name of the setup in which its tiering service moves table data into Paimon or Iceberg, with recent data held in Fluss and historical data in the lake table, and queries combining both.[^fluss]
+
+[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) and [Apache Hudi](/wiki/Apache_Hudi) document the same pattern (streaming writes and incremental reads on one table) without using the name. This page uses "streaming lakehouse" for the general pattern, not for any one product.
+
+## How it works
+
+A streaming lakehouse has three moving parts.
+
+### Streaming writes
+
+A streaming engine writes each micro-batch or checkpoint interval as one atomic commit to the table. [Structured Streaming](/wiki/Structured_Streaming) can write to Iceberg tables in append or complete output mode, to Delta tables, and to Hudi tables.[^iceberg-ss][^delta-stream][^hudi-ss] The Iceberg Flink sink commits to the table after each successful Flink checkpoint and supports upserts on tables with a primary key or identifier fields.[^iceberg-flink] Because each commit is atomic, batch readers never see a half-written batch, and the sink can be part of an [exactly-once](/wiki/Exactly-once_semantics) pipeline.[^delta-stream]
+
+### Incremental and change-data reads
+
+Downstream jobs read only what changed since their last position, which turns each table into a source for the next stage, as in a [medallion architecture](/wiki/Medallion_architecture). What a reader can see differs by format:
+
+| Format | Incremental read | Updates and deletes |
+| --- | --- | --- |
+| [Apache Iceberg](/wiki/Apache_Iceberg) | Spark streaming reads start from a timestamp (`stream-from-timestamp`); Flink streaming reads start from a snapshot and poll for new ones[^iceberg-ss][^iceberg-flinkq] | Spark streaming reads only append snapshots; overwrite and delete snapshots raise an error unless skipped with `streaming-skip-overwrite-snapshots` or `streaming-skip-delete-snapshots`[^iceberg-ss] |
+| [Delta Lake](/wiki/Delta_Lake) | A streaming read processes the existing table and then new data[^delta-stream] | Plain streaming reads fail on non-append commits unless `skipChangeCommits` is set; the change data feed (`readChangeFeed`) returns row-level inserts, updates and deletes[^delta-stream][^delta-cdf] |
+| [Apache Hudi](/wiki/Apache_Hudi) | Incremental queries return data written since an instant on the table's timeline[^hudi-types] | Incremental CDC queries return inserts, updates and deletes with before and after images[^hudi-types] |
+| [Apache Paimon](/wiki/Apache_Paimon) | Streaming updates on an LSM-tree structure, typically written with Flink[^paimon-docs] | Changelog producers generate a complete changelog for merge engines[^paimon-docs] |
+
+The Delta change data feed is enabled with the table property `delta.enableChangeDataFeed` and adds the columns `_change_type` (`insert`, `update_preimage`, `update_postimage` or `delete`), `_commit_version` and `_commit_timestamp`. Only changes made after it is enabled are recorded.[^delta-cdf]
+
+### Declarative streaming tables
+
+[Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines) (SDP) expresses the pattern declaratively. An SDP **streaming table** is a table filled by one or more streaming flows that process only new data, and it can read from any source that `spark.readStream` supports, including Kafka.[^sdp] In Spark 4.3, **Auto CDC** applies a stream of change events to a target streaming table by key and sequence value, handling out-of-order and duplicate events.[^sdp]
+
+```sql
+CREATE STREAMING TABLE orders
+AS SELECT * FROM STREAM orders_source;
+```
+
+## Example
+
+This PySpark sketch writes a Kafka topic into an Iceberg table once a minute, then reads the same table as a batch snapshot and as an incremental stream. It assumes the Iceberg Spark runtime and Kafka connector are on the classpath and that a catalog named `lake` is configured.
+
+```python
+orders = (
+    spark.readStream.format("kafka")
+    .option("kafka.bootstrap.servers", "broker:9092")
+    .option("subscribe", "orders")
+    .load()
+    .selectExpr("CAST(key AS STRING) AS order_id",
+                "CAST(value AS STRING) AS payload",
+                "timestamp")
+)
+
+(orders.writeStream.format("iceberg")
+    .outputMode("append")
+    .trigger(processingTime="1 minute")          # one commit per minute
+    .option("checkpointLocation", "/chk/bronze_orders")
+    .toTable("lake.bronze.orders"))
+
+spark.table("lake.bronze.orders").count()        # batch reader: a snapshot
+spark.readStream.format("iceberg").load("lake.bronze.orders")  # streaming reader
+```
+
+## Limits
+
+### Latency is bounded by commit frequency
+
+Readers see new data only after it is committed, so freshness is set by how often the writer commits, not by how fast the engine processes records. Iceberg recommends a trigger interval of at least 1 minute for streaming writes, because frequent commits create many data files, manifests and snapshots.[^iceberg-ss] With Flink, Iceberg commits follow checkpoints, so the checkpoint interval is also the commit interval.[^iceberg-flink] Systems such as Fluss address this by keeping the most recent data in a separate low-latency store and combining it with the lake table at query time.[^fluss]
+
+### Small files and metadata growth
+
+<Hatnote>See also: [Small files problem](/wiki/Small_files_problem)</Hatnote>
+
+Each streaming commit usually writes small files. Iceberg's documentation states that streaming writes typically produce small amounts of data per commit, leading to many small files, and recommends compacting data files (`rewrite_data_files`), expiring old snapshots and rewriting manifests (`rewrite_manifests`) on tables written by streams.[^iceberg-ss] Delta Lake offers `OPTIMIZE` to coalesce small files, and since Delta 3.1.0, auto compaction and optimized writes.[^delta-opt] In Hudi, merge-on-read tables lower write latency for near real-time availability, at the cost of query performance until log files are compacted.[^hudi-types] See [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read).
+
+### Updates downstream
+
+Append-only incremental reads are the simplest case. When an upstream table receives updates or deletes, downstream streams need a change feed (Delta, Hudi, Paimon) or must skip those commits and lose the changes, as with Iceberg's and Delta's skip options.[^iceberg-ss][^delta-stream]
+
+## See also
+
+- [Stream processing](/wiki/Stream_processing)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Open lakehouse](/wiki/Open_lakehouse)
+- [Medallion architecture](/wiki/Medallion_architecture)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Small files problem](/wiki/Small_files_problem)
+- [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read)
+
+## References
+
+[^paimon-tlp]: [The Apache Software Foundation Announces New Top-Level Project Apache Paimon](https://news.apache.org/foundation/entry/apache-software-foundation-announces-new-top-level-project-apache-paimon). *Apache Software Foundation*, 2024-04-16. Retrieved 2026-11-22.
+[^paimon-docs]: [Apache Paimon documentation (1.4)](https://paimon.apache.org/docs/1.4/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^fluss]: [Building a Streaming Lakehouse (Apache Fluss 0.9)](https://fluss.apache.org/docs/0.9/quickstart/lakehouse). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^iceberg-ss]: [Spark Structured Streaming (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/spark-structured-streaming/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^delta-stream]: [Table streaming reads and writes](https://docs.delta.io/delta-streaming/). *Delta Lake*. Retrieved 2026-11-22.
+[^hudi-ss]: [Streaming Writes (Apache Hudi 1.2.1)](https://hudi.apache.org/docs/writing_tables_streaming_writes). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^iceberg-flink]: [Flink Writes (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/flink-writes/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^iceberg-flinkq]: [Flink Queries (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/flink-queries/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^delta-cdf]: [Change data feed](https://docs.delta.io/delta-change-data-feed/). *Delta Lake*. Retrieved 2026-11-22.
+[^hudi-types]: [Table and Query Types (Apache Hudi 1.2.1)](https://hudi.apache.org/docs/table_types). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sdp]: [Spark Declarative Pipelines Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/declarative-pipelines-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^delta-opt]: [Optimizations](https://docs.delta.io/optimizations-oss/). *Delta Lake*. Retrieved 2026-11-22.

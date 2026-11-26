@@ -1,0 +1,106 @@
+---
+title: "Dataset (Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Typed Dataset, `Dataset[T]`</Field>
+  <Field name="field">Data processing APIs</Field>
+  <Field name="introduced">Spark 1.6.0</Field>
+  <Field name="key_parts">A JVM type `T`, an [encoder](/wiki/Encoder_(Spark)) for that type, a logical plan</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (Scala and Java APIs)</Field>
+  <Field name="related">[DataFrame](/wiki/DataFrame), [Encoder (Spark)](/wiki/Encoder_(Spark)), [RDD](/wiki/RDD), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (Dataset.scala, package.scala, Encoder.scala, docs/sql-programming-guide.md, docs/sql-getting-started.md, docs/sql-migration-guide.md, docs/spark-connect-overview.md) and the Spark 1.6.0 and 2.0.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **Dataset** is a strongly typed, distributed collection of objects of one JVM type `T` that can be transformed in parallel with functional operations such as `map` and `filter` or with relational operations such as `select` and `groupBy`.[^dataset] It combines the typed lambdas of the [RDD](/wiki/RDD) API with the optimized execution engine of Spark SQL.[^guide] The Dataset API exists only in Scala and Java; a [DataFrame](/wiki/DataFrame) is the untyped Dataset of `Row` objects, and it is the only form available in Python and R.[^guide]
+
+## How is a Dataset different from a DataFrame?
+
+A DataFrame is a Dataset whose element type is the generic `Row`. In Scala the alias is declared in the `org.apache.spark.sql` package object as `type DataFrame = Dataset[Row]`; in Java the type is written `Dataset<Row>`.[^n1][^guide]
+
+Both forms share one class, so both kinds of operation are available on any Dataset. The Spark documentation calls column-based operations such as `select` and `groupBy` "untyped transformations", and operations that take a lambda over `T`, such as `map`, `filter` and `groupByKey`, "typed transformations".[^started][^migration] A DataFrame becomes a typed Dataset with `as[T]`, which maps columns to fields by name.[^dataset]
+
+Like a DataFrame, a Dataset is lazy. It represents a logical plan, transformations return new Datasets, and an action such as `count`, `show` or a write runs the optimized physical plan on the [executors](/wiki/Executor).[^dataset]
+
+## What does a Dataset need an encoder for?
+
+<Hatnote>Main article: [Encoder (Spark)](/wiki/Encoder_(Spark))</Hatnote>
+
+Every Dataset needs an [encoder](/wiki/Encoder_(Spark)) for its type. The encoder maps `T` to Spark's internal type system, and Spark uses it to generate code that serializes objects into a compact binary form.[^dataset] Spark can filter, sort and hash data in that form without turning the bytes back into objects, which is the difference from Java or Kryo serialization of RDD elements.[^started]
+
+In Scala, `import spark.implicits._` supplies encoders for primitive types and case classes. In Java, encoders come from static methods on `Encoders`, such as `Encoders.bean(Person.class)`.[^encoder]
+
+## Example
+
+This Scala example is adapted from the Spark SQL examples at v4.3.0. It reads a JSON file into a DataFrame, converts it to a typed Dataset of a case class, and applies a typed and an untyped transformation.[^n2]
+
+```scala
+import org.apache.spark.sql.{Dataset, SparkSession}
+
+case class Person(name: String, age: Option[Long])
+
+val spark = SparkSession.builder().getOrCreate()
+import spark.implicits._
+
+val people: Dataset[Person] =
+  spark.read.json("examples/src/main/resources/people.json").as[Person]
+
+val adultNames: Dataset[String] =
+  people.filter(p => p.age.exists(_ >= 21)).map(_.name)   // typed
+
+val byAge = people.groupBy("age").count()                   // untyped, returns a DataFrame
+byAge.show()
+adultNames.show()
+```
+
+The same query in PySpark uses a DataFrame and column expressions, because Python has no typed Dataset:
+
+```python
+from pyspark.sql import functions as F
+
+people = spark.read.json("examples/src/main/resources/people.json")
+adult_names = people.filter(F.col("age") >= 21).select("name")
+adult_names.show()
+```
+
+## Why does PySpark have no Dataset API?
+
+The Dataset's value is compile-time type safety: the compiler checks that a lambda receives a `Person` and returns a `String`. When Spark 2.0 unified the two APIs, the migration guide noted that compile-time type safety is not a language feature of Python and R, so the Dataset concept does not apply to them and the DataFrame stays their main abstraction.[^migration] The programming guide adds that, because Python is dynamic, many of the Dataset's benefits are already available there; for example, a field of a `Row` can be read by name as `row.columnName`.[^guide]
+
+PySpark code that needs per-row Python logic uses a [user-defined function](/wiki/User-defined_function_(Spark)) or `mapInPandas`, which maps an iterator of pandas DataFrames to another, rather than a typed `map`.[^n3]
+
+## Does Spark Connect support Datasets?
+
+Yes. The Spark Connect Scala client supports most Scala APIs since Spark 3.5, including `Dataset` and `KeyValueGroupedDataset`. User-defined functions, which typed transformations rely on, work by default in the shell and need extra set-up in standalone applications.[^connect] See [Spark Connect](/wiki/Spark_Connect).
+
+## Is the Dataset API deprecated?
+
+No. The `Dataset` class is annotated `@Stable` at the v4.3.0 tag, and the Spark 4.3.0 documentation presents it as a current API for Scala and Java.[^dataset][^guide]
+
+## History
+
+Spark 1.6.0 added the Dataset API (SPARK-9999) as a new API, similar to RDDs, for working with custom objects and lambda functions while using the Spark SQL execution engine.[^n4] Spark 2.0.0 unified DataFrame and Dataset in Scala and Java, so that DataFrame became a type alias for `Dataset[Row]`, and introduced a typed `Aggregator` API for Datasets.[^n5]
+
+## See also
+
+- [DataFrame](/wiki/DataFrame)
+- [Encoder (Spark)](/wiki/Encoder_(Spark))
+- [RDD](/wiki/RDD)
+- [Spark Connect](/wiki/Spark_Connect)
+- [User-defined function (Spark)](/wiki/User-defined_function_(Spark))
+
+## References
+
+[^dataset]: [Dataset.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Dataset.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^guide]: [Spark SQL, DataFrames and Datasets Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [package.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^started]: [Getting Started (Spark SQL, Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-getting-started.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: SQL, Datasets and DataFrame (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^encoder]: [Encoder.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/Encoder.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [SparkSQLExample.scala (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/examples/src/main/scala/org/apache/spark/examples/sql/SparkSQLExample.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [Apache Arrow in PySpark (arrow_pandas.rst at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/tutorial/sql/arrow_pandas.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [Spark Release 1.6.0](https://spark.apache.org/releases/spark-release-1-6-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.

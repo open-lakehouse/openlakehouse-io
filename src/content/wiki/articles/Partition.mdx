@@ -1,0 +1,95 @@
+---
+title: "Partition"
+categories: ["Concepts", "Glossary terms"]
+---
+
+<Infobox type="concept">
+  <Field name="field">Data engineering</Field>
+  <Field name="key_parts">Spark partitions, table partitions (Hive-style, Iceberg, Delta Lake), Kafka topic partitions</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Kafka](/wiki/Apache_Kafka)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Executor](/wiki/Executor), [Predicate pushdown](/wiki/Predicate_pushdown), [Small files problem](/wiki/Small_files_problem)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (docs and PySpark source), a run on a Spark 4.3.1-SNAPSHOT build, the Apache Iceberg 1.12.0 spec and partitioning docs, the Delta Lake protocol at v4.4.1 and the clustering docs, and the Apache Kafka 4.4 introduction</Verified>
+
+A **partition** is a subset of a dataset that a system stores or processes as one unit. In a lakehouse the word has several distinct meanings, depending on whether it refers to how an engine splits work, how a table lays out files, or how a message log splits a topic. An [Apache Spark](/wiki/Apache_Spark) partition is a slice of data processed by one task. A table partition in Hive, [Apache Iceberg](/wiki/Apache_Iceberg) or [Delta Lake](/wiki/Delta_Lake) is a group of files that share partition values. An [Apache Kafka](/wiki/Apache_Kafka) partition is an ordered log inside a topic. These meanings interact (a Spark job reads table partitions into Spark partitions, and a Kafka source maps topic partitions to Spark partitions), but they are not the same thing.
+
+## Spark in-memory partition
+
+<Hatnote>Main article: [Apache Spark](/wiki/Apache_Spark)</Hatnote>
+
+In Spark, a partition is a piece of an RDD or DataFrame, and Spark runs one task for each partition.[^rddguide] The number of partitions therefore sets how much parallel work a stage can do on the cluster's [executors](/wiki/Executor). When Spark reads files, it packs at most `spark.sql.files.maxPartitionBytes` (default 128 MB) into one partition; after a join or aggregation, it uses `spark.sql.shuffle.partitions` (default 200) partitions, which adaptive query execution can coalesce at runtime.[^perf]
+
+Two DataFrame methods change the number of partitions. `repartition` hash-partitions the data and always causes a [shuffle](/wiki/Shuffle).[^repartition][^rddguide] `coalesce` only reduces the number of partitions and creates a narrow dependency without a shuffle: going from 1,000 partitions to 100, each new partition claims 10 old ones.[^coalesce]
+
+```python
+from pyspark.sql import functions as F
+
+df = spark.range(0, 1_000_000)
+wide = df.repartition(8, "id")   # shuffle into 8 hash partitions
+narrow = wide.coalesce(2)        # merge into 2 partitions, no new shuffle
+
+narrow.select(F.spark_partition_id()).distinct().count()   # 2
+```
+
+A Spark partition exists only while a job runs. It is not stored, and it is unrelated to the directory layout of the table being read, except that file and partition layout influence how Spark splits its input.
+
+## Hive-style table partitioning
+
+Hive-style partitioning stores a table's files in directories named after partition column values, such as `gender=male/country=US/`. The partition values are encoded in the path of each directory. Spark's built-in file sources discover this layout automatically and add the partition columns to the schema.[^parquet]
+
+Queries skip directories only when they filter on the partition column itself. In Hive, a table partitioned by `event_date` has an explicit `event_date` column, and a query without an `event_date` filter scans every file, even when it filters on the timestamp that the date was derived from.[^icebergpart] Very fine partitioning also produces many small files; see [small files problem](/wiki/Small_files_problem).
+
+## Apache Iceberg hidden partitioning and partition evolution
+
+<Hatnote>Main article: [Apache Iceberg](/wiki/Apache_Iceberg)</Hatnote>
+
+Iceberg uses **hidden partitioning**. A partition spec derives partition values from table columns through transforms such as `identity`, `bucket[N]`, `truncate[W]`, `year`, `month`, `day` and `hour`. Because the table records the transform, Iceberg turns a filter on the source column into a partition filter, and users do not have to add partition predicates to their queries.[^ispec][^icebergpart] Partition values are stored in manifests for each data file, not taken from directory names.[^ispec]
+
+Iceberg also supports **partition evolution**: a table's partitioning can change by adding, removing, renaming or reordering partition fields. Each change creates a new partition spec, and files written under an older spec keep it; at scan time, Iceberg converts filters using the spec each manifest was written with.[^ispec]
+
+## Delta Lake partitioning and liquid clustering
+
+<Hatnote>Main article: [Delta Lake](/wiki/Delta_Lake)</Hatnote>
+
+A [Delta Lake](/wiki/Delta_Lake) table can have partition columns, recorded in the table metadata. The transaction log stores each file's partition values, and readers must take the values from the log. The reference implementation writes files into Hive-style `column=value` directories, but the protocol says this layout only follows convention and is not required.[^dproto]
+
+**Liquid clustering** is Delta Lake's alternative to partitioning and `ZORDER`. A table declares clustering columns with `CLUSTER BY`, `OPTIMIZE` clusters the data incrementally, and the clustering columns can be changed later with `ALTER TABLE` without rewriting existing data. Clustering cannot be combined with partitioning or `ZORDER` on the same table. It is available from Delta Lake 3.1.0, and the preview flag was removed in 3.2.[^dcluster] The protocol requires writers of clustered tables to record per-file statistics for the clustering columns, which readers use for data skipping.[^dproto]
+
+## Apache Kafka topic partitions
+
+A Kafka topic is split into partitions spread over brokers. Events with the same key go to the same partition, consumers read each partition in the order its events were written, and replication works per partition.[^kafka] Ordering is guaranteed within a partition, not across a topic.
+
+When [Structured Streaming](/wiki/Structured_Streaming) reads from Kafka, Spark by default maps each Kafka topic partition to one Spark partition. The `minPartitions` option asks Spark to split large Kafka partitions into more Spark partitions.[^sskafka]
+
+## Which partition am I looking at?
+
+| Meaning | Where it lives | Lifetime | Who decides it | Changed by |
+| --- | --- | --- | --- | --- |
+| Spark partition | Memory and local disk of executors | One job or stage | Spark (file split size, shuffle partitions, AQE) or the user | `repartition`, `coalesce`, SQL hints[^perf] |
+| Hive-style table partition | Directory names in storage (`col=value/`) | Permanent, part of the table | Table author (partition columns) | Writing the data into a new directory layout |
+| Iceberg partition | Partition tuples in manifests, derived by transforms | Permanent, per partition spec | Table author (partition spec) | Partition evolution; old files keep their spec[^ispec] |
+| Delta Lake partition or cluster | Partition values or statistics in the transaction log | Permanent | Table author (`PARTITIONED BY` or `CLUSTER BY`) | Clustering columns via `ALTER TABLE`[^dcluster] |
+| Kafka topic partition | Brokers | Lifetime of the topic | Topic configuration; the event key decides which partition an event goes to[^kafka] | Kafka topic administration |
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [Executor](/wiki/Executor)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Open table format](/wiki/Open_table_format)
+- [Small files problem](/wiki/Small_files_problem)
+
+## References
+
+[^rddguide]: [RDD Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^repartition]: [pyspark.sql.DataFrame.repartition (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.repartition.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^coalesce]: [pyspark.sql.DataFrame.coalesce (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.coalesce.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^parquet]: [Parquet Files: Partition Discovery (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-data-sources-parquet.html#partition-discovery). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icebergpart]: [Partitioning (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/partitioning/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ispec]: [Iceberg Table Spec (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^dproto]: [Delta Transaction Log Protocol (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md). *Delta Lake*. Retrieved 2026-11-22.
+[^dcluster]: [Use liquid clustering for Delta tables](https://docs.delta.io/delta-clustering/). *Delta Lake*. Retrieved 2026-11-22.
+[^kafka]: [Introduction (Apache Kafka 4.4)](https://kafka.apache.org/44/getting-started/introduction/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sskafka]: [Structured Streaming + Kafka Integration Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-kafka-integration.html). *Apache Software Foundation*. Retrieved 2026-11-22.

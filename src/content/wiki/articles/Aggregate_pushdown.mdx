@@ -1,0 +1,89 @@
+---
+title: "Aggregate pushdown"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Aggregation pushdown, metadata-only aggregation</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="key_parts">Connector interface for aggregates, file footer or table metadata statistics (row counts, min, max, null counts), fallback to a normal scan</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (Data Source V2), [Apache Iceberg](/wiki/Apache_Iceberg), [Apache Parquet](/wiki/Apache_Parquet) and ORC readers in Spark, JDBC sources</Field>
+  <Field name="related">[Predicate pushdown](/wiki/Predicate_pushdown), [Column pruning](/wiki/Column_pruning), [Apache Parquet](/wiki/Apache_Parquet), [Data Source V2](/wiki/Data_Source_V2)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SupportsPushDownAggregates.java, AggregatePushDownUtils.scala, ParquetScanBuilder.scala, ParquetScan.scala, SQLConf.scala, docs/sql-data-sources-jdbc.md), Spark JIRA SPARK-34952 and SPARK-36645, parquet.thrift at apache-parquet-format-2.12.0, and the Apache Iceberg 1.12.0 Spark source and configuration docs</Verified>
+
+**Aggregate pushdown** is a query optimization in which an engine hands an aggregate such as `COUNT(*)`, `MIN(col)` or `MAX(col)` to the data source, which answers it from metadata or computes it itself, instead of returning every row for the engine to aggregate.[^spda] For file formats like [Apache Parquet](/wiki/Apache_Parquet), the answer can come from statistics in the file footers without reading data pages; for [Apache Iceberg](/wiki/Apache_Iceberg), it can come from the per-file statistics in the table metadata. In [Apache Spark](/wiki/Apache_Spark), aggregate pushdown is part of the Data Source V2 API.
+
+## How does aggregate pushdown work in Apache Spark?
+
+A Data Source V2 connector opts in by implementing `SupportsPushDownAggregates` on its `ScanBuilder` (since Spark 3.2.0). Spark calls `pushAggregation` with the aggregate functions and grouping expressions; the source returns true if it can handle them. A source may complete the aggregation fully or only partially, in which case Spark adds a final aggregate on top of the source's output.[^spda] The API was added in SPARK-34952, fixed in 3.2.0.[^n1]
+
+Spark pushes filters to the source first and aggregates second. If a pushed filter must still be evaluated after the scan, the aggregate cannot be pushed, because the source's answer would include rows that the filter later removes.[^spda] For Parquet and ORC footers the rule is stricter: any filter on a data column blocks pushdown, because the statistics describe all rows and not only those that pass the filter.[^utils]
+
+## How do Parquet footers answer COUNT, MIN and MAX?
+
+A Parquet file footer records the number of rows in the file and in each row group, and optional column chunk statistics, including `min_value`, `max_value` and `null_count`.[^thrift] From these values a reader can compute `COUNT(*)` as the sum of row counts, `COUNT(col)` as row count minus null count, and `MIN` or `MAX` as the smallest or largest bound, without decoding any data page.
+
+Spark's Parquet and ORC aggregate pushdown, added in Spark 3.3.0 (SPARK-36645), works this way.[^n2] It is off by default and is enabled with `spark.sql.parquet.aggregatePushdown` or `spark.sql.orc.aggregatePushdown` (both default false, since 3.3.0). The setting's documentation warns that if statistics are missing from any file footer, Spark throws an exception.[^sqlconf]
+
+```python
+spark.conf.set("spark.sql.parquet.aggregatePushdown", "true")
+spark.read.parquet("/data/events").selectExpr("count(*)", "max(event_id)").explain()
+# On the V2 Parquet scan path, the scan metadata lists the pushed aggregates under PushedAggregation
+```
+
+## What are the limits of Parquet and ORC aggregate pushdown in Spark?
+
+At Spark 4.3.0, the rules in `AggregatePushDownUtils` are:[^utils]
+- **Functions.** `MIN`, `MAX`, `COUNT(col)` and `COUNT(*)`. `COUNT(DISTINCT ...)` and other aggregates are not pushed.
+- **Types for MIN and MAX.** Boolean, byte, short, integer, long, float, double, date and time. Timestamps are excluded because the INT96 sort order is undefined; strings, binary and decimals are excluded because they can be stored as Parquet binary values, whose minimum and maximum may be truncated.
+- **No data filters.** Any filter on a data column blocks pushdown. A filter on a partition column is allowed.
+- **Grouping.** `GROUP BY` is pushed only when the grouping columns are exactly the table's partition columns.
+- **No partition columns in MIN or MAX**, because the footer has no statistics for them.
+
+The pushdown is implemented in the Data Source V2 Parquet and ORC scans.[^scanbuilder] In Spark 4.3.0 the built-in `parquet` and `orc` sources still use the V1 code path by default, because they are in the internal setting `spark.sql.sources.useV1SourceList` (default `avro,csv,json,kafka,orc,parquet,text`), so the pushdown applies only when Spark reads these formats through the V2 path.[^sqlconf]
+
+## Aggregate pushdown in Apache Iceberg
+
+[Apache Iceberg](/wiki/Apache_Iceberg)'s Spark connector answers aggregates from the column statistics stored in its manifest files. The feature is controlled by `spark.sql.iceberg.aggregate-push-down.enabled` (default true), and covers `MAX`, `MIN` and `COUNT`.[^icebergconf]
+
+In Iceberg 1.12.0, the Spark scan builder skips aggregate pushdown when:[^icebergsb]
+- the query has a `GROUP BY`;
+- any data file in the scan has row-level delete files, since deleted rows would be counted;
+- the column's metrics mode is `none`, or is `counts` and the query asks for `MIN` or `MAX`;
+- the query asks for `MIN` or `MAX` of a string or binary column, because stored bounds may be truncated;
+- the table is a metadata table rather than the main table.
+
+When pushdown succeeds, Iceberg plans the files, computes the result from their statistics, and returns it to Spark as a local scan of one row, so no data file is opened.[^icebergsb]
+
+## Aggregate pushdown to JDBC sources
+
+For the JDBC data source, the `pushDownAggregate` option (default true) lets Spark send aggregates to the database. The Spark documentation notes that aggregates are pushed only if all the aggregate functions and their related filters can be pushed, and that Spark still applies a final aggregate unless `numPartitions` is 1 or the group-by key equals `partitionColumn`.[^n3]
+
+## How can you tell if an aggregate was pushed?
+
+In `EXPLAIN` output, a V2 Parquet or ORC scan with a pushed aggregate lists `PushedAggregation` and `PushedGroupBy` in its metadata.[^n4] A JDBC scan lists `PushedAggregates` and `PushedGroupByExpressions`.[^n5] For Iceberg, a pushed aggregate replaces the batch scan with a local scan, and the Iceberg logs record the reason whenever pushdown is skipped.[^icebergsb]
+
+## See also
+
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Column pruning](/wiki/Column_pruning)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Data Source V2](/wiki/Data_Source_V2)
+
+## References
+
+[^spda]: [SupportsPushDownAggregates.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownAggregates.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-34952: DS V2 Aggregate push down](https://issues.apache.org/jira/browse/SPARK-34952). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^utils]: [AggregatePushDownUtils.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/AggregatePushDownUtils.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^thrift]: [parquet.thrift (apache-parquet-format-2.12.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.12.0/src/main/thrift/parquet.thrift). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [SPARK-36645: Aggregate (Min/Max/Count) push down for Parquet](https://issues.apache.org/jira/browse/SPARK-36645). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scanbuilder]: [ParquetScanBuilder.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/parquet/ParquetScanBuilder.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icebergconf]: [Spark Configuration (Iceberg 1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/docs/docs/spark-configuration.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^icebergsb]: [SparkScanBuilder.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/spark/v4.1/spark/src/main/java/org/apache/iceberg/spark/source/SparkScanBuilder.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [JDBC To Other Databases (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-data-sources-jdbc.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [ParquetScan.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/parquet/ParquetScan.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [DataSourceScanExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/DataSourceScanExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

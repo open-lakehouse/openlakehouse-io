@@ -1,0 +1,81 @@
+---
+title: "External shuffle service"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">ESS, Spark shuffle service, `spark_shuffle` (YARN auxiliary service name)</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 1.2</Field>
+  <Field name="key_parts">Long-running per-node process, shuffle file server, state store (RocksDB by default)</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) standalone workers and YARN NodeManagers; not supported on Kubernetes</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Dynamic allocation](/wiki/Dynamic_allocation), [Push-based shuffle](/wiki/Push-based_shuffle), [Executor](/wiki/Executor)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/job-scheduling.md, docs/configuration.md, docs/running-on-yarn.md, docs/spark-standalone.md), the Apache Celeborn and Apache Uniffle project sites</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), the **external shuffle service** (ESS) is a long-running process on each node of a cluster that serves the [shuffle](/wiki/Shuffle) files written by [executors](/wiki/Executor), so those files stay available after the executor that wrote them has been removed or has failed. It runs independently of Spark applications and their executors, and was introduced in Spark 1.2.[^jobsched] It is enabled with `spark.shuffle.service.enabled` (default false) and listens on port 7337 by default (`spark.shuffle.service.port`).[^config]
+
+## Why does the external shuffle service exist?
+
+In a shuffle, each executor writes its map output to local disk and then acts as the server for those files when other executors fetch them. If the executor goes away before the next stage has read the files, the map tasks that produced them have to run again.[^jobsched]
+
+This matters most with [dynamic allocation](/wiki/Dynamic_allocation), which removes idle executors while the application is still running; a straggler can keep a shuffle open after the executors that wrote it are idle.[^jobsched] With the ESS enabled, executors fetch shuffle files from the service instead of from each other, so shuffle output can still be served after the executor's lifetime. The service also lets shuffle fetches continue if an executor fails.[^jobsched][^config]
+
+The ESS can also serve RDD blocks persisted on disk, when `spark.shuffle.service.fetch.rdd.enabled` is true (default false). With dynamic allocation, executors that hold only disk-persisted blocks are then treated as idle and can be released.[^config]
+
+## Where does the external shuffle service run?
+
+| Cluster manager | Where the ESS runs | How to enable it |
+| --- | --- | --- |
+| Standalone | Inside each Spark worker | Start the workers with `spark.shuffle.service.enabled=true`[^jobsched] |
+| YARN | As a YARN auxiliary service inside each NodeManager, class `org.apache.spark.network.yarn.YarnShuffleService` | Add `spark_shuffle` to `yarn.nodemanager.aux-services` in `yarn-site.xml`, put `spark-<version>-yarn-shuffle.jar` on the NodeManager classpath, raise the NodeManager heap (`YARN_HEAPSIZE`, 1000 by default) and restart the NodeManagers[^yarn] |
+| Kubernetes | Not supported | Use an alternative (below)[^jobsched] |
+
+On YARN, a cluster can run more than one version of the shuffle service at once in isolated classloaders, on YARN 2.9.0 or later, because the shuffle service is not always compatible with other Spark versions.[^yarn] On both standalone and YARN, the service can store its state on local disk so that it survives a restart of the service; the state store uses RocksDB by default, and LevelDB is deprecated.[^yarn][^standalone]
+
+```xml
+<!-- yarn-site.xml on every NodeManager -->
+<property>
+  <name>yarn.nodemanager.aux-services</name>
+  <value>mapreduce_shuffle,spark_shuffle</value>
+</property>
+<property>
+  <name>yarn.nodemanager.aux-services.spark_shuffle.class</name>
+  <value>org.apache.spark.network.yarn.YarnShuffleService</value>
+</property>
+```
+
+The application then sets `spark.shuffle.service.enabled=true`.[^config]
+
+## What are the alternatives on Kubernetes?
+
+Spark on Kubernetes does not support the external shuffle service.[^jobsched] Spark itself offers three other ways to keep shuffle data when executors are removed:[^jobsched][^config]
+
+- **Shuffle tracking** (`spark.dynamicAllocation.shuffleTracking.enabled`, default true): Spark keeps alive the executors that store shuffle data for active jobs.
+- **Decommissioning with shuffle block migration** (`spark.decommission.enabled` and `spark.storage.decommission.shuffleBlocks.enabled`): an executor copies its shuffle blocks to other executors before it is removed, optionally to a fallback storage path such as an S3 bucket.
+- **A shuffle storage plugin** (`spark.shuffle.sort.io.plugin.class`, experimental): a custom `ShuffleDataIO` stores shuffle data in reliable storage.
+
+Separate open source **remote shuffle services** take the shuffle data out of executors altogether. [Apache Celeborn](/wiki/Apache_Celeborn) describes itself as an intermediate data service for compute engines, for shuffle and spilled data, with Spark integration and a Kubernetes deployment guide.[^celeborn] Apache Uniffle is a remote shuffle service that lets Spark applications store shuffle data on remote shuffle servers, with a Kubernetes operator.[^uniffle]
+
+|  | External shuffle service | Shuffle tracking | Decommission migration | Remote shuffle service |
+| --- | --- | --- | --- | --- |
+| Extra process | One per node | None | None | Separate cluster |
+| Kubernetes | Not supported | Yes | Yes | Yes |
+| Executors can be released while their shuffle is in use | Yes | No (unless `shuffleTracking.timeout` is set)[^config] | Yes, after migration | Yes |
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [Dynamic allocation](/wiki/Dynamic_allocation)
+- [Push-based shuffle](/wiki/Push-based_shuffle)
+- [Executor](/wiki/Executor)
+
+## References
+
+[^jobsched]: [Job Scheduling: Graceful Decommission of Executors (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html#graceful-decommission-of-executors). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^yarn]: [Running Spark on YARN: Configuring the External Shuffle Service (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-yarn.html#configuring-the-external-shuffle-service). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^standalone]: [Spark Standalone Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-standalone.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^celeborn]: [Apache Celeborn](https://celeborn.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^uniffle]: [Apache Uniffle: Intro](https://uniffle.apache.org/docs/intro). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,90 @@
+---
+title: "Output mode"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Streaming output mode</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Append, update, complete; result table; [watermark](/wiki/Watermark)</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark) (`outputMode` on `writeStream`)</Field>
+  <Field name="related">[Watermark](/wiki/Watermark), [Windowing (stream processing)](/wiki/Windowing_(stream_processing)), [foreachBatch](/wiki/ForeachBatch), [Delta Lake](/wiki/Delta_Lake), [Apache Iceberg](/wiki/Apache_Iceberg)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (output modes, joins, unsupported operations, session windows) and Real-time Mode guide, the Delta Lake table streaming documentation and the Apache Iceberg 1.12.0 Spark Structured Streaming page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), the **output mode** of a streaming query says which rows of the query's result table are written to the sink after each trigger: only new rows (**append**), only rows that changed (**update**) or the whole result (**complete**). The mode is set with `outputMode(...)` on `writeStream`, and each kind of query supports only some modes.[^ss-out] The output mode also decides how a [watermark](/wiki/Watermark) affects state and when windowed results appear.
+
+## What are the three output modes?
+
+- **Append** is the default. Only rows added to the result table since the last trigger are written, and a row is written once. It is allowed only for queries whose result rows never change afterwards, such as `select`, `where`, `map`, `flatMap`, `filter` and joins.[^ss-out]
+- **Update** writes only the rows of the result table that changed since the last trigger. It has been available since Spark 2.1.1.[^ss-out]
+- **Complete** writes the whole result table after every trigger. It is supported for aggregation queries.[^ss-out]
+
+The result table is a model, not a stored table: Spark keeps only the state it needs to produce the next output, and the sink decides how written rows are applied.
+
+## Which queries allow which output modes?
+
+The table follows the compatibility matrix in the Spark 4.3.0 guide.[^ss-out]
+
+| Query type | Append | Update | Complete | Notes |
+| --- | --- | --- | --- | --- |
+| Aggregation on event time with a watermark | Yes | Yes | Yes | Append emits each window once, after the watermark passes it, and drops its state. Update also drops old state. Complete keeps all state. |
+| Other aggregations | No | Yes | Yes | Without a watermark, aggregates can change at any time, so append is not allowed and old state is never dropped. |
+| `mapGroupsWithState` | No | Yes | No | Aggregations are not allowed in the same query. |
+| `flatMapGroupsWithState` | In append operation mode | In update operation mode | No | Aggregations are allowed after it only in append operation mode. |
+| Joins | Yes | No | No | See [Stream-stream join](/wiki/Stream-stream_join). |
+| Other queries | Yes | Yes | No | Complete would mean keeping all unaggregated data. |
+
+Further restrictions apply to some operators. Streaming [session window](/wiki/Session_window) aggregations do not support update mode.[^ss-types] Sorting a streaming DataFrame is supported only after an aggregation and in complete mode, and chaining several stateful operators is not supported in update or complete mode.[^ss-unsup] Real-time Mode, added in Spark 4.1.0, requires update mode; a query with any other mode fails to start.[^rtm]
+
+## How does the output mode interact with watermarks?
+
+For a windowed count with a 10-minute watermark, the three modes give different output streams for the same input:[^ss-out][^ss-late]
+- In append mode, the window 12:00 to 12:10 is written once, with its final count, after the watermark passes 12:10. Its output is therefore delayed by the watermark threshold.
+- In update mode, the window's running count is written after every trigger in which it changes, until the watermark passes it.
+- In complete mode, every window ever seen is written after every trigger, and no state is dropped.
+
+For the watermark to clean aggregation state, the output mode must be append or update, the aggregation must group by the event-time column or a window on it, and `withWatermark` must be called on that column before the aggregation.[^ss-late]
+
+## Which output modes do table formats support as sinks?
+
+The [Delta Lake](/wiki/Delta_Lake) streaming sink supports append mode, which adds new records to the table, and complete mode, which replaces the table with each batch's result.[^delta] To apply update-mode output to a Delta table as row-level upserts, the Delta documentation uses [foreachBatch](/wiki/ForeachBatch) with `MERGE`, and describes update mode as much more efficient than complete mode for streaming aggregates.[^delta-merge]
+
+The [Apache Iceberg](/wiki/Apache_Iceberg) Spark sink also supports append mode (append each micro-batch's rows) and complete mode (replace the table contents every micro-batch).[^iceberg]
+
+## Example
+
+```python
+from pyspark.sql import functions as F
+
+counts = (spark.readStream.table("main.web.page_views")
+    .withWatermark("ts", "10 minutes")
+    .groupBy(F.window("ts", "5 minutes"), "page")
+    .count())
+
+# Final counts only, one row per window, appended to a Delta table
+(counts.writeStream
+    .outputMode("append")
+    .option("checkpointLocation", "/checkpoints/page_counts")
+    .toTable("main.web.page_counts"))
+```
+
+## See also
+
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Watermark](/wiki/Watermark)
+- [Windowing (stream processing)](/wiki/Windowing_(stream_processing))
+- [foreachBatch](/wiki/ForeachBatch)
+- [Trigger (Structured Streaming)](/wiki/Trigger_(Structured_Streaming))
+
+## References
+
+[^ss-out]: [Structured Streaming: Output Modes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#output-modes). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-types]: [Structured Streaming: Types of time windows (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#types-of-time-windows). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-unsup]: [Structured Streaming: Unsupported Operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#unsupported-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-late]: [Structured Streaming: Conditions for watermarking to clean aggregation state (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#conditions-for-watermarking-to-clean-aggregation-state). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta]: [Table streaming reads and writes](https://docs.delta.io/latest/delta-streaming.html). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^delta-merge]: [Table deletes, updates, and merges: Upsert from streaming queries using foreachBatch](https://docs.delta.io/latest/delta-update.html#upsert-from-streaming-queries-using-foreachbatch). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^iceberg]: [Spark Structured Streaming (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/spark-structured-streaming/). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,98 @@
+---
+title: "Cost-based optimizer (Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">CBO, Spark SQL cost-based optimization</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="introduced">Apache Spark 2.2.0</Field>
+  <Field name="key_parts">Table and column statistics, `ANALYZE TABLE`, cardinality estimation, join reordering, histograms</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Catalyst optimizer](/wiki/Catalyst_optimizer), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Broadcast join](/wiki/Broadcast_join), [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan), [Hive Metastore](/wiki/Hive_Metastore)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 2.2.0 release notes, SPARK-16026, the v4.3.0 tag of apache/spark (SQLConf.scala, docs/sql-performance-tuning.md, docs/sql-ref-syntax-aux-analyze-table.md, docs/sql-ref-syntax-qry-explain.md) and ANALYZE TABLE, DESCRIBE and EXPLAIN COST output from a PySpark 4.3.0 run</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), the **cost-based optimizer** (**CBO**) is the part of the [Catalyst optimizer](/wiki/Catalyst_optimizer) that uses table and column statistics, such as row counts, distinct values and minimum and maximum values, to estimate how many rows each step of a query produces, and uses those estimates to choose join orders and join strategies.[^sqlconf][^perf] Spark 2.2.0 introduced cardinality estimation for filter, join, aggregate, project and limit operators and cost-based join reordering.[^r220] The umbrella issue for the framework, SPARK-16026, was closed with fix version 2.3.0.[^jira16026] In Spark 4.3.0 the CBO is still off by default (`spark.sql.cbo.enabled=false`), and most queries rely instead on size estimates and on [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) at run time.
+
+## What statistics does Spark use?
+
+The Spark tuning guide lists three sources of statistics:[^perf]
+
+- **Data source**: statistics that Spark reads from the data itself, such as the counts and minimum and maximum values in [Apache Parquet](/wiki/Apache_Parquet) file metadata.
+- **Catalog**: statistics stored in the catalog, such as the [Hive Metastore](/wiki/Hive_Metastore), and collected or updated by `ANALYZE TABLE`.
+- **Runtime**: statistics that Spark measures while a query runs, used by [Adaptive Query Execution](/wiki/Adaptive_Query_Execution).
+
+Without the CBO, Catalyst still uses one statistic everywhere: the estimated size in bytes of each plan node. That size decides, for example, whether a table is small enough for a [broadcast join](/wiki/Broadcast_join).[^perf] When the size of a table is unknown, the internal default `spark.sql.defaultSizeInBytes` is `Long.MaxValue`, so the optimizer does not broadcast a table unless it knows the table is small.[^sqlconf]
+
+## How do you collect statistics with ANALYZE TABLE?
+
+`ANALYZE TABLE` collects statistics for one table, or for all tables in a database, and stores them in the catalog for the optimizer.[^analyze]
+
+| Statement | What it collects |
+| --- | --- |
+| `ANALYZE TABLE t COMPUTE STATISTICS NOSCAN` | Table size in bytes only, without scanning the data |
+| `ANALYZE TABLE t COMPUTE STATISTICS` | Row count and size in bytes |
+| `ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS a, b` | Table statistics plus column statistics for the listed columns |
+| `ANALYZE TABLE t COMPUTE STATISTICS FOR ALL COLUMNS` | Table statistics plus column statistics for every column |
+| `ANALYZE TABLES IN db COMPUTE STATISTICS` | Table statistics for every table in the database |
+
+Source: Spark 4.3.0 SQL reference.[^analyze] A `PARTITION (...)` clause limits the statement to some partitions.
+
+`DESCRIBE EXTENDED` shows what was collected.[^perf] After `ANALYZE TABLE t1 COMPUTE STATISTICS FOR ALL COLUMNS` on a 1,000-row Parquet table in PySpark 4.3.0, `DESCRIBE EXTENDED t1` reported `Statistics: 5665 bytes, 1000 rows`, and `DESCRIBE EXTENDED t1 id` reported `min 0`, `max 999`, `num_nulls 0`, `distinct_count 1000`, `avg_col_len 8`, `max_col_len 8` and `histogram NULL`.
+
+Histograms are not collected by default. With `spark.sql.statistics.histogram.enabled=true` (default false, since 2.3.0), `ANALYZE TABLE ... FOR COLUMNS` also builds equi-height histograms, which improve estimates but cost an extra table scan.[^sqlconf] Statistics are not refreshed automatically when data changes, unless `spark.sql.statistics.size.autoUpdate.enabled` is set (default false), and even then only the table size is updated.[^sqlconf]
+
+## When is the CBO used?
+
+The CBO is used only when it is turned on, and its parts have separate switches. All of them are off by default in Spark 4.3.0:[^sqlconf]
+
+| Setting | Default | Since | Effect |
+| --- | --- | --- | --- |
+| `spark.sql.cbo.enabled` | false | 2.2.0 | Estimate plan statistics (row counts, column statistics) from the collected statistics |
+| `spark.sql.cbo.joinReorder.enabled` | false | 2.2.0 | Reorder joins by estimated cost (join reordering in the CBO) |
+| `spark.sql.cbo.joinReorder.dp.threshold` | 12 | 2.2.0 | The maximum number of joined nodes for the dynamic programming algorithm |
+| `spark.sql.cbo.starSchemaDetection` | false | 2.2.0 | Reorder joins with a star schema heuristic |
+| `spark.sql.cbo.planStats.enabled` | false | 3.0.0 | Fetch row counts and column statistics from the catalog into the logical plan |
+
+The effect is visible with `EXPLAIN COST`, which prints the optimized logical plan with statistics.[^explain] In this PySpark 4.3.0 run, table `t1` has 1,000 rows and `t2` has 10, both analyzed for all columns, and the query is `SELECT * FROM t1 JOIN t2 ON t1.k = t2.k WHERE t1.id < 100`. With the CBO off, the filter does not change the size estimate, and the join is estimated at 7.8 MiB:
+
+```
+Join Inner, (k#5104L = k#5105L), Statistics(sizeInBytes=7.8 MiB)
+:- Filter ((isnotnull(id#5103L) AND (id#5103L < 100)) AND isnotnull(k#5104L)), Statistics(sizeInBytes=5.5 KiB)
+:  +- Relation spark_catalog.default.t1[id#5103L,k#5104L] parquet, Statistics(sizeInBytes=5.5 KiB)
++- Filter isnotnull(k#5105L), Statistics(sizeInBytes=1438.0 B)
+   +- Relation spark_catalog.default.t2[k#5105L,name#5106] parquet, Statistics(sizeInBytes=1438.0 B)
+```
+
+With `spark.sql.cbo.enabled=true`, the same plan carries row counts. The filter `id < 100` is estimated at 101 rows (the true count is 100), and the join estimate falls to 4.4 KiB:
+
+```
+Join Inner, (k#5104L = k#5105L), Statistics(sizeInBytes=4.4 KiB, rowCount=101)
+:- Filter ((isnotnull(id#5103L) AND (id#5103L < 100)) AND isnotnull(k#5104L)), Statistics(sizeInBytes=2.4 KiB, rowCount=101)
+:  +- Relation spark_catalog.default.t1[id#5103L,k#5104L] parquet, Statistics(sizeInBytes=23.4 KiB, rowCount=1.00E+3)
++- Filter isnotnull(k#5105L), Statistics(sizeInBytes=290.0 B, rowCount=10)
+   +- Relation spark_catalog.default.t2[k#5105L,name#5106] parquet, Statistics(sizeInBytes=290.0 B, rowCount=10)
+```
+
+## CBO and Adaptive Query Execution
+
+The CBO and [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) solve the same problem at different times. The CBO works before the query runs, from statistics that must be collected in advance and can be stale. AQE works during the query, from exact sizes of completed shuffle stages, but can only change the parts of the plan that have not run yet.[^perf]
+
+## See also
+
+- [Catalyst optimizer](/wiki/Catalyst_optimizer)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan)
+- [Hive Metastore](/wiki/Hive_Metastore)
+
+## References
+
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r220]: [Spark Release 2.2.0](https://spark.apache.org/releases/spark-release-2-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira16026]: [SPARK-16026: Cost-based Optimizer Framework](https://issues.apache.org/jira/browse/SPARK-16026). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^analyze]: [ANALYZE TABLE (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-aux-analyze-table.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^explain]: [EXPLAIN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-explain.html). *Apache Software Foundation*. Retrieved 2026-11-23.

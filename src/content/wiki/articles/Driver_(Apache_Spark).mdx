@@ -1,0 +1,91 @@
+---
+title: "Driver (Apache Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark driver, driver program</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">`SparkContext`, DAG scheduler, task scheduler, query planner, web UI (port 4040)</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Executor](/wiki/Executor), [SparkContext](/wiki/SparkContext), [SparkSession](/wiki/SparkSession), [Spark Connect](/wiki/Spark_Connect), [Job, stage and task](/wiki/Job,_stage_and_task)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/cluster-overview.md, docs/submitting-applications.md, docs/configuration.md, docs/rdd-programming-guide.md, docs/running-on-kubernetes.md, docs/spark-connect-overview.md, python/pyspark/sql/dataframe.py, BroadcastExchangeExec.scala, QueryExecutionErrors.scala), a PySpark 4.3.0 run, and the Trino 484 concepts page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), the **driver** is the process that runs an application's `main()` function, creates the [SparkContext](/wiki/SparkContext), turns the program into tasks and schedules those tasks on [executors](/wiki/Executor).[^cluster] Every Spark application has exactly one driver. The driver plans the work and coordinates the cluster; the executors read data, run the tasks and hold cached and shuffled data. Where the driver runs is set by the deploy mode, and its memory is a common cause of failures when results or broadcast tables are pulled back to it.
+
+## What runs in the driver and what runs in executors?
+
+The Spark driver holds the application's control flow. It connects to a cluster manager (standalone, YARN or Kubernetes), acquires executors, sends them the application code, and then sends them tasks to run.[^cluster] For DataFrame and SQL work, the driver also parses, analyzes and optimizes each query with the [Catalyst optimizer](/wiki/Catalyst_optimizer) and builds the physical plan. The DAG scheduler in the driver splits each job into stages and the task scheduler hands the tasks to executors.[^dag] Each driver serves a web UI, typically on port 4040, that shows its jobs, stages, tasks, executors and storage.[^cluster]
+
+| Work | Runs in the driver | Runs in executors |
+| --- | --- | --- |
+| Program logic outside Spark operations (loops, Python variables, `print`) | Yes | No |
+| Query parsing, analysis, optimization and physical planning | Yes | No |
+| Job, stage and task scheduling; retry decisions | Yes | No |
+| Functions passed to `map`, `filter` and UDFs | No | Yes, inside tasks |
+| Reading files, shuffling, joining and aggregating rows | No | Yes |
+| Results of `collect()`, `take()` or `toPandas()` | Received here | Computed and serialized here |
+
+The split matters for side effects. Calling `rdd.foreach(println)` in cluster mode prints to each executor's standard output, not the driver's, because the function runs inside the executors.[^rddguide]
+
+The driver must stay reachable by its executors for its whole lifetime, so it has to be network addressable from the worker nodes. The Spark documentation recommends running it close to the workers, preferably on the same local network.[^cluster]
+
+## Client mode vs cluster mode
+
+The deploy mode decides where the Spark driver process runs. In **client** mode the submitter launches the driver outside the cluster; in **cluster** mode the cluster framework launches the driver inside the cluster.[^cluster] `spark-submit --deploy-mode` (or `spark.submit.deployMode`) selects it, and the default is `client`.[^submit][^config]
+
+|  | Client mode | Cluster mode |
+| --- | --- | --- |
+| Where the driver runs | Inside the `spark-submit` process on the submitting machine[^submit] | On a node inside the cluster; on Kubernetes, in a driver pod[^submit][^k8s] |
+| Console input and output | Attached to the submitting console; suited to the Spark shell and other REPLs[^submit] | Not attached; read the driver log from the cluster |
+| Typical use | A gateway machine co-located with the workers[^submit] | Submitting from a machine far from the workers, such as a laptop, to reduce driver to executor latency[^submit] |
+| Setting driver memory | Must be passed as `--driver-memory` or in the defaults file, because the driver JVM has already started when `SparkConf` is read[^config] | `spark.driver.memory` works as a normal setting; `spark.driver.cores` applies only in this mode[^config] |
+
+Spark's standalone cluster manager does not support cluster mode for Python applications.[^submit] A PySpark 4.3.0 session started without options reports `spark.submit.deployMode` as `client`.
+
+## Why does the driver run out of memory?
+
+The Spark driver's JVM heap is set by `spark.driver.memory` (default `1g`). On YARN and Kubernetes in cluster mode, `spark.driver.memoryOverhead` adds non-heap memory, which also has to cover a Python process that goes with a PySpark driver.[^config] The common causes of a driver out-of-memory error all move data into this process:
+
+- **Collecting large results.** `collect()` fetches the entire dataset to a single machine and can make the driver run out of memory; the Spark guide suggests `take(n)` when only some rows are needed.[^rddguide] The PySpark API reference gives the same warning for `DataFrame.collect()`, `toPandas()` and `toArrow()`: all the data is loaded into the driver's memory.[^pydf]
+- **Large total result size.** `spark.driver.maxResultSize` (default `1g`) limits the total serialized results of all partitions for one action; a job above the limit is aborted. Setting it high, or to 0 for unlimited, can lead to driver out-of-memory errors instead.[^config]
+- **Broadcast joins.** For a [broadcast join](/wiki/Broadcast_join), Spark SQL collects the small side to the driver, builds the hash table there and then broadcasts it. If the driver runs out of memory while doing so, Spark reports that there is not enough memory to build and broadcast the table and suggests disabling broadcast with `spark.sql.autoBroadcastJoinThreshold=-1` or raising the driver memory.[^bex][^qee]
+
+## Driver and Spark Connect
+
+With [Spark Connect](/wiki/Spark_Connect), the client application no longer runs in the same process as the Spark driver. The client sends unresolved logical plans to a Spark Connect server, and that server runs the driver and its `SparkContext`. The client therefore cannot reach the driver JVM directly and has no access to the `SparkContext` or the static Spark configuration.[^connect] Several Connect sessions share one server's driver; state backed by the shared `SparkContext`, such as cached datasets and global temporary views, is shared across those sessions.[^connect]
+
+## Spark driver compared with other uses of the word
+
+The word "driver" means something different in [Trino](/wiki/Trino), which causes confusion when reading Trino documentation next to Spark's.
+
+|  | Spark driver | Trino driver |
+| --- | --- | --- |
+| What it is | One process per Spark application that plans and schedules all work[^cluster] | A sequence of operator instances inside a Trino task[^trino] |
+| Closest counterpart in the other engine | The Trino coordinator, which receives statements from clients and plans them[^trino] | A Spark task, which runs a pipelined chain of narrow operations inside an executor[^dag] |
+| How many per query | One for the whole application, across all its queries | Many, running on the workers[^trino] |
+
+## See also
+
+- [Executor](/wiki/Executor)
+- [SparkContext](/wiki/SparkContext)
+- [SparkSession](/wiki/SparkSession)
+- [Job, stage and task](/wiki/Job,_stage_and_task)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Broadcast join](/wiki/Broadcast_join)
+
+## References
+
+[^cluster]: [Cluster Mode Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/cluster-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dag]: [DAGScheduler.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rddguide]: [RDD Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^submit]: [Submitting Applications (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/submitting-applications.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pydf]: [dataframe.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/dataframe.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^bex]: [BroadcastExchangeExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/BroadcastExchangeExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^qee]: [QueryExecutionErrors.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/errors/QueryExecutionErrors.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trino]: [Trino concepts (Trino 484)](https://trino.io/docs/current/overview/concepts.html). *Trino Software Foundation*. Retrieved 2026-11-23.

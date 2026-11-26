@@ -1,0 +1,118 @@
+---
+title: "Watermark"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Event-time watermark, low watermark</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Event-time column, maximum observed event time, allowed delay (lateness threshold)</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) (`withWatermark`), [Apache Flink](/wiki/Apache_Flink) (`WatermarkStrategy`), Kafka Streams (grace period)</Field>
+  <Field name="related">[Stream processing](/wiki/Stream_processing), [Exactly-once semantics](/wiki/Exactly-once_semantics)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Spark 4.3.0 Structured Streaming guides and `SQLConf.scala` at tag v4.3.0, the Apache Flink 2.3 documentation and the Dataflow Model paper (VLDB 2015)</Verified>
+
+In [stream processing](/wiki/Stream_processing), a **watermark** is a moving timestamp that tells the engine how far event time has progressed in a stream, so that it can treat earlier event times as complete, emit final results for them and discard the state it kept for them. Watermarks let an engine handle data that arrives out of order while still bounding the memory and storage that stateful operators use. [Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark) and [Apache Flink](/wiki/Apache_Flink) both use watermarks, with different APIs and defaults.
+
+The word is also used for unrelated offset markers in message queues and connectors; this page covers only event-time watermarks in streaming engines.
+
+## Why streaming engines need watermarks
+
+Records carry an **event time** (when the event happened) and are handled at a **processing time** (when the engine sees them). The gap between the two changes all the time, so records arrive late and out of order.[^dataflow] An engine that counts events per 10-minute window cannot know when a window has received all its records.
+
+Without a signal, the engine has two bad choices: keep every window open forever, so that state grows without limit, or close windows by processing time, so that late records are counted in the wrong window. The Spark guide states that to run a windowed query for days, the engine must know when an old aggregate can be dropped because no more late data will arrive for it.[^ss-apis]
+
+The Dataflow paper, building on Google's MillWheel, describes a watermark as a lower bound on the event times that have been processed, and notes that for most real-world data the system cannot know this bound with certainty, so watermarks are usually heuristic.[^dataflow] A watermark is therefore a trade-off: a longer delay accepts more late data but holds state longer and emits final results later.
+
+## Watermarks in Structured Streaming
+
+Spark added watermarking in Spark 2.1. A query declares a watermark with `withWatermark(eventTimeColumn, delayThreshold)`. At the start of every trigger, the engine sets the watermark to the maximum event time seen so far minus the delay. For a window that ends at time *T*, the engine keeps state and accepts late records until the watermark passes *T*; after that, the window's state is cleared and later records for it are ignored.[^ss-apis]
+
+The guarantee runs in one direction only. With a delay of 2 hours, the engine never drops a record that is less than 2 hours late, but a record more than 2 hours late is not guaranteed to be dropped; it may still be aggregated.[^ss-apis]
+
+The output mode decides what the watermark does:[^ss-apis]
+
+- In **update** mode, the engine writes changed window counts after every trigger until the window falls behind the watermark.
+- In **append** mode, the engine writes each window once, with its final count, after the watermark passes the window's end. Sinks that cannot apply fine-grained updates, such as files, use this mode.
+- In **complete** mode, all aggregate data must be kept, so the watermark cannot drop state.
+
+For the watermark to clean aggregation state, the aggregation must group by the event-time column or a window on it, and `withWatermark` must be called on that same column before the aggregation. Watermarks also bound state for stream-stream joins and for deduplication with `dropDuplicates` or `dropDuplicatesWithinWatermark`. On a batch DataFrame, `withWatermark` has no effect.[^ss-apis]
+
+### Multiple watermarks
+
+When a query unions or joins several streams, each with its own watermark, Spark tracks each one and combines them into a single global watermark. By default it takes the minimum, so the query moves at the pace of the slowest stream and no stream's data is dropped as too late. Since Spark 2.4, setting `spark.sql.streaming.multipleWatermarkPolicy` to `max` makes the global watermark follow the fastest stream instead, at the cost of dropping more data from slower streams.[^ss-apis] The setting cannot be changed between restarts of a query from the same checkpoint location.[^sqlconf]
+
+In Real-time Mode, records are processed as they arrive, but watermark advancement still waits for the batch boundary, which in that mode is the checkpoint interval.[^ss-rtm]
+
+### Example
+
+This PySpark query counts rows from the built-in `rate` test source in 1-minute tumbling windows and accepts records up to 30 seconds late. In append mode, each window is printed once, after the watermark passes its end.
+
+```python
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import window
+
+spark = SparkSession.builder.appName("watermark-demo").getOrCreate()
+
+events = spark.readStream.format("rate").option("rowsPerSecond", 5).load()
+
+counts = (
+    events.withWatermark("timestamp", "30 seconds")   # before the aggregation
+    .groupBy(window("timestamp", "1 minute"))         # same column
+    .count()
+)
+
+(counts.writeStream.outputMode("append")
+    .format("console")
+    .option("checkpointLocation", "/tmp/watermark-demo")
+    .start()
+    .awaitTermination())
+```
+
+## Watermarks in Apache Flink
+
+In Flink, a watermark is an element in the stream that carries a timestamp *t* and declares that event time has reached *t*, meaning no more records with timestamps at or before *t* are expected.[^flink-time] Each parallel source subtask usually generates its own watermarks, and an operator with several inputs uses the minimum of its inputs' event times as its current event time.[^flink-time]
+
+Watermarks are defined with a `WatermarkStrategy`, which combines a `TimestampAssigner` (which reads the event time from each record) and a `WatermarkGenerator`. The built-in bounded out-of-orderness strategy is the closest equivalent of Spark's delay threshold:[^flink-wm]
+
+```java
+WatermarkStrategy
+        .<Tuple2<Long, String>>forBoundedOutOfOrderness(Duration.ofSeconds(20))
+        .withTimestampAssigner((event, timestamp) -> event.f0);
+```
+
+Because the combined watermark is a minimum, one idle input (for example, a Kafka partition that receives no data) holds back the watermark for the whole job. `withIdleness(...)` lets a source mark an input as idle so that the others can advance. Watermark alignment, enabled with `withWatermarkAlignment(...)`, stops fast sources or splits from moving too far ahead of the rest.[^flink-wm]
+
+By default, Flink window operators drop records that arrive after the watermark has passed the end of their window; the allowed lateness is 0. `allowedLateness(...)` keeps windows open longer and may fire them again, and `sideOutputLateData(...)` sends dropped late records to a separate stream.[^flink-windows]
+
+Kafka Streams uses a related idea without the name: a window's **grace period** controls how long the engine waits for out-of-order records, and later records are discarded for that window.[^kstreams]
+
+## Comparison
+
+|  | Spark Structured Streaming | Apache Flink |
+| --- | --- | --- |
+| How it is defined | `withWatermark(column, delay)` on a DataFrame[^ss-apis] | `WatermarkStrategy` on a source or stream[^flink-wm] |
+| What it is | A value the engine computes: max event time seen minus delay[^ss-apis] | An element that flows through the stream[^flink-time] |
+| When it advances | At the start of each trigger (micro-batch)[^ss-apis] | When the `WatermarkGenerator` emits one; periodic generators run at an interval set with `ExecutionConfig.setAutoWatermarkInterval(...)`[^flink-wm] |
+| Several inputs | One global watermark; minimum by default, maximum with `spark.sql.streaming.multipleWatermarkPolicy=max`[^ss-apis] | Each operator takes the minimum of its inputs[^flink-time] |
+| Idle inputs | Under the default policy, a stalled stream holds the global watermark back[^ss-apis] | `withIdleness` marks an input idle so it no longer holds the watermark back[^flink-wm] |
+| Late records | Dropped once their window's state is cleared; records within the delay are always kept[^ss-apis] | Dropped by default (allowed lateness 0); can be kept with `allowedLateness` or captured with `sideOutputLateData`[^flink-windows] |
+
+## See also
+
+- [Stream processing](/wiki/Stream_processing)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Streaming lakehouse](/wiki/Streaming_lakehouse)
+
+## References
+
+[^dataflow]: Tyler Akidau, Robert Bradshaw, Craig Chambers, Slava Chernyak, Rafael J. Fernández-Moctezuma, Reuven Lax, Sam McVeety, Daniel Mills, Frances Perry, Eric Schmidt, Sam Whittle. [The Dataflow Model: A Practical Approach to Balancing Correctness, Latency, and Cost in Massive-Scale, Unbounded, Out-of-Order Data Processing](https://www.vldb.org/pvldb/vol8/p1792-Akidau.pdf). *Proceedings of the VLDB Endowment, Vol. 8, No. 12*, 2015. Retrieved 2026-11-22.
+[^ss-apis]: [Structured Streaming: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sqlconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ss-rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^flink-time]: [Timely Stream Processing](https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/time/). *Apache Software Foundation (Apache Flink 2.3 documentation)*. Retrieved 2026-11-22.
+[^flink-wm]: [Generating Watermarks](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/datastream/event-time/generating_watermarks/). *Apache Software Foundation (Apache Flink 2.3 documentation)*. Retrieved 2026-11-22.
+[^flink-windows]: [Windows](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/datastream/operators/windows/). *Apache Software Foundation (Apache Flink 2.3 documentation)*. Retrieved 2026-11-22.
+[^kstreams]: [Kafka Streams Core Concepts](https://kafka.apache.org/44/streams/core-concepts/). *Apache Software Foundation (Apache Kafka 4.4 documentation)*. Retrieved 2026-11-22.

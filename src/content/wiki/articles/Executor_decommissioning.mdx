@@ -1,0 +1,107 @@
+---
+title: "Executor decommissioning"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Graceful decommission, node decommissioning, block manager decommissioning</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 3.1 (SPARK-20624)</Field>
+  <Field name="key_parts">`spark.decommission.enabled`, shuffle and RDD block migration, fallback storage, decommission signal</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Executor](/wiki/Executor), [Shuffle](/wiki/Shuffle), [Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [Spark Kubernetes shuffle storage](/wiki/Spark_Kubernetes_shuffle_storage), [Spark Kubernetes pod template](/wiki/Spark_Kubernetes_pod_template)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (core/.../internal/config/package.scala and Worker.scala, deploy/k8s/Config.scala, BasicExecutorFeatureStep.scala, decom.sh, YarnAllocator.scala, docs/configuration.md, docs/job-scheduling.md, docs/core-migration-guide.md, docs/spark-standalone.md), SPARK-20624 and its sub-tasks, and the Spark 3.1.1 and 3.4.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **executor decommissioning** is the graceful shutdown of an [executor](/wiki/Executor): Spark stops sending it new tasks and, when storage decommissioning is on, copies its cached RDD blocks and [shuffle](/wiki/Shuffle) files to other executors or to fallback storage before the executor exits.[^config][^jira20628] It lets an application lose executors, for example to dynamic allocation, spot or preemptible nodes or a node drain, without recomputing the data those executors held. Decommissioning is off by default and is controlled by `spark.decommission.enabled`.[^config]
+
+## How does executor decommissioning work?
+
+A decommission starts when the cluster manager or the driver tells an executor to leave. The scheduler then treats the executor as inactive and schedules no new tasks on it.[^jira20628] With `spark.storage.decommission.enabled` set, the executor's block manager migrates its blocks: shuffle files when `spark.storage.decommission.shuffleBlocks.enabled` is true and cached RDD blocks when `spark.storage.decommission.rddBlocks.enabled` is true.[^config]
+
+Once its running tasks and all migrations are done, the executor exits on its own; this behaviour came from SPARK-31197 in Spark 3.1.0.[^n1] The driver updates the location of each migrated shuffle block, so reduce tasks fetch it from the new executor.[^pkg] Since Spark 3.4.0, a fetch failure caused by a decommissioned executor does not count toward `spark.stage.maxConsecutiveAttempts`, because `spark.stage.ignoreDecommissionFetchFailure` defaults to true.[^config]
+
+With `spark.decommission.enabled` and dynamic allocation both on, Spark decommissions idle executors instead of killing them.[^config] Shuffle block migration through decommissioning is one of the documented ways to make dynamic allocation safe without an external shuffle service.[^jobsched]
+
+## Which configuration keys control decommissioning?
+
+The main keys are defined in Spark core. Versions are those listed in the Spark 4.3.0 configuration reference and source.[^config][^pkg]
+
+| Key | Default | Since | Meaning |
+| --- | --- | --- | --- |
+| `spark.decommission.enabled` | false | 3.1.0 | Turns on graceful decommissioning |
+| `spark.storage.decommission.enabled` | false | 3.1.0 | Decommissions the block manager, so blocks are migrated |
+| `spark.storage.decommission.shuffleBlocks.enabled` | true | 3.1.0 | Migrates shuffle files; needs a migratable shuffle resolver such as sort-based shuffle |
+| `spark.storage.decommission.shuffleBlocks.maxThreads` | 8 | 3.1.0 | Threads used to migrate shuffle files |
+| `spark.storage.decommission.rddBlocks.enabled` | true | 3.1.0 | Migrates cached RDD blocks |
+| `spark.storage.decommission.fallbackStorage.path` | none | 3.1.0 | Storage path, for example `s3a://spark-storage/`, used when no executor can take the blocks; must end with a path separator |
+| `spark.storage.decommission.fallbackStorage.cleanUp` | false | 3.2.0 | Lets Spark delete its fallback storage data |
+| `spark.storage.decommission.shuffleBlocks.maxDiskSize` | none | 3.2.0 | Disk space an executor uses for received shuffle blocks before it rejects more |
+| `spark.executor.decommission.killInterval` | none | 3.1.0 | Expected time until an outside service kills a decommissioned executor; used to decide which of its tasks to speculate |
+| `spark.executor.decommission.forceKillTimeout` | none | 3.2.0 | Time after which Spark forces a decommissioning executor to exit |
+| `spark.executor.decommission.signal` | PWR | 3.2.0 | Signal that starts decommissioning in the executor |
+
+The block-migration defaults changed in Spark 3.4. Since then, Spark migrates both cached RDD blocks and shuffle blocks once `spark.decommission.enabled` and `spark.storage.decommission.enabled` are true; setting the `rddBlocks` and `shuffleBlocks` keys to false restores the earlier behaviour.[^migration]
+
+Fallback storage is not cleaned up unless `spark.storage.decommission.fallbackStorage.cleanUp` is true, and the Spark documentation recommends managing the path with a time-to-live policy.[^config][^pkg] A low `forceKillTimeout` can stop migrations before they finish, so the documentation advises a high value.[^config]
+
+## Which cluster managers trigger executor decommissioning?
+
+**Kubernetes.** When `spark.decommission.enabled` is true, Spark adds a `preStop` lifecycle hook to the executor container that runs `spark.kubernetes.decommission.script` (default `/opt/decom.sh`, since Spark 3.2.0).[^k8sfeature][^k8sconfig] The script in the Spark image sends `SIGPWR` to the executor JVM and waits for it to exit, so deleting or evicting the pod starts a graceful decommission.[^n2] Since Spark 3.3.0, `spark.kubernetes.executor.decommissionLabel` and `decommissionLabelValue` label pods that are being decommissioned, for use with pod disruption budgets and pod deletion cost.[^k8s] Shuffle storage options that complement decommissioning on Kubernetes are described in [Spark Kubernetes shuffle storage](/wiki/Spark_Kubernetes_shuffle_storage).
+
+**Standalone.** With decommissioning enabled, a standalone worker registers a handler for `spark.worker.decommission.signal` (default `PWR`, since 3.2.0) and decommissions itself and its executors when it receives the signal.[^worker][^n3] The Master web UI also has a `/workers/kill` endpoint for decommissioning workers; `spark.master.ui.decommission.allow.mode` (default `LOCAL`, since 3.1.0) controls which hosts may call it.[^n4]
+
+**YARN.** Since Spark 3.4.0, the YARN allocator watches for NodeManagers in the `DECOMMISSIONING` state and asks the driver to decommission the executors on those hosts.[^yarn][^rel340] This works only when the external shuffle service is disabled; with `spark.shuffle.service.enabled` true, Spark logs a warning and skips YARN executor decommissioning (SPARK-39018).[^yarn][^n5]
+
+## Example
+
+Decommissioning on Kubernetes with shuffle migration and an object-storage fallback:
+
+```
+spark.decommission.enabled                          true
+spark.storage.decommission.enabled                  true
+spark.storage.decommission.shuffleBlocks.enabled    true
+spark.storage.decommission.rddBlocks.enabled        true
+spark.storage.decommission.fallbackStorage.path     s3a://spark-storage/
+spark.dynamicAllocation.enabled                     true
+```
+
+## What is the history of executor decommissioning?
+
+Holden Karau opened SPARK-20624, "SPIP: Add better handling for node shutdown", in May 2017. It proposed handling preemption that Spark does not choose, such as YARN over-commit and cloud spot or preemptible instances, by moving data off the node or at least not scheduling new tasks there.[^jira20624] The umbrella ticket is still marked In Progress, with some sub-tasks open.[^jira20624]
+
+The core sub-tasks shipped in the Spark 3.1 line: avoiding new tasks on decommissioning nodes (SPARK-20628), shuffle block migration (SPARK-20629), cached block migration (SPARK-20732), decommissioning as part of dynamic scaling (SPARK-31198) and fallback storage (SPARK-33545).[^jira20628][^rel311] The Spark 3.1.1 release notes, published on 2 March 2021, list it as experimental node decommissioning for Kubernetes and standalone.[^rel311][^n6]
+
+Spark 3.4.0 added YARN support (SPARK-30835), stopped rerunning tasks whose shuffle data had already migrated (SPARK-41469) and ignored fetch failures caused by decommissioned executors (SPARK-40481).[^rel340] Spark 4.3.0 added `spark.storage.decommission.shuffleBlocks.bufferRacingMigrations` (default true), which keeps a migration report that reaches the driver before the map output is registered and applies it once registration happens.[^pkg]
+
+## See also
+
+- [Executor](/wiki/Executor)
+- [Shuffle](/wiki/Shuffle)
+- [Spark Kubernetes shuffle storage](/wiki/Spark_Kubernetes_shuffle_storage)
+- [Spark Kubernetes pod template](/wiki/Spark_Kubernetes_pod_template)
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark)
+
+## References
+
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira20628]: [SPARK-20628: Keep track of nodes which are going to be shut down and avoid scheduling new tasks](https://issues.apache.org/jira/browse/SPARK-20628). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n1]: [SPARK-31197: Exit the executor once all tasks and migrations are finished](https://issues.apache.org/jira/browse/SPARK-31197). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^pkg]: [package.scala (core config, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: Spark Core (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/core-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8sfeature]: [BasicExecutorFeatureStep.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/features/BasicExecutorFeatureStep.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8sconfig]: [Config.scala (Kubernetes resource manager, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/Config.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [decom.sh (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/docker/src/main/dockerfiles/spark/decom.sh). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^worker]: [Worker.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/worker/Worker.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [Worker.scala (core config, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/Worker.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [Spark Standalone Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-standalone.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^yarn]: [YarnAllocator.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/yarn/src/main/scala/org/apache/spark/deploy/yarn/YarnAllocator.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rel340]: [Spark Release 3.4.0](https://spark.apache.org/releases/spark-release-3-4-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [SPARK-39018: Add support for YARN decommissioning when ESS is Disabled](https://issues.apache.org/jira/browse/SPARK-39018). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^jira20624]: [SPARK-20624: SPIP: Add better handling for node shutdown](https://issues.apache.org/jira/browse/SPARK-20624). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^rel311]: [Spark Release 3.1.1](https://spark.apache.org/releases/spark-release-3-1-1.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n6]: [News](https://spark.apache.org/news/index.html). *Apache Software Foundation*. Retrieved 2026-11-23.

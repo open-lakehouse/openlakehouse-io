@@ -1,0 +1,110 @@
+---
+title: "Apache Parquet"
+categories: ["Table formats"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) (originally Twitter and Cloudera)</Field>
+  <Field name="latest_release">parquet-format 2.14.0</Field>
+  <Field name="latest_release_date">2026-09-11</Field>
+  <Field name="written_in">Thrift (format definition); Java (parquet-java)</Field>
+  <Field name="type">Columnar data file format</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[parquet.apache.org](https://parquet.apache.org)</Field>
+  <Field name="repo">[github.com/apache/parquet-format](https://github.com/apache/parquet-format)</Field>
+  <Field name="related">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi), [Open table format](/wiki/Open_table_format)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the parquet-format 2.14.0 release announcement, the Parquet file format documentation and the ASF incubator record</Verified>
+
+**Apache Parquet** is an open source, column-oriented data file format for efficient storage and retrieval of analytic data. Parquet stores the values of each column together and supports per-column compression and encoding, and it is implemented in many programming languages and analytics tools.[^overview] In an [open lakehouse](/wiki/Open_lakehouse), Parquet files commonly hold the table data, and [open table formats](/wiki/Open_table_format) such as [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) and [Apache Hudi](/wiki/Apache_Hudi) add table metadata and transactions on top of Parquet files.
+
+## Specification and implementations
+
+The Apache Parquet project separates the format from its libraries. The parquet-format repository holds the official specification and the Thrift definitions of the file metadata (`parquet.thrift`); it contains no code for reading or writing files. The parquet-java repository, formerly named parquet-mr, holds the Java libraries and tools.[^overview] Other implementations include Apache Arrow (C++, Go and Rust), [DuckDB](/wiki/DuckDB), ClickHouse, cuDF and Polars, and the project publishes a table of which format features each one supports.[^impl]
+
+## How it works
+
+### File layout
+
+An Apache Parquet file begins and ends with the 4-byte magic number `PAR1`. Between them come the column chunks, then the file metadata, then a 4-byte little-endian length of the metadata. The metadata records where every column chunk starts. Because it is written after the data, a writer can produce a file in a single pass; a reader first reads the footer, then reads only the column chunks it needs.[^fileformat]
+
+### Row groups, column chunks and pages
+
+A Parquet file contains one or more row groups, each a horizontal slice of the rows. A row group holds exactly one column chunk per column, and each column chunk is stored contiguously in the file. Column chunks are divided into pages, the smallest unit of encoding and compression.[^concepts]
+
+| Level | Contains | Unit of |
+| --- | --- | --- |
+| File | One or more row groups and the footer metadata | Whole-file reads |
+| Row group | One column chunk per column | Parallel processing of a file |
+| Column chunk | One or more pages for one column | Column input and output |
+| Page | Encoded, optionally compressed values | Encoding and compression |
+
+### Nested data
+
+Apache Parquet was designed for nested data from the start. It uses the record shredding and assembly algorithm from Google's Dremel paper, encoding nested structure with definition and repetition levels instead of flattening nested names.[^motivation][^readme] Null values are not stored in the data; nullness is recorded in the run-length encoded definition levels.[^n1]
+
+## Features
+
+### Types
+
+Apache Parquet keeps a small set of physical types (such as INT32, INT64, DOUBLE and BYTE_ARRAY) and uses logical type annotations to say how to interpret them. For example, a string is a BYTE_ARRAY with a STRING annotation.[^logical] The specification also defines a Variant type for semi-structured data such as JSON, encoded as a value and a metadata binary so that nested fields can be read by path.[^n2]
+
+### Encodings and compression
+
+Parquet defines encodings including plain, dictionary, run-length/bit-packing hybrid, several delta encodings, byte stream split and ALP (adaptive lossless floating-point).[^encodings] Data and dictionary pages can be compressed with one of several codecs, and the codec can be chosen per column.[^n3][^motivation]
+
+### Statistics, page index and Bloom filters
+
+Readers can skip data using metadata stored in the file. Column statistics hold minimum and maximum values, and dictionaries let readers rule out values inside that range. An optional Bloom filter answers "definitely not present" or "probably present" for a value, which helps on high-cardinality columns.[^n4] The optional page index stores per-page statistics so that a reader can skip individual pages without reading every page header.[^n5]
+
+## History
+
+Parquet originated as a joint effort of Twitter and Cloudera; the parquet-format README carries the notice "Copyright 2013 Twitter, Cloudera and other contributors".[^readme] The project's stated aim was to make compressed, efficient columnar storage available to any project in the Apache Hadoop ecosystem without favouring one processing framework.[^motivation]
+
+Parquet entered the Apache Incubator on 20 May 2014 and graduated on 22 April 2015.[^incubator] The Apache Software Foundation announced Parquet as a top-level project on 27 April 2015.[^n6]
+
+parquet-format 2.14.0 was released on 11 September 2026. It added chronological ordering of INT96 timestamps, a FILE logical type and the ALP encoding.[^release]
+
+## Use in an open lakehouse
+
+Apache Parquet defines single files, organised internally into row groups, column chunks and pages.[^concepts] Grouping many files into one table, with commits and snapshots, is the job of an [open table format](/wiki/Open_table_format). The [Apache Iceberg](/wiki/Apache_Iceberg) specification lists Parquet as one of its data file formats, alongside Avro and ORC.[^n7] [Delta Lake](/wiki/Delta_Lake), Iceberg and [Apache Hudi](/wiki/Apache_Hudi) all store Parquet data files, which is what allows Delta Lake's UniForm feature to expose one copy of the data through several table formats.[^n8]
+
+## Engine support
+
+[Apache Spark](/wiki/Apache_Spark) reads and writes Parquet through a built-in data source.[^n9] [DuckDB](/wiki/DuckDB) reads and writes Parquet files directly.[^n10] The Parquet implementation status page lists feature support for Arrow C++, parquet-java, Arrow Go, Arrow Rust, ClickHouse, cuDF, hyparquet, DuckDB, Polars and DataHaskell.[^impl]
+
+## Limitations
+
+Apache Parquet implementations do not all support the same features of the format, so a file that uses a newer encoding or logical type may not be readable by every tool.[^overview][^impl] The specification keeps older representations for compatibility: the ConvertedType annotation is deprecated, but writers must still write it next to LogicalType so that old readers work.[^logical] The INT96 timestamp type is deprecated, yet the project notes it was still common in files produced as of 2024.[^impl]
+
+## See also
+
+- [Open table format](/wiki/Open_table_format)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Hudi](/wiki/Apache_Hudi)
+- [DuckDB](/wiki/DuckDB)
+
+## References
+
+[^overview]: [Overview](https://parquet.apache.org/docs/overview/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^impl]: [Implementation status](https://parquet.apache.org/docs/file-format/implementationstatus/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^fileformat]: [File Format](https://parquet.apache.org/docs/file-format/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^concepts]: [Concepts](https://parquet.apache.org/docs/concepts/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^motivation]: [Motivation](https://parquet.apache.org/docs/overview/motivation/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^readme]: [parquet-format README](https://github.com/apache/parquet-format/blob/master/README.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [Nulls](https://parquet.apache.org/docs/file-format/nulls/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^logical]: [Logical Types](https://parquet.apache.org/docs/file-format/types/logicaltypes/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Variant Type](https://parquet.apache.org/docs/file-format/types/variantencoding/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^encodings]: [Encodings](https://parquet.apache.org/docs/file-format/data-pages/encodings/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [Compression](https://parquet.apache.org/docs/file-format/data-pages/compression/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [Bloom Filter](https://parquet.apache.org/docs/file-format/bloomfilter/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n5]: [Page Index](https://parquet.apache.org/docs/file-format/pageindex/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^incubator]: [Parquet Project Incubation Status](https://incubator.apache.org/projects/parquet.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n6]: [The Apache Software Foundation Announces Apache Parquet as a Top-Level Project](https://news.apache.org/?p=4278). *Apache Software Foundation*, 2015-04-27. Retrieved 2026-11-22.
+[^release]: [2.14.0](https://parquet.apache.org/blog/2026/09/11/2.14.0/). *Apache Software Foundation*, 2026-09-11. Retrieved 2026-11-22.
+[^n7]: [Iceberg Table Spec](https://iceberg.apache.org/spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n8]: [Universal Format (UniForm)](https://docs.delta.io/latest/delta-uniform.html). *Delta Lake project*. Retrieved 2026-11-22.
+[^n9]: [Parquet Files](https://spark.apache.org/docs/latest/sql-data-sources-parquet.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n10]: [Reading and Writing Parquet Files](https://duckdb.org/docs/stable/data/parquet/overview). *DuckDB*. Retrieved 2026-11-22.

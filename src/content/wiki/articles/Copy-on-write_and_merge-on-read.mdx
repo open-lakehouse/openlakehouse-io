@@ -1,0 +1,93 @@
+---
+title: "Copy-on-write and merge-on-read"
+categories: ["Concepts", "Glossary terms", "Table formats"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">CoW and MoR; write modes for row-level operations</Field>
+  <Field name="field">Table formats</Field>
+  <Field name="key_parts">Rewritten data files (copy-on-write); delete files, deletion vectors or log files merged at read time (merge-on-read)</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi)</Field>
+  <Field name="related">[Deletion vector](/wiki/Deletion_vector), [Small files problem](/wiki/Small_files_problem), [Open table format](/wiki/Open_table_format)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Iceberg table spec and configuration documentation (1.12.0), the Delta Lake deletion vectors documentation and PROTOCOL.md at v4.4.1, and the Apache Hudi table types documentation (version 1.2.1)</Verified>
+
+**Copy-on-write** and **merge-on-read** are the two strategies an [open table format](/wiki/Open_table_format) can use to apply row-level updates and deletes to data stored in immutable files. With copy-on-write, the writer rewrites every data file that contains a changed row, so readers only read data files. With merge-on-read, the writer records the change separately (as delete files, [deletion vectors](/wiki/Deletion_vector) or log files) and readers combine those records with the original data files at query time.[^hudi-types] The choice moves cost between writes and reads. [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake) and [Apache Hudi](/wiki/Apache_Hudi) all support both approaches, with different names and defaults.
+
+## Why the choice exists
+
+Lakehouse data files, usually [Apache Parquet](/wiki/Apache_Parquet), are written once and never changed in place. The Iceberg specification requires that files are not moved or altered once they are written, and states that data and metadata files are immutable until they are deleted.[^icespec] A `DELETE`, `UPDATE` or `MERGE` that touches one row must therefore either produce a new copy of the file without that row, or leave the file alone and write a note saying the row is gone.
+
+The Delta Lake documentation states the copy-on-write cost directly: by default, deleting a single row means rewriting the entire Parquet file that contains it.[^delta-dv]
+
+## Copy-on-write
+
+In copy-on-write, a row-level operation reads each affected data file, writes a new file with the changes applied, and commits a snapshot that replaces the old file with the new one. Readers see only complete data files and do no merging. The cost is write amplification: the whole file is rewritten even when a small fraction of its rows changed.[^hudi-types]
+
+Iceberg's Spark integration reports this cost as a metric: `spark.delete.num-copied-rows` counts unmodified rows that were rewritten in copy-on-write mode and is zero in merge-on-read.[^ice-writes]
+
+## Merge-on-read
+
+In merge-on-read, the writer adds a small record of the change and leaves existing data files untouched. Each project encodes the record differently:
+
+- **Apache Iceberg** (format version 2 and later) writes delete files. Position deletes mark a row by data file and row position; equality deletes mark rows by column values, such as `id = 5`. In format version 3, position deletes are stored as deletion vectors in Puffin files, and position delete files are deprecated.[^icespec]
+- **Delta Lake** attaches a deletion vector to the data file's entry in the transaction log, marking rows as logically deleted while they stay physically in the file. Readers must skip those rows.[^delta-proto]
+- **Apache Hudi** merge-on-read tables write updates and deletes to log files next to a columnar base file, and a periodic compaction merges the log files into a new base file. Queries on such tables can be snapshot queries, which merge the logs for the freshest data, or read-optimized queries, which read only the compacted base files.[^hudi-types]
+
+Merge-on-read makes writes cheaper but adds work to every read until the changes are compacted into rewritten data files. Hudi's documentation notes that merge-on-read query performance depends on whether the log files have been compacted.[^hudi-types]
+
+## Comparison
+
+|  | [Apache Iceberg](/wiki/Apache_Iceberg) | [Delta Lake](/wiki/Delta_Lake) | [Apache Hudi](/wiki/Apache_Hudi) |
+| --- | --- | --- | --- |
+| How the strategy is chosen | Per operation, with table properties `write.delete.mode`, `write.update.mode` and `write.merge.mode`[^ice-conf] | Table property `delta.enableDeletionVectors`[^delta-dv] | Table type, fixed when the table is created: `hoodie.datasource.write.table.type` or `hoodie.table.type`, values `COPY_ON_WRITE` or `MERGE_ON_READ`[^hudi-conf] |
+| Default | `copy-on-write` for all three properties[^ice-conf] | Files are rewritten unless deletion vectors are enabled on the table[^delta-dv] | `COPY_ON_WRITE`[^hudi-conf] |
+| Merge-on-read record | Position delete files (v2), equality delete files, deletion vectors (v3)[^icespec] | Deletion vectors stored in files or inline in the log[^delta-proto] | Log files attached to a base file[^hudi-types] |
+| Requirements | Merge-on-read requires format version 2 or later[^ice-conf] | Reader version 3 and writer version 7 with the `deletionVectors` table feature[^delta-proto] | The table type cannot change between writes[^hudi-conf] |
+| Folding changes back into data files | Data file compaction with `rewrite_data_files`, which can select files by delete count or delete ratio[^ice-proc] | `OPTIMIZE`, DML with deletion vectors disabled, or `REORG TABLE ... APPLY (PURGE)`[^delta-dv] | Compaction of merge-on-read file groups[^hudi-types] |
+
+## Example
+
+In Iceberg the mode is a table property, so one table can use merge-on-read for deletes and copy-on-write for merges.[^ice-conf]
+
+```sql
+-- Apache Iceberg (Spark SQL): merge-on-read for DELETE and UPDATE, copy-on-write for MERGE
+ALTER TABLE db.events SET TBLPROPERTIES (
+  'write.delete.mode' = 'merge-on-read',
+  'write.update.mode' = 'merge-on-read',
+  'write.merge.mode'  = 'copy-on-write'
+);
+```
+
+The Delta Lake equivalent enables deletion vectors on the table: `ALTER TABLE t SET TBLPROPERTIES ('delta.enableDeletionVectors' = true)`. Doing so upgrades the table protocol, and clients that do not support deletion vectors can no longer read the table.[^delta-dv]
+
+## Choosing a strategy
+
+The projects document the tradeoff in general terms rather than with a fixed rule.
+
+Apache Hudi gives the most explicit guidance. Its documentation describes copy-on-write as suited to read-heavy workloads, batch ETL, data warehousing on data lakes and slowly changing reference data, and merge-on-read as suited to change data capture pipelines, streaming ingestion, hybrid batch and streaming workloads, and tables with frequent updates and deletes. Its comparison lists copy-on-write as having higher write latency and update cost and lower query latency, and merge-on-read the reverse.[^hudi-types]
+
+Delta Lake describes deletion vectors as a storage optimization that avoids rewriting Parquet files for some operations, with reads applying the recorded deletions. Its documentation adds that `UPDATE`, `MERGE` and `OPTIMIZE` do not guarantee that all recorded deletions get applied, so `REORG TABLE ... APPLY (PURGE)` is the command that rewrites every affected file.[^delta-dv]
+
+Apache Iceberg documents the properties and their defaults, and documents compaction as the way to rewrite files with many deletes, but its configuration page does not recommend one mode over the other.[^ice-conf][^ice-proc]
+
+## See also
+
+- [Deletion vector](/wiki/Deletion_vector)
+- [Small files problem](/wiki/Small_files_problem)
+- [Open table format](/wiki/Open_table_format)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Hudi](/wiki/Apache_Hudi)
+
+## References
+
+[^hudi-types]: [Table & Query Types (version 1.2.1)](https://hudi.apache.org/docs/table_types). *Apache Hudi*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec (format/spec.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^delta-dv]: [What are deletion vectors?](https://docs.delta.io/delta-deletion-vectors/). *Delta Lake*. Retrieved 2026-11-22.
+[^ice-writes]: [Spark Writes](https://iceberg.apache.org/docs/latest/spark-writes/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^delta-proto]: [Delta Transaction Log Protocol (PROTOCOL.md at v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-22.
+[^ice-conf]: [Configuration](https://iceberg.apache.org/docs/latest/configuration/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^hudi-conf]: [All Configurations](https://hudi.apache.org/docs/configurations). *Apache Hudi*. Retrieved 2026-11-22.
+[^ice-proc]: [Spark Procedures](https://iceberg.apache.org/docs/latest/spark-procedures/). *Apache Iceberg*. Retrieved 2026-11-22.

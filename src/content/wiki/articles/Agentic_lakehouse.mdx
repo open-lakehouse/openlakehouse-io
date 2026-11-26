@@ -1,0 +1,93 @@
+---
+title: "Agentic lakehouse"
+categories: ["Concepts", "AI agents"]
+---
+
+<Infobox type="concept">
+  <Field name="field">Data engineering, AI agents</Field>
+  <Field name="key_parts">[Open table formats](/wiki/Open_table_format), [Data catalog](/wiki/Data_catalog), agent tools, declarative pipelines, policies, tracing and lineage</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Unity Catalog](/wiki/Unity_Catalog), [Apache Polaris](/wiki/Apache_Polaris), [Apache Spark](/wiki/Apache_Spark), [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines), [Model Context Protocol](/wiki/Model_Context_Protocol)</Field>
+  <Field name="related">[Open lakehouse](/wiki/Open_lakehouse), agentic data engineering</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the openlakehouse.io agentic lakehouse and agentic data engineering guides, the Model Context Protocol specification (revision 2025-11-25), the Spark Declarative Pipelines programming guide, the Iceberg REST catalog specification and the Unity Catalog OSS documentation</Verified>
+
+An **agentic lakehouse** is an [open lakehouse](/wiki/Open_lakehouse) built so that AI agents can find, query and change data under controls that the platform enforces. It combines open tables on object storage, a [catalog](/wiki/Data_catalog) that tells agents what data exists and what they may touch, agent tools exposed through the [Model Context Protocol](/wiki/Model_Context_Protocol) (MCP), declarative pipelines that the platform validates before they run, policies that allow, deny or escalate each tool call, and tracing and lineage that record what each agent did.[^olio-agentic] An agentic lakehouse is an architecture assembled from open source projects, not a single product.[^olio-agentic]
+
+## Background
+
+The term describes an extension of the open lakehouse rather than a new storage design. The tables, catalog and engines are the same ones used by human data engineers. What changes is that some of the work (writing pipelines, running them, checking results) is done by an AI agent, so the platform must decide what the agent may do instead of relying on the agent's instructions.[^olio-ade]
+
+The openlakehouse.io guide distinguishes an agentic lakehouse from a lakehouse with a chatbot. A chatbot answers questions by generating SQL. An agentic lakehouse lets agents act, which requires a place for the agent to write, an output format the platform can check, policies that stop unsafe calls and a record of what was done.[^olio-agentic]
+
+## Why a lakehouse suits agents
+
+An open lakehouse already exposes machine-readable interfaces that engines use, and agents can use the same interfaces.
+
+- **Discoverable metadata.** A catalog exposes namespaces, tables, schemas and permissions over an API, such as the [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) or the Unity Catalog REST API, so an agent can ask what exists instead of inferring it from file paths.[^olio-agentic] The Iceberg REST catalog specification defines a common API, described in OpenAPI, for interacting with any Iceberg catalog.[^icerest]
+- **Engine independence.** Because the table format is open, an agent's tools can read the same table with different engines, such as [Apache Spark](/wiki/Apache_Spark) or [DuckDB](/wiki/DuckDB).[^olio-agentic]
+- **Reversible changes.** Open table formats record each commit as a snapshot. In [Apache Iceberg](/wiki/Apache_Iceberg), every change creates a new metadata file that replaces the old one through an atomic swap, and each snapshot gives access to the full set of data files at that time.[^icespec] A bad write by an agent can therefore be inspected and rolled back.
+- **Checkable output.** When an agent writes a [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines) definition instead of an imperative script, the platform can validate it first. The `spark-pipelines dry-run` command runs a pipeline without reading or writing data and catches syntax errors, analysis errors such as a missing table or column, and graph errors such as cyclic dependencies.[^sdp]
+
+## Layers
+
+The openlakehouse.io guide describes an agentic lakehouse as a set of replaceable layers, each joined to the next by an open interface.[^olio-agentic]
+
+| Layer | Role for agents | Open source examples |
+| --- | --- | --- |
+| Tables and storage | Durable, versioned data that any engine can read | [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Parquet](/wiki/Apache_Parquet) |
+| Catalog and permissions | Lists what exists, decides what the agent may read or write, vends scoped storage credentials | [Unity Catalog](/wiki/Unity_Catalog), [Apache Polaris](/wiki/Apache_Polaris), Lakekeeper |
+| Engines | Run the queries and pipelines the agent requests | [Apache Spark](/wiki/Apache_Spark) over [Spark Connect](/wiki/Spark_Connect), [DuckDB](/wiki/DuckDB), [Trino](/wiki/Trino) |
+| Pipelines | A declarative output the platform can validate | [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines) |
+| Agent tools | Named actions with named arguments | [Model Context Protocol](/wiki/Model_Context_Protocol) servers |
+| Agent harness and policy | Runs the agent and decides per tool call whether to allow, deny or ask a person | Agent harnesses such as Omnigent |
+| Observability | Traces of each agent step and lineage of each write | MLflow, OpenLineage |
+| Orchestration | Schedules approved pipelines | [Apache Airflow](/wiki/Apache_Airflow) |
+
+## Agent tools and MCP
+
+The Model Context Protocol is an open protocol for connecting applications built on large language models to external data sources and tools. It uses JSON-RPC 2.0 messages between hosts, clients and servers, and servers can offer resources, prompts and tools.[^mcp] Anthropic announced and open sourced MCP on 25 November 2024.[^anthropic-mcp]
+
+In an agentic lakehouse, MCP tools are narrow actions such as reading a table, writing one pipeline file, dry-running a pipeline or running one SQL statement. The openlakehouse.io guides recommend giving agents such named tools instead of a general shell, because a policy can inspect a named tool call and its arguments exactly but can only guess what an arbitrary shell command will do.[^olio-ade]
+
+## Guardrails
+
+The design rests on the difference between an instruction, which a model weighs against the rest of its context, and a guardrail, which the platform enforces. The openlakehouse.io guide lists the following guardrails.[^olio-agentic]
+
+- A sandbox namespace in the catalog: the agent reads production tables but writes only to its own namespace.
+- A dry run before every run: a pipeline that fails validation does not execute.
+- Policies on every tool call and tool result, returning allow, deny or ask. A policy that raises an error counts as deny, so the system fails closed.
+- Specific tools instead of a shell.
+- Identity-pinned access: each agent or tenant reaches the engine through its own authenticated endpoint, and the catalog vends storage credentials scoped to that identity.
+- Human approval for irreversible steps such as dropping tables or deleting objects.
+
+Scoped storage credentials depend on the catalog. Unity Catalog OSS, for example, can issue short-lived credentials limited to one table or volume, and checks privileges such as SELECT or MODIFY on each request when authorization is enabled.[^ucwhat] The Iceberg REST catalog specification lets a client request delegated access through the `X-Iceberg-Access-Delegation` header, with `vended-credentials` and `remote-signing` as defined mechanisms.[^icerest-yaml]
+
+## Agentic data engineering
+
+Agentic data engineering is the practice of having AI agents write, test, run and maintain data pipelines while the platform enforces what each agent may do. People set goals, own the policies and review important changes.[^olio-ade] The agentic lakehouse is the platform this practice runs on. The openlakehouse.io guide groups the checks on an agent's pipeline into four questions: whether it uses the framework's API correctly, whether the work stays on the cluster, whether it touched only its own tables, and whether its results match trusted tables.[^olio-ade]
+
+## Limitations
+
+Catalog-based guardrails cover only access that passes through the catalog. The Unity Catalog OSS documentation notes that anyone holding direct storage credentials can bypass catalog checks.[^ucwhat] A dry run checks the structure of a pipeline, not the correctness of its results; the Spark documentation describes the errors it catches as syntax, analysis and graph validation errors.[^sdp] Correctness still needs separate checks, such as comparison with trusted tables.[^olio-ade]
+
+## See also
+
+- [Open lakehouse](/wiki/Open_lakehouse)
+- [Model Context Protocol](/wiki/Model_Context_Protocol)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+- [Data catalog](/wiki/Data_catalog)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [The Agentic Lakehouse guide](https://openlakehouse.io/agentic-lakehouse) and [Agentic Data Engineering guide](https://openlakehouse.io/agentic-data-engineering) on openlakehouse.io
+
+## References
+
+[^olio-agentic]: [The Agentic Lakehouse](https://openlakehouse.io/agentic-lakehouse). *openlakehouse.io*. Retrieved 2026-11-22.
+[^olio-ade]: [Agentic Data Engineering](https://openlakehouse.io/agentic-data-engineering). *openlakehouse.io*. Retrieved 2026-11-22.
+[^icerest]: [REST Catalog Spec](https://iceberg.apache.org/rest-catalog-spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec](https://iceberg.apache.org/spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sdp]: [Spark Declarative Pipelines Programming Guide](https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^mcp]: [Model Context Protocol Specification, revision 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25). *Model Context Protocol*. Retrieved 2026-11-22.
+[^anthropic-mcp]: [Introducing the Model Context Protocol](https://www.anthropic.com/news/model-context-protocol). *Anthropic*, 25 November 2024. Retrieved 2026-11-22.
+[^ucwhat]: [What is Unity Catalog OSS?](https://unitycatalog.io/docs/explanation/what-is-unity-catalog/). *Unity Catalog (LF AI & Data)*. Retrieved 2026-11-22.
+[^icerest-yaml]: [Iceberg REST Catalog OpenAPI specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml). *Apache Software Foundation*. Retrieved 2026-11-22.

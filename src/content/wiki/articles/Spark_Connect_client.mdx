@@ -1,0 +1,106 @@
+---
+title: "Spark Connect client"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Thin client, Spark Connect client library</Field>
+  <Field name="field">Distributed data processing, client-server protocols</Field>
+  <Field name="introduced">Apache Spark 3.4.0 (Python client)</Field>
+  <Field name="key_parts">Protocol Buffers plan builder, gRPC channel, Apache Arrow result decoder, `sc://` connection string</Field>
+  <Field name="implementations">PySpark (`pyspark-client`), Scala (`spark-connect-client-jvm`), JDBC driver, Go, Swift, Rust</Field>
+  <Field name="related">[Spark Connect](/wiki/Spark_Connect), [Spark Connect server](/wiki/Spark_Connect_server), [Spark Connect plugin](/wiki/Spark_Connect_plugin), [Apache Spark](/wiki/Apache_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Spark Connect overview and sql/connect/docs/client-connection-string.md at tag v4.3.0; the GitHub repositories, READMEs, tags and releases of apache/spark-connect-go, apache/spark-connect-swift, apache/spark-connect-rust, GoEddie/spark-connect-dotnet and yaooqinn/spark.js; PyPI, crates.io, Maven Central and the Apache Spark download directory</Verified>
+
+A **Spark Connect client** is a library that lets an application use [Apache Spark](/wiki/Apache_Spark) remotely through the [Spark Connect](/wiki/Spark_Connect) protocol: it builds unresolved logical plans as Protocol Buffers messages, sends them to a Spark Connect server over gRPC, and decodes the results, which come back as Apache Arrow record batches.[^overview] A Spark Connect client runs in its own process, separate from the Spark driver, and does not reach into the driver JVM; the PySpark client does not use Py4J.[^overview] The `pyspark-client` package leaves Py4J out and depends only on Python libraries such as `pyarrow` and `grpcio`, so it needs no local Spark JVM.[^clientsetup] Because the protocol is language-agnostic, a client can be written in any language with gRPC and Arrow support, and the Scala client (`spark-connect-client-jvm`) and the JDBC driver are themselves JVM libraries.[^overview][^mvnjdbc] The Apache Spark project ships Python and Scala clients and a JDBC driver, and maintains separate Go, Swift and Rust clients; other clients are community projects.
+
+## What does a Spark Connect client do?
+
+A Spark Connect client has three jobs. It turns DataFrame or SQL calls into a protobuf plan, manages a gRPC channel and session with the server, and turns Arrow batches into native values. The Spark documentation describes the protocol as language-agnostic, and the server runs every plan through the normal Spark optimizer and execution engine, so a query from a Go client and the same query from PySpark run the same way on the server.[^overview]
+
+All official clients address the server with the same connection string format, `sc://host:port/;param=value`. The Spark Connect developer guidelines ask new clients to follow this format so that the user experience is the same in every language. The parameters include `token`, `use_ssl`, `user_id`, `user_agent`, `session_id` and gRPC keepalive settings, and the default port is 15002.[^connstr][^readme]
+
+## Which Spark Connect clients exist?
+
+The following table lists the clients maintained under the Apache Spark project, followed by two community clients. "Latest release" is the newest version found on 23 November 2026, and "stated status" quotes or paraphrases each project's own description.
+
+| Client | Repository and package | Language | Latest release | Stated status | Notable gaps |
+| --- | --- | --- | --- | --- | --- |
+| PySpark client | [apache/spark](https://github.com/apache/spark); PyPI `pyspark-client` | Python | 4.3.0 (30 October 2026)[^pypi] | Part of each Spark release; supports most PySpark APIs since Spark 3.4[^overview] | No `SparkContext` or RDD API[^overview] |
+| Scala client | apache/spark; Maven `spark-connect-client-jvm_2.13` | Scala | 4.3.0[^mvnjvm] | Part of each Spark release; supports most Scala APIs since Spark 3.5[^overview] | No `SparkContext` or RDD API; UDF classes and JARs must be uploaded as artifacts[^overview] |
+| JDBC driver | apache/spark; Maven `spark-connect-client-jdbc_2.13` | Java (JDBC) | 4.3.0[^mvnjdbc] | Added in Spark 4.1.0 (SPARK-53484); Spark 4.3.0 describes it as "more complete"[^r410][^r430] | SQL only; ARRAY, MAP and STRUCT support arrived in 4.3.0 (SPARK-57380)[^r430] |
+| Go client | [apache/spark-connect-go](https://github.com/apache/spark-connect-go) | Go | v0.1.0 (GitHub release, 17 June 2025)[^gorel] | "Highly experimental and should not be used in any production setting"; the Spark PMC reserves the right to withdraw it[^goreadme] | The `spark/sql` package has session, DataFrame, reader, writer, grouping, NA and statistics APIs, but no streaming or UDF API; last commit on `master` in August 2025[^gocommits][^gotree] |
+| Swift client | [apache/spark-connect-swift](https://github.com/apache/spark-connect-swift) | Swift | 0.8.0 (13 November 2026)[^swiftrel] | "Still experimental" (0.8.0 release notes); source releases published in the Apache Spark download directory[^swiftrel][^dist] | UDFs only by registering existing Java UDF classes on the server, not in Swift; README lists Spark 4.3.0 as the requirement[^swiftudf][^swiftreadme] |
+| Rust client | [apache/spark-connect-rust](https://github.com/apache/spark-connect-rust); crate `apache-spark-connect`, PyPI `pyspark-client-rust` | Rust, with a Python wrapper | 4.3.0 (git tag and packages, 16 November 2026)[^crate][^rustpypi] | README claims full public-API parity with PySpark 4.3.0 for the Python wrapper; targets Spark 4.3.0 and later[^rustreadme][^rustcompat] | Native Rust API excludes APIs that need Python itself, such as pandas; UDFs are Rust functions compiled to WebAssembly[^rustdocs] |
+| .NET client (community) | [GoEddie/spark-connect-dotnet](https://github.com/GoEddie/spark-connect-dotnet) | C# and other .NET languages | v4.0.0-build.41 (3 October 2026)[^dotnet] | Not an Apache project (MIT license)[^dotnet] | README says keeping up with new Spark versions is hard and advises users to be prepared to make their own gRPC calls for functions the library lacks[^dotnet] |
+| JavaScript client (community) | [yaooqinn/spark.js](https://github.com/yaooqinn/spark.js); npm `@yaooqinn/spark.js` | TypeScript | v0.1.0 (git tag, January 2026)[^sparkjs] | "Experimental"; APIs may change without notice[^sparkjs] | Requires Spark 4.0 or later[^sparkjs] |
+
+The Apache Spark download directory lists source releases of the Swift client but none of the Go or Rust clients.[^dist] The Rust client replaced an earlier community project, sjrusso8/spark-connect-rs, whose repository is now read-only and points to apache/spark-connect-rust.[^n1] The Rust repository also contains an unpublished, experimental Rust server frontend intended for local, trusted experiments.[^rustreadme]
+
+## How is a client connected to a server?
+
+In PySpark, the `pyspark-client` package contains only the Spark Connect client, and `SparkSession.builder.remote()` takes the connection string.[^overview] The following example connects over TLS with a bearer token; according to the connection string reference, setting `token` also enables TLS.[^connstr]
+
+```python
+# pip install pyspark-client==4.3.0
+from pyspark.sql import SparkSession
+
+spark = (
+    SparkSession.builder
+    .remote("sc://spark.example.com:443/;use_ssl=true;token=MY_TOKEN;user_agent=etl_app")
+    .getOrCreate()
+)
+print(spark.version)
+spark.sql("SELECT 1 AS ok").show()
+```
+
+The same string can be set in the `SPARK_REMOTE` environment variable. The Swift README states that its client also reads `SPARK_REMOTE`, and the Rust and JavaScript clients take an `sc://` address in their builders.[^overview][^swiftreadme][^rustreadme][^sparkjs]
+
+## Spark Connect client vs classic Spark application
+
+A Spark Connect client differs from a classic PySpark or Scala application because it runs outside the driver:[^overview]
+
+|  | Spark Connect client | Classic Spark application |
+| --- | --- | --- |
+| Process | Separate from the driver; talks to it over gRPC | Runs inside the driver process (Py4J bridge for PySpark) |
+| `SparkContext` and RDDs | Not available | Available |
+| Cluster-wide and static configuration | Not accessible; session settings only | Accessible |
+| Dependencies | Client library only; server upgraded independently | Shares the driver's process and dependencies |
+
+## See also
+
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark Connect server](/wiki/Spark_Connect_server)
+- [Spark Connect plugin](/wiki/Spark_Connect_plugin)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+
+## References
+
+[^overview]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^clientsetup]: [python/packaging/client/setup.py (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/packaging/client/setup.py). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^mvnjdbc]: [spark-connect-client-jdbc_2.13 maven-metadata.xml](https://repo1.maven.org/maven2/org/apache/spark/spark-connect-client-jdbc_2.13/maven-metadata.xml). *Maven Central*. Retrieved 2026-11-23.
+[^connstr]: [Connecting to Spark Connect using Clients (sql/connect/docs/client-connection-string.md, tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/docs/client-connection-string.md). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^readme]: [sql/connect/README.md (tag v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/connect/README.md). *Apache Spark on GitHub*. Retrieved 2026-11-23.
+[^pypi]: [pyspark-client](https://pypi.org/project/pyspark-client/). *Python Package Index*. Retrieved 2026-11-23.
+[^mvnjvm]: [spark-connect-client-jvm_2.13 maven-metadata.xml](https://repo1.maven.org/maven2/org/apache/spark/spark-connect-client-jvm_2.13/maven-metadata.xml). *Maven Central*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^gorel]: [Releases: apache/spark-connect-go](https://github.com/apache/spark-connect-go/releases). *GitHub*. Retrieved 2026-11-23.
+[^goreadme]: [apache/spark-connect-go README](https://github.com/apache/spark-connect-go/blob/master/README.md). *GitHub*. Retrieved 2026-11-23.
+[^gocommits]: [Commits: apache/spark-connect-go (master)](https://github.com/apache/spark-connect-go/commits/master). *GitHub*. Retrieved 2026-11-23.
+[^gotree]: [apache/spark-connect-go: spark/sql](https://github.com/apache/spark-connect-go/tree/master/spark/sql). *GitHub*. Retrieved 2026-11-23.
+[^swiftrel]: [Release 0.8.0: apache/spark-connect-swift](https://github.com/apache/spark-connect-swift/releases/tag/0.8.0). *GitHub*. Retrieved 2026-11-23.
+[^dist]: [Index of /spark](https://downloads.apache.org/spark/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^swiftudf]: [UDFRegistration.swift (tag 0.8.0)](https://github.com/apache/spark-connect-swift/blob/0.8.0/Sources/SparkConnect/UDFRegistration.swift). *GitHub*. Retrieved 2026-11-23.
+[^swiftreadme]: [apache/spark-connect-swift README](https://github.com/apache/spark-connect-swift/blob/main/README.md). *GitHub*. Retrieved 2026-11-23.
+[^crate]: [apache-spark-connect](https://crates.io/crates/apache-spark-connect). *crates.io*. Retrieved 2026-11-23.
+[^rustpypi]: [pyspark-client-rust](https://pypi.org/project/pyspark-client-rust/). *Python Package Index*. Retrieved 2026-11-23.
+[^rustreadme]: [apache/spark-connect-rust README](https://github.com/apache/spark-connect-rust/blob/main/README.md). *GitHub*. Retrieved 2026-11-23.
+[^rustcompat]: [Compatibility (Spark Connect Rust Client documentation)](https://apache.github.io/spark-connect-rust/compatibility/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rustdocs]: [Spark Connect Rust Client documentation](https://apache.github.io/spark-connect-rust/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^dotnet]: [GoEddie/spark-connect-dotnet](https://github.com/GoEddie/spark-connect-dotnet). *GitHub*. Retrieved 2026-11-23.
+[^sparkjs]: [yaooqinn/spark.js](https://github.com/yaooqinn/spark.js). *GitHub*. Retrieved 2026-11-23.
+[^n1]: [sjrusso8/spark-connect-rs](https://github.com/sjrusso8/spark-connect-rs). *GitHub*. Retrieved 2026-11-23.

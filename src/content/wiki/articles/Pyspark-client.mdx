@@ -1,0 +1,94 @@
+---
+title: "Pyspark-client"
+displayTitle: "pyspark-client"
+categories: ["Concepts", "Glossary terms", "Query engines", "Apache Spark"]
+---
+
+<Infobox type="software" name="pyspark-client">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">4.0.0 (2025-05-23)</Field>
+  <Field name="latest_release">4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Python</Field>
+  <Field name="type">Pure-Python [Spark Connect](/wiki/Spark_Connect) client library</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[pypi.org/project/pyspark-client](https://pypi.org/project/pyspark-client/)</Field>
+  <Field name="repo">[github.com/apache/spark (python/packaging/client)](https://github.com/apache/spark/tree/v4.3.0/python/packaging/client)</Field>
+  <Field name="related">[Spark Connect](/wiki/Spark_Connect), [Apache Spark](/wiki/Apache_Spark), [Pandas API on Spark](/wiki/Pandas_API_on_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the pyspark-client, pyspark and pyspark-connect release histories and metadata on PyPI (latest 4.3.0, uploaded 2026-10-30), python/packaging/client/setup.py and python/packaging/classic/setup.py at tags v4.0.0 and v4.3.0, python/docs/source/getting_started/install.rst at v4.0.0 and v4.3.0, docs/spark-connect-overview.md at v4.3.0, the Spark 4.0.0 release notes and SPARK-47540</Verified>
+
+**pyspark-client** is the pure-Python [Spark Connect](/wiki/Spark_Connect) client for [Apache Spark](/wiki/Apache_Spark), published on PyPI, which lets a Python program use the PySpark DataFrame, SQL and streaming APIs against a remote Spark Connect server without a Java runtime or Spark JAR files on the client machine.[^install430] The package was first released with Spark 4.0.0, and its version numbers follow Spark releases.[^pypi] It is installed with `pip install pyspark-client` and supports only remote connections through `spark.remote` with an `sc://` connection URI.[^install430]
+
+## What is pyspark-client?
+
+pyspark-client is a separate distribution of the PySpark source tree that contains only Python code. The Spark installation guide describes it as a pure Python library that does not depend on non-Python components such as JARs or a Java Runtime Environment (JRE).[^install430] The PyPI package name is `pyspark-client`; the import name stays `pyspark`, so code written for Spark Connect runs unchanged.[^setup430]
+
+The Spark 4.0.0 release notes list "a new lightweight Python client (pyspark-client) at just 1.5 MB" among the Spark Connect changes of that release.[^r400] On PyPI, the 4.3.0 source distribution of pyspark-client is 1,745,601 bytes, while the 4.3.0 source distribution of the full `pyspark` package, which bundles the Spark JARs, is 455,910,862 bytes.[^pypi][^pypi-pyspark]
+
+## How is pyspark-client installed and used?
+
+pyspark-client 4.3.0 requires Python 3.11 or later and installs pandas (2.2.0 or later), PyArrow (18.0.0 or later), grpcio and grpcio-status (1.76.0 or later), googleapis-common-protos, zstandard, NumPy and PyYAML as dependencies.[^setup430] The 4.0.0 release required Python 3.9 or later.[^setup400]
+
+The Spark Connect documentation recommends pinning the client to the Spark release in use, for example `pip install pyspark-client==4.3`, and then creating a session with `SparkSession.builder.remote()`.[^overview] The server side is a Spark Connect server, which by default listens on port 15002; see [Spark Connect](/wiki/Spark_Connect).[^overview]
+
+```python
+# pip install pyspark-client==4.3.0
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+spark = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
+
+df = spark.range(10).withColumn("even", F.col("id") % 2 == 0)
+df.groupBy("even").count().show()
+```
+
+## What is missing compared with PySpark?
+
+pyspark-client leaves out the parts of PySpark that need a local JVM. Compared with the classic `pyspark` package at v4.3.0, its package list omits `pyspark.core` (the module that holds `SparkContext`, `RDD` and broadcast variables), `pyspark.sql.classic` (the Py4J-based DataFrame implementation), and the bundled `jars`, `bin` and `sbin` directories.[^setup430][^classic430] It also does not depend on Py4J, which the full package requires.[^setup430][^pypi-pyspark]
+
+Because pyspark-client speaks only the Spark Connect protocol, the general Spark Connect limits apply to it. The Spark documentation lists them: the client cannot reach the driver JVM, so private fields such as `df._jdf` do not exist; RDDs are not supported; and the client has no access to `SparkContext` or to the static Spark configuration.[^overview] The [RDD](/wiki/RDD) API is therefore unavailable, and code that calls `spark.sparkContext` must be rewritten with DataFrame APIs.
+
+pyspark-client cannot start Spark by itself. The installation guide says it supports only `spark.remote` with connection URIs; it has no local mode, and the user must run a Spark Connect server separately.[^install430] The SPIP that proposed the pure-Python package also excluded full compatibility with classic PySpark (such as the RDD API), launching the server and local mode from its scope.[^spip]
+
+Most of the PySpark API is still present. The package includes `pyspark.sql` with its Spark Connect implementation, Structured Streaming, `pyspark.ml`, the [Pandas API on Spark](/wiki/Pandas_API_on_Spark) (`pyspark.pandas`) and the `pyspark.pipelines` module of [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines).[^setup430] The Spark API reference labels each API that "Supports Spark Connect".[^overview]
+
+## How does pyspark-client differ from pyspark and pyspark-connect?
+
+Spark publishes three Python packages from the same source tree:[^install430][^setup430][^classic430]
+
+| PyPI package | Contents | Bundles Spark JARs | Connection modes |
+| --- | --- | --- | --- |
+| `pyspark-client` | Python code only; no JARs, no Py4J | No | `spark.remote` with an `sc://` URI only |
+| `pyspark` | Full PySpark with the Spark JARs and Py4J; Spark Connect available through the `connect` extra | Yes | Classic (Py4J) and Spark Connect |
+| `pyspark-connect` | A small package that depends on the same version of `pyspark` and makes Spark Connect the default | Yes, through its `pyspark` dependency | `spark.master` with a local Connect server, or `spark.remote` |
+
+The `pyspark-connect` 4.3.0 package on PyPI depends on `pyspark==4.3.0`, so it brings in the full JVM-backed distribution; pyspark-client does not.[^pypi-connect]
+
+## History
+
+The pure-Python package was proposed in SPARK-47540, "SPIP: Pure Python Package (Spark Connect)", filed on 25 March 2024 with fix version 4.0.0.[^spip] The SPIP text used the name `pyspark-connect`; in the released code the pure-Python package is named `pyspark-client`, and `pyspark-connect` became the package that makes Connect the default for full PySpark.[^spip][^setup400] The Spark 4.0.0 release notes list SPARK-47540 and the 1.5 MB client.[^r400]
+
+pyspark-client 4.0.0 was uploaded to PyPI on 23 May 2025, the release date of Spark 4.0.0. Later releases track Spark: 4.1.0 (16 December 2025), 4.2.0 (14 July 2026) and 4.3.0 (30 October 2026), with maintenance releases for older lines, such as 4.2.1, 4.1.4 and 4.0.5 on 27 October 2026.[^pypi]
+
+## See also
+
+- [Spark Connect](/wiki/Spark_Connect)
+- [Apache Spark](/wiki/Apache_Spark)
+- [RDD](/wiki/RDD)
+- [Pandas API on Spark](/wiki/Pandas_API_on_Spark)
+- [Spark 3 to Spark 4 migration](/wiki/Spark_3_to_Spark_4_migration)
+
+## References
+
+[^install430]: [Installation (python/docs/source/getting_started/install.rst at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/docs/source/getting_started/install.rst). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pypi]: [pyspark-client release history](https://pypi.org/project/pyspark-client/#history). *Python Package Index*. Retrieved 2026-11-23.
+[^setup430]: [python/packaging/client/setup.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/packaging/client/setup.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pypi-pyspark]: [pyspark 4.3.0 (files)](https://pypi.org/project/pyspark/4.3.0/#files). *Python Package Index*. Retrieved 2026-11-23.
+[^setup400]: [python/packaging/client/setup.py (v4.0.0)](https://github.com/apache/spark/blob/v4.0.0/python/packaging/client/setup.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^overview]: [Spark Connect Overview (docs/spark-connect-overview.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/spark-connect-overview.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^classic430]: [python/packaging/classic/setup.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/packaging/classic/setup.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^spip]: [SPARK-47540: SPIP: Pure Python Package (Spark Connect)](https://issues.apache.org/jira/browse/SPARK-47540). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^pypi-connect]: [pyspark-connect 4.3.0](https://pypi.org/project/pyspark-connect/4.3.0/). *Python Package Index*. Retrieved 2026-11-23.

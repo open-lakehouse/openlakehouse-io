@@ -1,0 +1,112 @@
+---
+title: "Apache Iceberg"
+categories: ["Table formats"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation)</Field>
+  <Field name="latest_release">1.12.0</Field>
+  <Field name="latest_release_date">2026-09-29</Field>
+  <Field name="written_in">Java (reference implementation)</Field>
+  <Field name="type">[Open table format](/wiki/Open_table_format)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[iceberg.apache.org](https://iceberg.apache.org)</Field>
+  <Field name="repo">[github.com/apache/iceberg](https://github.com/apache/iceberg)</Field>
+  <Field name="related">[Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi), [Apache Parquet](/wiki/Apache_Parquet), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Apache Iceberg releases page (1.12.0), the Iceberg table spec and the ASF incubator record</Verified>
+
+**Apache Iceberg** is an [open table format](/wiki/Open_table_format) for large analytic tables stored as files in a distributed file system or object store. The Iceberg specification describes how a table's schema, partitioning and data files are tracked in metadata files, so that several engines can read and write the same table with transactional guarantees.[^spec] Iceberg is a common table layer in an [open lakehouse](/wiki/Open_lakehouse), where data stays in open file formats such as [Apache Parquet](/wiki/Apache_Parquet) and is shared between engines such as [Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino) and [DuckDB](/wiki/DuckDB).
+
+## How it works
+
+Apache Iceberg tracks individual data files instead of directories. Table state is held in a metadata file that records the schema, partition configuration, properties and snapshots. Each snapshot points to manifest files, and each manifest lists data files together with their partition values and column statistics.[^spec]
+
+Every change to an Iceberg table writes a new metadata file and replaces the old one with an atomic swap. Writers work optimistically: a writer prepares its change, then commits by swapping the table's metadata pointer from the version it started from to the new version. If another commit happened first, the writer must retry against the new current version. Readers use the snapshot that was current when they loaded the table and do not take locks.[^spec]
+
+The atomic swap of the metadata pointer is performed by a catalog. Catalog types supported by the Iceberg Spark integration include a REST catalog, the Hive Metastore and a directory-based Hadoop catalog,[^sparkconf] and Iceberg also provides a JDBC catalog.[^n1] The REST catalog is an HTTP protocol defined by the Iceberg project,[^rest] described further in [Iceberg REST catalog](/wiki/Iceberg_REST_catalog). Catalog services such as [Apache Polaris](/wiki/Apache_Polaris) and [Unity Catalog](/wiki/Unity_Catalog) are covered in their own articles.
+
+## Features
+
+### Snapshots and time travel
+
+Each write to an Apache Iceberg table creates a new snapshot. Snapshots are the basis for reader isolation, time travel queries and rollback. Branches and tags are named references to snapshots, each with its own retention policy.[^branching]
+
+In Spark SQL, Iceberg supports time travel with the `TIMESTAMP AS OF` and `VERSION AS OF` clauses. `VERSION AS OF` accepts a snapshot ID or a branch or tag name.[^sparkq]
+
+```sql
+-- Iceberg 1.12.0 with Spark SQL
+SELECT * FROM prod.db.events TIMESTAMP AS OF '2026-11-01 00:00:00';
+SELECT * FROM prod.db.events VERSION AS OF 10963874102873;
+SELECT * FROM prod.db.events VERSION AS OF 'audit-branch';
+```
+
+### Hidden partitioning
+
+Apache Iceberg produces partition values from column values, for example the day of a timestamp column, and records the relationship in table metadata. Queries filter on the source column and Iceberg skips files that cannot match. Users do not need to know how the table is partitioned or add a separate partition filter, as they would with a Hive-style partition column.[^partitioning]
+
+### Schema and partition evolution
+
+Apache Iceberg supports adding, dropping, renaming, reordering and widening columns, including fields in nested structures. Schema changes are metadata changes and do not rewrite data files. Columns are tracked by unique IDs, so a change to one column does not change the values read from another.[^evolution] The partition layout of a table can also change in place, for example from daily to hourly partitions, without creating a new table.[^evolution]
+
+### Format versions
+
+The Iceberg specification is versioned. The format version increases when a feature breaks forward compatibility, meaning older readers would not read the newer table correctly. Versions 1, 2 and 3 are complete and adopted; version 4 is under development and not formally adopted.[^spec]
+
+| Format version | Main additions (per the spec) |
+| --- | --- |
+| 1 | Analytic tables built on immutable Parquet, Avro and ORC files |
+| 2 | Row-level deletes through delete files; stricter writer requirements |
+| 3 | New types (nanosecond timestamps, variant, geometry, geography, unknown), column default values, multi-argument transforms, row lineage, binary deletion vectors, table encryption keys |
+| 4 (in development) | Restructured metadata tree, combined data file and deletion vector entries, relative locations, table constraints; new equality deletes no longer allowed |
+
+## History
+
+Iceberg was developed at Netflix. The proposal to the Apache Incubator described it as a table format designed to improve on the Hive table layout, and stated that it was under active development at Netflix.[^proposal] The project entered the Apache Incubator on 16 November 2018 and graduated to a top-level Apache project on 20 May 2020.[^incubator]
+
+Apache Iceberg 1.12.0 was released on 29 September 2026. That release removed Spark 3.4 support.[^releases]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Apache Iceberg tables sit on object storage, and a [data catalog](/wiki/Data_catalog) holds the pointer to each table's current metadata file. Because the table state is defined by the specification and not by one engine, a table written by one engine can be read by another that implements the same format version. Pipelines that move data through layers, such as the [Medallion architecture](/wiki/Medallion_architecture), can use Iceberg tables at each layer.
+
+## Engine support
+
+Connectors for [Apache Spark](/wiki/Apache_Spark), Apache Flink and Apache Hive are maintained in the main Iceberg repository, with a separate runtime artifact for each supported engine version.[^multiengine] [Trino](/wiki/Trino) reads and writes Iceberg tables through its Iceberg connector,[^n2] and [DuckDB](/wiki/DuckDB) reads them through its iceberg extension.[^n3] The Iceberg project also maintains implementations in Python (PyIceberg), Rust and Go in separate repositories.[^n4][^n5][^n6]
+
+## Limitations
+
+Apache Iceberg tables need regular maintenance. Snapshots accumulate until they are expired, and data files are not deleted while any retained snapshot still references them. Each commit also writes a new metadata file, so tables with frequent commits, such as streaming tables, may need old metadata files cleaned up.[^maintenance]
+
+Support for newer features depends on the engine. A table can be kept on an older format version so that engines without support for newer features can still use it.[^spec]
+
+## See also
+
+- [Open table format](/wiki/Open_table_format)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Hudi](/wiki/Apache_Hudi)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Apache Polaris](/wiki/Apache_Polaris)
+
+## References
+
+[^spec]: [Iceberg Table Spec](https://iceberg.apache.org/spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkconf]: [Spark Configuration](https://iceberg.apache.org/docs/latest/spark-configuration/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [JDBC](https://iceberg.apache.org/docs/latest/jdbc/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^rest]: [REST Catalog Spec](https://iceberg.apache.org/rest-catalog-spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^branching]: [Branching and Tagging](https://iceberg.apache.org/docs/latest/branching/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sparkq]: [Spark Queries](https://iceberg.apache.org/docs/latest/spark-queries/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^partitioning]: [Partitioning](https://iceberg.apache.org/docs/latest/partitioning/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^evolution]: [Evolution](https://iceberg.apache.org/docs/latest/evolution/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^proposal]: [IcebergProposal](https://cwiki.apache.org/confluence/display/INCUBATOR/IcebergProposal). *Apache Incubator wiki*. Retrieved 2026-11-22.
+[^incubator]: [Iceberg Project Incubation Status](https://incubator.apache.org/projects/iceberg.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^releases]: [Releases](https://iceberg.apache.org/releases/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^multiengine]: [Multi-Engine Support](https://iceberg.apache.org/multi-engine-support/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Iceberg connector](https://trino.io/docs/current/connector/iceberg.html). *Trino*. Retrieved 2026-11-22.
+[^n3]: [Iceberg Extension](https://duckdb.org/docs/stable/core_extensions/iceberg/overview). *DuckDB*. Retrieved 2026-11-22.
+[^n4]: [apache/iceberg-python](https://github.com/apache/iceberg-python). *GitHub*. Retrieved 2026-11-22.
+[^n5]: [apache/iceberg-rust](https://github.com/apache/iceberg-rust). *GitHub*. Retrieved 2026-11-22.
+[^n6]: [apache/iceberg-go](https://github.com/apache/iceberg-go). *GitHub*. Retrieved 2026-11-22.
+[^maintenance]: [Maintenance](https://iceberg.apache.org/docs/latest/maintenance/). *Apache Software Foundation*. Retrieved 2026-11-22.

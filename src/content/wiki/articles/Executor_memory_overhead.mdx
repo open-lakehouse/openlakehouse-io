@@ -1,0 +1,83 @@
+---
+title: "Executor memory overhead"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">`spark.executor.memoryOverhead`, memory overhead, non-heap memory</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">JVM native memory, Python workers, other processes in the container, container memory limit</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) on YARN and Kubernetes</Field>
+  <Field name="related">[Spark memory management](/wiki/Spark_memory_management), [Executor](/wiki/Executor), [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/configuration.md, docs/running-on-kubernetes.md, docs/running-on-yarn.md), Hadoop yarn-default.xml (stable docs) and the Kubernetes "Assign Memory Resources to Containers" task page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **executor memory overhead** is the memory that Spark requests for each [executor](/wiki/Executor) container on top of the JVM heap, to cover everything in the container that is not on the heap: JVM internals, native libraries, Python worker processes and other processes. It is set by `spark.executor.memoryOverhead` and applies on YARN and Kubernetes.[^config] When the executor process as a whole uses more memory than its container allows, the cluster manager kills the container, even if the JVM heap still has room.
+
+## How is memory overhead sized?
+
+By default, `spark.executor.memoryOverhead` is `spark.executor.memory` × `spark.executor.memoryOverheadFactor`, with a minimum of `spark.executor.minMemoryOverhead`.[^config]
+
+| Setting | Default | Since |
+| --- | --- | --- |
+| `spark.executor.memoryOverhead` | executor memory × factor, at least the minimum | 2.3.0 |
+| `spark.executor.memoryOverheadFactor` | 0.10; 0.40 for non-JVM jobs on Kubernetes | 3.3.0 |
+| `spark.executor.minMemoryOverhead` | 384 MiB | 4.0.0 |
+
+<small>Source: Spark 4.3.0 configuration reference.[^config]</small>
+
+The full container size is the sum of `spark.executor.memory`, `spark.executor.memoryOverhead`, `spark.memory.offHeap.size` and `spark.executor.pyspark.memory`.[^config] An executor with `spark.executor.memory=8g` and no other settings gets about 819 MiB of overhead, so a container of about 9 GiB. The higher factor for non-JVM jobs on Kubernetes exists because, in the words of the Spark docs, such tasks "commonly fail with 'Memory Overhead Exceeded' errors".[^config]
+
+## What lives outside the JVM heap?
+
+- **JVM and native overheads.** The Spark docs list VM overheads, interned strings and other native overheads.[^config]
+- **Python workers.** In PySpark, Python worker processes run beside the executor JVM in the same container. Their memory is counted in the overhead unless `spark.executor.pyspark.memory` is set, in which case it is a separate, limited amount added to the container request.[^config] Python UDFs and pandas UDFs that load large objects use this memory.
+- **Other processes in the container.** Anything else started in the executor's container counts against the overhead.[^config]
+- **RAM-backed local directories on Kubernetes.** With `spark.kubernetes.local.dirs.tmpfs=true`, shuffle and spill files live in memory and count toward the pod's memory, so the overhead factor should be raised.[^k8s]
+
+Off-heap memory set with `spark.memory.offHeap.size` is not part of the overhead; it is added to the container separately.[^config] See [Spark memory management](/wiki/Spark_memory_management).
+
+## Why do executor containers get killed?
+
+YARN and Kubernetes both enforce the container's memory limit from outside the JVM. The JVM heap cannot grow beyond `spark.executor.memory`, but native and Python memory can, and when the process as a whole goes over the limit the container is terminated.
+
+- **On YARN**, the NodeManager enforces physical memory limits for containers by default (`yarn.nodemanager.pmem-check-enabled`, default true).[^yarndefault]
+- **On Kubernetes**, a container that allocates more memory than its limit becomes a candidate for termination; the pod status then shows `OOMKilled` and exit code 137.[^k8smem] The Spark Kubernetes docs also describe exit code 137 as a SIGKILL, possibly a container OOM, and exit code 52 as a JVM out-of-memory error.[^k8s]
+
+A container kill and a JVM `OutOfMemoryError` are different failures. A JVM heap OOM means the heap was too small for the task; the fix is more `spark.executor.memory`, more partitions, or less data per task. A container kill with a healthy heap means the non-heap side was too small; the fix is more overhead, setting `spark.executor.pyspark.memory`, or reducing native or Python memory use. On YARN, Spark 4.3.0 adds `-XX:OnOutOfMemoryError='kill %p'` to executor JVM options by default (`spark.yarn.executor.oomKill.enabled`), so a heap OOM also ends the executor process.[^yarn]
+
+Spark 4.3.0 on Kubernetes can also react to these failures with `org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin`, which is enabled by registering it in `spark.plugins`. Every `spark.kubernetes.executor.resizeInterval`, the driver reads each executor container's memory usage, and when usage exceeds `spark.kubernetes.executor.resizeThreshold` of the current limit it raises the memory request and limit in place by `spark.kubernetes.executor.resizeFactor`, with no configured upper bound. It requires Kubernetes 1.33 or later (in-place pod resize through the `pods/resize` subresource), a metrics server or other provider of the `metrics.k8s.io` API, and a driver service account allowed to list pods, get pods in the `metrics.k8s.io` API group and patch `pods/resize`. The heap size does not change, so the extra memory goes to off-heap and native use, and Kubernetes may reject or defer a resize when the node lacks free memory.[^k8sresize]
+
+```
+spark.plugins                              org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin
+spark.kubernetes.executor.resizeInterval   1m
+```
+
+## Example
+
+A PySpark job whose Python UDFs need about 2 GiB per executor:
+
+```
+spark.executor.memory            8g
+spark.executor.memoryOverhead    1g
+spark.executor.pyspark.memory    2g
+```
+
+Each executor container is then 11 GiB: 8 GiB heap, 1 GiB overhead and 2 GiB reserved for Python.[^config]
+
+## See also
+
+- [Spark memory management](/wiki/Spark_memory_management)
+- [Executor](/wiki/Executor)
+- [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark)
+- [Spill (memory)](/wiki/Spill_(memory))
+
+## References
+
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^yarndefault]: [yarn-default.xml](https://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-common/yarn-default.xml). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8smem]: [Assign Memory Resources to Containers and Pods](https://kubernetes.io/docs/tasks/configure-pod-container/assign-memory-resource/). *The Kubernetes Authors*. Retrieved 2026-11-23.
+[^yarn]: [Running Spark on YARN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-yarn.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8sresize]: [Running Spark on Kubernetes: Executor Memory Resize (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html#executor-memory-resize). *Apache Software Foundation*. Retrieved 2026-11-23.

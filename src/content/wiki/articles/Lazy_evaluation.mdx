@@ -1,0 +1,77 @@
+---
+title: "Lazy evaluation"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Lazy execution, deferred execution</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Transformations (lazy), actions (eager), logical plan, analysis, optimization</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (RDD, DataFrame, SQL and [Spark Connect](/wiki/Spark_Connect) APIs)</Field>
+  <Field name="related">[Directed acyclic graph (Spark)](/wiki/Directed_acyclic_graph_(Spark)), [Catalyst optimizer](/wiki/Catalyst_optimizer), [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan), [SparkSession](/wiki/SparkSession)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/rdd-programming-guide.md, docs/spark-connect-gotchas.md, docs/spark-connect-overview.md) and a PySpark 4.3.0 run (ANSI mode default, analysis and runtime errors)</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **lazy evaluation** means that transformations such as `filter`, `select` or `map` do not compute anything when they are called; Spark only records them in a plan, and runs the plan when an action such as `collect`, `count` or a write needs a result.[^rddguide] Deferring the work lets Spark see the whole computation before running it, so it can combine steps and return only what the action needs. It also means that many errors appear at the action, far from the line that caused them.
+
+## Transformations vs actions
+
+Spark divides operations into two kinds. A **transformation** creates a new dataset from an existing one; an **action** returns a value to the driver program or writes data after running a computation.[^rddguide] All transformations are lazy: they remember the operations applied to a base dataset and are computed only when an action requires a result. The Spark guide's example is a `map` followed by a `reduce`, where Spark can return only the reduced result to the driver instead of the larger mapped dataset.[^rddguide]
+
+| Kind | DataFrame and SQL examples | RDD examples | When it computes |
+| --- | --- | --- | --- |
+| Transformation | `select`, `filter`, `withColumn`, `join`, `groupBy().agg()`, `spark.sql("SELECT ...")` | `map`, `filter`, `reduceByKey`, `join` | At the next action that needs it |
+| Action | `collect`, `count`, `show`, `take`, `toPandas`, `write...save` | `collect`, `count`, `reduce`, `saveAsTextFile` | Immediately |
+| SQL command | `spark.sql("INSERT ...")`, `spark.sql("CREATE ...")` | (none) | Immediately[^gotchas] |
+
+Each action runs the full chain of transformations again unless the data is cached. Without `persist()` or `cache()`, each transformed RDD may be recomputed every time an action runs on it.[^rddguide]
+
+## Why do errors appear late?
+
+Because transformations only build a plan, an error in the data or in a function passed to Spark is raised when an action runs, not on the line where the transformation was written. Two kinds of error behave differently in Spark Classic:
+
+- **Analysis errors** (a missing column, a wrong type, an unknown table) are raised early. Spark Classic analyzes each DataFrame eagerly as it is built, so `spark.sql("select 1 as a, 2 as b").filter("c > 1")` fails immediately because column `c` cannot be found.[^gotchas] In PySpark 4.3.0 this raises `AnalysisException` with error class `UNRESOLVED_COLUMN.WITH_SUGGESTION`.
+- **Runtime errors** (bad values, an exception inside a UDF) are raised late, when the action runs the tasks. ANSI mode is on by default in Spark 4.3.0 (`spark.sql.ansi.enabled=true`), so a division by zero is an error rather than a null, but it still surfaces only when the data is processed.
+
+```python
+df = spark.range(3).selectExpr("id", "10 / (id - 1) AS x")   # no error: only a plan
+df.collect()   # raises SparkArithmeticException [DIVIDE_BY_ZERO] at the action
+```
+
+Accumulators show the same effect. An accumulator updated inside a transformation such as `map()` changes only when an action computes that RDD, so updates inside lazy transformations are not guaranteed to have run.[^rddguide]
+
+## How does Spark Connect change when analysis happens?
+
+With [Spark Connect](/wiki/Spark_Connect), execution is lazy in the same way, but analysis is lazy too. The client builds unresolved plans and sends them to the server only when an operation needs a resolved plan: an action, schema access (`df.columns`, `df.schema`), `explain` or persisting a DataFrame.[^gotchas]
+
+| Operation | Spark Classic | Spark Connect |
+| --- | --- | --- |
+| Transformations: `filter`, `select`, `limit` | Executed lazily; analyzed eagerly | Executed lazily; analyzed lazily |
+| Schema access: `df.columns`, `df.schema` | Eager | Eager, and each access sends an analysis request to the server |
+| Actions: `collect`, `show` | Eager | Eager |
+| Session state a DataFrame depends on (UDFs, temporary views, configs) | Captured when the DataFrame is defined | Resolved when the DataFrame executes |
+
+Source: the Spark 4.3.0 guide "Eager vs Lazy: Spark Connect vs Spark Classic".[^gotchas]
+
+This changes program behavior in three ways that the guide documents:[^gotchas]
+
+- The example `spark.sql("select 1 as a, 2 as b").filter("c > 1")` raises no error in Spark Connect until `df.columns` or `df.show()` is called.
+- A DataFrame that reads a temporary view by name sees the view's current definition at execution time; replacing the view changes what earlier DataFrames return. Unique view names avoid this.
+- A Python UDF is serialized when the query runs, not when it is defined, so it sees the latest value of any outer variable it reads.
+
+Code that calls `df.columns` or `df.schema` many times, for example in a loop that adds columns one by one, sends many analysis requests over Spark Connect. The guide recommends building all column expressions first and applying them in a single `select`.[^gotchas]
+
+## See also
+
+- [Directed acyclic graph (Spark)](/wiki/Directed_acyclic_graph_(Spark))
+- [Catalyst optimizer](/wiki/Catalyst_optimizer)
+- [Logical plan and physical plan](/wiki/Logical_plan_and_physical_plan)
+- [Spark Connect](/wiki/Spark_Connect)
+- [SparkSession](/wiki/SparkSession)
+- [Narrow and wide transformations](/wiki/Narrow_and_wide_transformations)
+
+## References
+
+[^rddguide]: [RDD Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^gotchas]: [Eager vs Lazy: Spark Connect vs Spark Classic (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-gotchas.html). *Apache Software Foundation*. Retrieved 2026-11-23.

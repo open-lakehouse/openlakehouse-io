@@ -488,3 +488,204 @@ button.smx-c { @apply cursor-pointer outline-none focus-visible:ring-2 focus-vis
 .smx-behind { @apply mt-0.5 block text-[0.65rem] font-semibold leading-tight text-red-700 dark:text-red-300; }
 .smx-undocumented { @apply bg-transparent text-muted-foreground ring-1 ring-inset ring-border; }
 .smx-unknown { @apply bg-navy-200 text-navy-600 dark:bg-navy-700 dark:text-navy-300; }
+
+/* ---------- Open Data Engineering Reference wiki (/wiki/*) ----------
+   Laid out like MediaWiki's Vector 2022 skin, with the brand colors the wiki
+   used on MediaWiki (its Common.css): navy infobox and navbox headers, green
+   "verified" box. Scoped to .olw so nothing leaks into the rest of the site. */
+.olw {
+  --olw-text: #202122; --olw-muted: #54595d; --olw-bg: #fff; --olw-bg-subtle: #f8f9fa;
+  --olw-border: #a2a9b1; --olw-border-subtle: #c8ccd1; --olw-border-faint: #eaecf0;
+  --olw-link: #3366cc; --olw-link-visited: #795cb2; --olw-link-hover: #447ff5; --olw-new: #d73333;
+  --olw-green-100: #DCF4ED; --olw-green-600: #00A972; --olw-blue-100: #F0F8FF; --olw-blue-600: #2272B4;
+  --olw-yellow-100: #FFF0D3; --olw-yellow-600: #FFAB00; --olw-navy-100: #EDF2F8; --olw-navy-200: #E5EAF1;
+  --olw-navy-300: #C4CCD6; --olw-navy-600: #1B5162; --olw-navy-800: #1B3139; --olw-red-100: #FEF3F2; --olw-red-700: #B42318;
+  --olw-serif: "Linux Libertine", "Georgia", "Times", "Source Serif Pro", serif;
+  --olw-sans: sans-serif; /* what Vector uses: the reader's own sans-serif font */
+  --olw-mono: "Menlo", "Consolas", "Liberation Mono", "Fira Mono", "Courier New", monospace;
+  min-height: 100vh; background: var(--olw-bg); color: var(--olw-text);
+  font-family: var(--olw-sans); font-size: 16px; line-height: 1.6;
+}
+.dark .olw {
+  --olw-text: #eaecf0; --olw-muted: #a2a9b1; --olw-bg: #101418; --olw-bg-subtle: #202122;
+  --olw-border: #72777d; --olw-border-subtle: #54595d; --olw-border-faint: #2e3136;
+  --olw-link: #88a3e8; --olw-link-visited: #a799cd; --olw-link-hover: #a6bbf5; --olw-new: #fd7865;
+  --olw-green-100: #0f2a20; --olw-blue-100: #0f1f33; --olw-yellow-100: #2e2410; --olw-navy-100: #1a2228;
+  --olw-navy-200: #22303a; --olw-navy-300: #3a4752; --olw-navy-600: #a9c6d0; --olw-navy-800: #0b1a20; --olw-red-100: #2d1513;
+}
+.olw :is(h1, h2, h3, h4, h5, h6) { color: var(--olw-text); }
+.olw a { color: var(--olw-link); text-decoration: none; }
+.olw a:visited { color: var(--olw-link-visited); }
+.olw a:hover { color: var(--olw-link-hover); text-decoration: underline; }
+.olw .olw-redlink { color: var(--olw-new); }
+
+/* Header */
+.olw-header { display: flex; align-items: center; gap: 1rem; max-width: 1596px; margin: 0 auto; padding: 0.5rem 1.5rem; height: 3.5rem; }
+.olw-menu { position: relative; }
+.olw-menu > button { display: flex; padding: 0.3rem; border-radius: 2px; color: var(--olw-text); }
+.olw-menu > button:hover { background: var(--olw-bg-subtle); }
+.olw-menu > button svg { width: 20px; height: 20px; }
+.olw-menu-panel { position: absolute; z-index: 50; top: 2.4rem; left: 0; width: 13rem; padding: 0.75rem 1rem; background: var(--olw-bg); border: 1px solid var(--olw-border); box-shadow: 0 2px 6px -1px rgba(0,0,0,0.2); font-size: 0.875rem; }
+.olw-menu-heading { color: var(--olw-muted); font-weight: bold; margin: 0.25rem 0; border-bottom: 1px solid var(--olw-border-subtle); }
+.olw-menu-panel ul { margin: 0 0 0.75rem; }
+.olw-menu-panel li { padding: 0.25rem 0; }
+.olw-logo { display: flex; align-items: center; gap: 0.6rem; color: var(--olw-text) !important; font-weight: 700; font-size: 1.05rem; white-space: nowrap; text-decoration: none !important; }
+.olw-logo-mark { width: 50px; height: 50px; }
+.dark .olw-logo-mark { filter: invert(1); }
+.olw-search { display: flex; flex: 0 1 30rem; min-width: 0; margin-left: 0.5rem; }
+.olw-search-field { position: relative; display: flex; flex: 1; align-items: center; }
+.olw-search-icon { position: absolute; left: 0.55rem; width: 18px; height: 18px; color: var(--olw-muted); }
+.olw-search input { width: 100%; height: 2rem; padding: 0 0.5rem 0 2.1rem; font-size: 0.875rem; color: var(--olw-text); background: var(--olw-bg); border: 1px solid var(--olw-border); border-right: 0; border-radius: 2px 0 0 2px; }
+.olw-search input:focus { outline: none; border-color: var(--olw-link); box-shadow: inset 0 0 0 1px var(--olw-link); }
+.olw-search button { height: 2rem; padding: 0 0.75rem; font-size: 0.875rem; font-weight: bold; color: var(--olw-text); background: var(--olw-bg-subtle); border: 1px solid var(--olw-border); border-radius: 0 2px 2px 0; }
+.olw-search button:hover { background: var(--olw-bg); }
+.olw-header-right { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; font-size: 0.875rem; white-space: nowrap; }
+
+/* Page grid: contents on the left, article on the right */
+.olw-page { display: grid; grid-template-columns: minmax(0, 1fr); max-width: 1596px; margin: 0 auto; padding: 0 1.5rem; }
+@media (min-width: 1120px) { .olw-page.has-toc { grid-template-columns: 15.5rem minmax(0, 1fr); column-gap: 2.25rem; } }
+.olw-toc { display: none; }
+@media (min-width: 1120px) { .olw-toc { display: block; position: sticky; top: 1rem; align-self: start; max-height: calc(100vh - 2rem); overflow-y: auto; margin-top: 3.2rem; padding-left: 1rem; font-size: 0.875rem; } }
+.olw-toc-title { font-weight: bold; padding-bottom: 0.4rem; margin-bottom: 0.6rem; border-bottom: 1px solid var(--olw-border-subtle); }
+.olw-toc li { padding: 0.3rem 0; line-height: 1.3; }
+.olw-toc .olw-toc-sub { padding-left: 0.75rem; }
+.olw-toc .olw-toc-top { color: var(--olw-text); font-weight: bold; }
+.olw-main { min-width: 0; max-width: 60rem; padding-bottom: 2rem; }
+
+/* Title and tabs */
+.olw-title { margin: 1.1rem 0 0; padding-bottom: 0.15rem; font-family: var(--olw-serif); font-size: 1.8rem; font-weight: normal; line-height: 1.375; border-bottom: 1px solid var(--olw-border); overflow-wrap: anywhere; }
+.olw-tabs { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; font-size: 0.875rem; border-bottom: 1px solid var(--olw-border-subtle); }
+.olw-tabs ul { display: flex; gap: 1rem; flex-wrap: wrap; }
+.olw-tabs li { padding: 0.45rem 0 0.35rem; }
+.olw-tabs li.is-current { border-bottom: 2px solid var(--olw-text); }
+.olw-tabs li.is-current a { color: var(--olw-text); }
+.olw-siteSub { margin: 0.4rem 0 0.9rem; font-size: 0.8rem; color: var(--olw-muted); }
+
+/* Article body */
+.olw-body { font-size: 0.875rem; line-height: 1.6; overflow-wrap: break-word; }
+.olw-body::after { content: ""; display: table; clear: both; }
+.olw-body p { margin: 0.5em 0 1em; }
+.olw-body h2 { margin: 1em 0 0.25em; padding: 0; font-family: var(--olw-serif); font-size: 1.5em; font-weight: normal; line-height: 1.375; border-bottom: 1px solid var(--olw-border); }
+.olw-body h3 { margin: 0.3em 0 0; padding-top: 0.5em; font-size: 1.2em; font-weight: bold; line-height: 1.6; }
+.olw-body h4 { margin: 0.3em 0 0; padding-top: 0.5em; font-size: 1em; font-weight: bold; }
+.olw-body h2 a, .olw-body h3 a { color: inherit; }
+.olw-body ul { list-style: disc; margin: 0.3em 0 0 1.6em; padding: 0; }
+.olw-body ol { list-style: decimal; margin: 0.3em 0 0 3.2em; padding: 0; }
+.olw-body li { margin-bottom: 0.1em; }
+.olw-body li > ul, .olw-body li > ol { margin-top: 0.1em; }
+.olw-body strong { font-weight: bold; }
+.olw-body em { font-style: italic; }
+.olw-body small { font-size: 85%; }
+.olw-body blockquote { margin: 1em 0; padding: 0 1.6em; border-left: 4px solid var(--olw-border-faint); }
+.olw-body :not(pre) > code { font-family: var(--olw-mono); font-size: 0.9em; padding: 1px 4px; color: var(--olw-text); background: var(--olw-bg-subtle); border: 1px solid var(--olw-border-faint); border-radius: 2px; }
+.olw-body figure[data-rehype-pretty-code-figure] { margin: 1em 0; }
+.olw-body pre { margin: 1em 0; padding: 14px; overflow-x: auto; font-family: var(--olw-mono); font-size: 0.875rem; line-height: 1.3; white-space: pre; color: var(--olw-text); background: var(--olw-bg-subtle); border: 1px solid var(--olw-border-faint); border-radius: 2px; }
+.olw-body pre code { font-family: inherit; }
+.olw-body pre [data-line] { display: inline; }
+.olw-body pre span[style] { color: var(--shiki-light); }
+.dark .olw-body pre span[style] { color: var(--shiki-dark); }
+
+/* Tables (MediaWiki "wikitable") */
+.olw-table-scroll { margin: 1em 0; overflow-x: auto; }
+.olw-table-scroll table { border-collapse: collapse; color: var(--olw-text); background: var(--olw-bg-subtle); border: 1px solid var(--olw-border); }
+.olw-table-scroll th, .olw-table-scroll td { padding: 0.2em 0.4em; border: 1px solid var(--olw-border); vertical-align: top; }
+.olw-table-scroll th { text-align: center; font-weight: bold; color: var(--olw-navy-800); background: var(--olw-navy-200); }
+.dark .olw-table-scroll th { color: var(--olw-text); }
+
+/* Infobox */
+.olw-infobox { float: right; clear: right; width: 22em; margin: 0 0 1em 1.5em; padding: 0.4em; border: 1px solid var(--olw-navy-300); background: var(--olw-navy-100); font-size: 88%; line-height: 1.5; border-spacing: 0.3em; border-collapse: separate; }
+.olw-infobox caption { padding: 0.4em; font-size: 125%; font-weight: bold; color: #fff; background: var(--olw-navy-800); caption-side: top; }
+.olw-infobox th { padding-right: 0.6em; text-align: left; vertical-align: top; font-weight: bold; color: var(--olw-navy-800); }
+.dark .olw-infobox th { color: var(--olw-text); }
+.olw-infobox td { vertical-align: top; }
+@media (max-width: 720px) { .olw-infobox { float: none; width: 100%; margin: 0 0 1em 0; } }
+
+/* Notices */
+.olw-verified { display: block; overflow: hidden; margin: 0 0 1em; padding: 0.3em 0.8em; font-size: 85%; color: var(--olw-navy-600); background: var(--olw-green-100); border-left: 3px solid var(--olw-green-600); }
+.olw-hatnote { margin-bottom: 0.5em; padding-left: 1.6em; font-style: italic; color: var(--olw-navy-600); }
+.olw-note, .olw-warning, .olw-status { display: flow-root; margin: 1em 0; padding: 0.6em 1em; }
+.olw-note > :first-child, .olw-warning > :first-child { margin-top: 0; }
+.olw-note > :last-child, .olw-warning > :last-child { margin-bottom: 0; }
+.olw-note { border-left: 4px solid var(--olw-blue-600); background: var(--olw-blue-100); }
+.olw-warning { border-left: 4px solid var(--olw-yellow-600); background: var(--olw-yellow-100); }
+.olw-status { margin-top: 0; padding: 0.5em 0.9em; color: var(--olw-navy-800); border-left: 4px solid var(--olw-navy-600); background: var(--olw-navy-100); }
+.dark .olw-status { color: var(--olw-text); }
+.olw-status-active { border-left-color: var(--olw-green-600); background: var(--olw-green-100); }
+.olw-status-experimental { border-left-color: var(--olw-blue-600); background: var(--olw-blue-100); }
+.olw-status-maintenance, .olw-status-proposed, .olw-status-deprecated { border-left-color: var(--olw-yellow-600); background: var(--olw-yellow-100); }
+.olw-status-removed, .olw-status-archived { border-left-color: var(--olw-red-700); background: var(--olw-red-100); }
+
+/* Citations and references (GFM footnotes) */
+.olw-body sup { font-size: 75%; line-height: 1; white-space: nowrap; }
+.olw-body sup a[data-footnote-ref]::before { content: "["; }
+.olw-body sup a[data-footnote-ref]::after { content: "]"; }
+.olw-body .footnotes { font-size: 90%; }
+.olw-body .footnotes ol { margin-left: 3.2em; }
+.olw-body .footnotes li p { display: inline; margin: 0; }
+/* Backlinks read "^" as on MediaWiki instead of GitHub's arrows. */
+.olw-body .footnotes a[data-footnote-backref] { margin-left: 0.3em; font-size: 0; text-decoration: none; }
+.olw-body .footnotes a[data-footnote-backref]::before { content: "^"; font-size: 0.875rem; font-weight: bold; }
+
+/* Navbox */
+.olw-navbox { clear: both; width: 100%; margin-top: 2em; font-size: 88%; border: 1px solid var(--olw-navy-300); border-collapse: collapse; }
+.olw-navbox-title { padding: 0.3em; font-size: 110%; color: #fff; background: var(--olw-navy-800); text-align: center; }
+.olw .olw-navbox-title a { color: #fff; }
+.olw-navbox-group { width: 1%; padding: 0.3em 0.8em; white-space: nowrap; text-align: right; color: var(--olw-navy-800); background: var(--olw-navy-200); }
+.dark .olw-navbox-group { color: var(--olw-text); }
+.olw-navbox-list { padding: 0.3em 0.8em; }
+.olw-navbox tr + tr > * { border-top: 1px solid var(--olw-navy-200); }
+@media (max-width: 720px) { .olw-navbox-group { white-space: normal; } }
+
+/* Categories box */
+.olw-catlinks { clear: both; margin-top: 1em; padding: 5px; font-size: 0.875rem; background: var(--olw-bg-subtle); border: 1px solid var(--olw-border); }
+.olw-catlinks ul { display: inline; margin: 0; padding: 0; }
+.olw-catlinks li { display: inline-block; padding: 0 0.5em; border-left: 1px solid var(--olw-border-subtle); line-height: 1.25; }
+.olw-catlinks li:first-child { padding-left: 0.25em; border-left: 0; }
+
+/* Category pages */
+.olw-category-members h2 { margin-top: 1em; }
+.olw-category-columns { columns: 3 15em; column-gap: 1.5em; }
+.olw-category-group { break-inside: avoid; }
+.olw-category-group h3 { margin: 0; padding: 0; font-size: 1.2em; font-weight: normal; }
+.olw-category-group ul { margin: 0 0 1em 1.6em; }
+
+/* Glossary */
+.olw-glossary { margin: 0.5em 0 1em; }
+.olw-glossary > div { margin-top: 0.6em; }
+.olw-glossary dt { font-weight: bold; }
+.olw-glossary dd { margin-left: 1.6em; }
+
+/* Footer */
+.olw-footer { margin-top: 2.5rem; padding-top: 1rem; font-size: 0.75rem; border-top: 1px solid var(--olw-border-subtle); }
+.olw-footer p { margin: 0.5em 0; }
+.olw-footer-links { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+/* Main page */
+.olw-home { margin-top: 1em; font-size: 0.875rem; }
+.olw-hero { margin-bottom: 1.2em; padding: 1.4em 1.6em; color: #fff; background: var(--olw-navy-800); border-radius: 6px; }
+.olw .olw-hero a { color: #8ACAFF; }
+.olw-hero-title { font-size: 180%; font-weight: 700; line-height: 1.2; }
+.olw-hero p { margin-top: 0.4em; font-size: 110%; opacity: 0.9; }
+.olw-hero p.olw-hero-tagline { margin-top: 0.2em; font-size: 125%; font-family: var(--olw-serif, Georgia, serif); opacity: 1; }
+.olw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18em, 1fr)); gap: 1em; margin-bottom: 1em; }
+.olw-card { padding: 0.4em 1em 0.8em; background: var(--olw-bg); border: 1px solid var(--olw-navy-300); border-top: 4px solid var(--olw-green-600); border-radius: 4px; }
+.olw-card.blue { border-top-color: var(--olw-blue-600); }
+.olw-card.yellow { border-top-color: var(--olw-yellow-600); }
+.olw-card.navy { border-top-color: var(--olw-navy-600); }
+.olw-card h2 { margin: 0.4em 0 0.3em; font-family: var(--olw-serif); font-size: 1.2em; font-weight: normal; }
+.olw-card ul { list-style: disc; margin: 0.3em 0 0 1.6em; }
+.olw-card li { margin-bottom: 0.1em; }
+.olw-card p { margin: 0.5em 0; }
+.olw-home-index h2 { margin: 1em 0 0.25em; font-family: var(--olw-serif); font-size: 1.5em; font-weight: normal; border-bottom: 1px solid var(--olw-border); }
+.olw-home-columns { columns: 3 14em; column-gap: 1.5em; list-style: disc; margin: 0.5em 0 0 1.6em; }
+.olw-home-columns li { margin-bottom: 0.1em; }
+.olw-count { color: var(--olw-muted); }
+
+/* Phones: header wraps, search on its own row */
+@media (max-width: 720px) {
+  .olw-header { flex-wrap: wrap; height: auto; padding: 0.5rem 1rem; gap: 0.5rem; }
+  .olw-logo-mark { width: 36px; height: 36px; }
+  .olw-search { order: 3; flex: 1 1 100%; margin-left: 0; }
+  .olw-page { padding: 0 1rem; }
+  .olw-tabs { flex-direction: column; gap: 0; }
+}

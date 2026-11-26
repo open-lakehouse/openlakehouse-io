@@ -1,0 +1,81 @@
+---
+title: "Data skew"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Skew, hot keys, partition skew</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Uneven [partition](/wiki/Partition) sizes, straggler tasks, hot keys</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (AQE skew join), [Apache Flink](/wiki/Apache_Flink) (adaptive skewed join, local-global aggregation), [Trino](/wiki/Trino)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Salting](/wiki/Salting), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Spill (memory)](/wiki/Spill_(memory))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/sql-performance-tuning.md, docs/web-ui.md, docs/sql-ref-syntax-qry-select-hints.md, adaptive/OptimizeSkewedJoin.scala), SPARK-29544, the Apache Flink 2.3 docs (Adaptive Batch, Performance Tuning) and the Trino 484 docs</Verified>
+
+**Data skew** is an uneven distribution of data across the [partitions](/wiki/Partition) of a distributed computation, so that a few tasks process far more data than the rest and the whole stage waits for them. In [Apache Spark](/wiki/Apache_Spark), skew usually appears after a [shuffle](/wiki/Shuffle), when many rows share the same join or grouping key and all land in one task. Spark's [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) (AQE) splits skewed join partitions automatically; other cases need manual fixes such as [salting](/wiki/Salting).[^perf]
+
+## How to recognize data skew in the Spark UI
+
+Data skew shows up as a gap between the typical task and the slowest task in one stage. The Spark UI stage page shows summary metrics for all tasks of a stage, including task duration, GC time, shuffle read size and records, and shuffle spill.[^webui] A skewed stage has a maximum duration and shuffle read size many times the median. The REST API returns the same summary as quantiles, by default 0.0, 0.25, 0.5, 0.75 and 1.0, and accepts other quantiles such as `?quantiles=0.01,0.5,0.99`.[^monitoring]
+
+Other signs of skew in the Spark UI are spill or high GC time in only the largest tasks, which the per-task table on the same page shows, and a stage that sits at a few running tasks long after most have finished.[^webui] See [Spill (memory)](/wiki/Spill_(memory)) and [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark).
+
+## What causes data skew?
+
+- **Hot keys.** A join or `GROUP BY` key with one very common value (a default customer ID, a popular product, `NULL`) sends all of its rows to one shuffle partition, because a shuffle brings all the values for a key together in one place (`hashpartitioning` in the plan).[^rddguide]
+- **Skewed source files.** Uneven input files or table partitions give some scan tasks much more data than others. See [Small files problem](/wiki/Small_files_problem).
+- **Partitioning that does not match the data.** Repartitioning by a low-cardinality column puts many rows in few partitions.
+
+## How Spark handles skew: AQE skew join
+
+Spark 3.0.0 added a skew join rule to the new AQE framework.[^spark29544] After the shuffle stages on both sides of a join have run, AQE checks partition sizes. A partition is skewed when it is larger than `spark.sql.adaptive.skewJoin.skewedPartitionFactor` (default 5.0) times the median partition size and also larger than `spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes` (default 256 MB). AQE splits such a partition into several tasks, replicating the matching partition of the other side.[^perf] The feature is on by default (`spark.sql.adaptive.skewJoin.enabled`) whenever AQE is on, and AQE is on by default since Spark 3.2.0.[^perf]
+
+AQE can split only the sides that the join type allows. In Spark 4.3.0 it can split the left side of inner, cross, left semi, left anti and left outer joins, and the right side of inner, cross and right outer joins; it applies to sort-merge and shuffled hash joins.[^skewrule] Full outer joins and skewed aggregations are not split by this rule; for those, [salting](/wiki/Salting) or a two-stage aggregation is still used.
+
+For writes, the `REBALANCE` hint asks AQE to even out output partitions and to split skewed ones, which keeps very large files out of a [Delta Lake](/wiki/Delta_Lake) or [Apache Iceberg](/wiki/Apache_Iceberg) table.[^hints][^perf]
+
+```
+spark.sql.adaptive.enabled                                   true
+spark.sql.adaptive.skewJoin.enabled                          true
+spark.sql.adaptive.skewJoin.skewedPartitionFactor            5.0
+spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes  256MB
+```
+
+## Manual remedies
+
+- **Broadcast the small side.** A [broadcast join](/wiki/Broadcast_join) has no shuffle on the large side, so a hot key in the large table cannot pile up in one task. Use the `BROADCAST` [hint](/wiki/Join_strategy_hints) when the small side fits.[^perf]
+- **Salting.** Add a random suffix to the hot key on one side and replicate the other side, so one key's rows spread over many tasks. See [Salting](/wiki/Salting).
+- **Filter or handle hot values separately.** Rows with a `NULL` join key never match in an inner join, so filtering them out before the join removes a common hot key.
+- **Pre-aggregate.** Aggregating before a join reduces the rows per key that the shuffle has to move.
+
+## Data skew compared across engines
+
+|  | Apache Spark | Apache Flink | Trino |
+| --- | --- | --- | --- |
+| Automatic skewed join handling | AQE skew join splits skewed sort-merge and shuffled hash join partitions at runtime; on by default[^perf] | The Adaptive Batch Scheduler's skewed join optimization splits skewed partitions in batch jobs; on by default, controlled by `table.optimizer.skewed-join-optimization.strategy`[^flinkab] | No dedicated skew splitting is documented; the cost-based optimizer can choose a broadcast join instead of a partitioned join[^trinocbo] |
+| Skewed aggregations | Partial aggregation before the shuffle (`partial_sum` in plans); salting by hand | Local-global (two-phase) aggregation, and split distinct aggregation (`table.optimizer.distinct-agg.split.enabled`)[^flinktuning] | Not documented as a separate feature |
+| Skewed writes | `REBALANCE` hint with AQE splits skewed output partitions[^hints] | Automatic balancing of data distribution in the Adaptive Batch Scheduler[^flinkab] | `redistribute-writes` (default true) hashes data across nodes before writing, to limit the effect of skew[^trinogen] |
+
+## See also
+
+- [Salting](/wiki/Salting)
+- [Shuffle](/wiki/Shuffle)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Join strategy hints](/wiki/Join_strategy_hints)
+- [Spill (memory)](/wiki/Spill_(memory))
+- [Speculative execution](/wiki/Speculative_execution)
+
+## References
+
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rddguide]: [RDD Programming Guide: Shuffle operations (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#shuffle-operations). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^spark29544]: [SPARK-29544: Optimize skewed join at runtime with new Adaptive Execution](https://issues.apache.org/jira/browse/SPARK-29544). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^skewrule]: [OptimizeSkewedJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/OptimizeSkewedJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^hints]: [Hints (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-hints.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flinkab]: [Adaptive Batch Execution (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-stable/docs/deployment/adaptive_batch/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trinocbo]: [Cost-based optimizations (Trino 484)](https://trino.io/docs/current/optimizer/cost-based-optimizations.html). *Trino Software Foundation*. Retrieved 2026-11-23.
+[^flinktuning]: [Performance Tuning (Apache Flink 2.3 Table API and SQL)](https://nightlies.apache.org/flink/flink-docs-stable/docs/dev/table/tuning/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^trinogen]: [General properties (Trino 484)](https://trino.io/docs/current/admin/properties-general.html). *Trino Software Foundation*. Retrieved 2026-11-23.

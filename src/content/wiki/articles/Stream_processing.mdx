@@ -1,0 +1,108 @@
+---
+title: "Stream processing"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Streaming, unbounded data processing</Field>
+  <Field name="field">Data engineering, distributed systems</Field>
+  <Field name="key_parts">Unbounded input, event time, windows, state, [Watermarks](/wiki/Watermark), triggers, checkpoints</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) ([Apache Spark](/wiki/Apache_Spark)), [Apache Flink](/wiki/Apache_Flink), Kafka Streams ([Apache Kafka](/wiki/Apache_Kafka))</Field>
+  <Field name="related">[Watermark](/wiki/Watermark), [Exactly-once semantics](/wiki/Exactly-once_semantics), [Streaming lakehouse](/wiki/Streaming_lakehouse), [Spark Streaming (DStreams)](/wiki/Spark_Streaming_(DStreams))</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Spark 4.3.0 Structured Streaming guides, the Apache Flink 2.3 documentation, the Apache Kafka 4.4 Streams documentation and the Dataflow Model paper (VLDB 2015)</Verified>
+
+**Stream processing** is the continuous computation of results over data that has no defined end, in which an engine processes records as they arrive and keeps its output up to date instead of waiting for a complete dataset. The input is called an **unbounded** dataset or stream; data with a fixed start and end is **bounded**.[^flink-arch] In the open lakehouse, the term covers engines such as [Structured Streaming](/wiki/Structured_Streaming), [Apache Flink](/wiki/Apache_Flink) and Kafka Streams, which read from message buses and write to tables, topics or other systems.
+
+## Unbounded data, not a kind of engine
+
+The Dataflow Model paper (Akidau et al., Google, published in the Proceedings of the VLDB Endowment in 2015) prefers the terms "unbounded" and "bounded" to "streaming" and "batch", because the latter imply a particular execution engine. The paper notes that unbounded data has long been processed by repeated batch runs, and that well-designed streaming systems can also process bounded data; it reserves "streaming" and "batch" for describing runtime engines.[^dataflow]
+
+The Apache Flink documentation draws the same line: batch processing is processing of a bounded stream, where the engine may read the whole input before producing results (for example, to sort it), while an unbounded stream must be processed continuously as data arrives.[^flink-learn]
+
+## Core ideas
+
+### Event time and processing time
+
+Every record has at least two times. **Event time** is when the event occurred on the device or system that produced it. **Processing time** is the clock time of the machine that handles the record.[^flink-time] Kafka Streams adds a third, **ingestion time**: when a Kafka broker stored the record in a topic partition.[^kstreams]
+
+The Dataflow paper points out that event time for an event never changes, while the skew between event time and processing time varies constantly because of network delays, scheduling and processing time.[^dataflow] Records therefore arrive out of order, and a result grouped by event time is never certain to be complete. A [watermark](/wiki/Watermark) is the engine's estimate of how far event time has progressed, and it lets the engine decide when a result is final.
+
+### Windows
+
+Aggregations over an unbounded stream need finite groups, called **windows**. Three types are common across engines:[^dataflow][^ss-apis][^flink-time]
+
+| Window | Definition | Example |
+| --- | --- | --- |
+| Tumbling (fixed) | Fixed size, non-overlapping, contiguous intervals; each record belongs to one window | Counts per 5-minute interval |
+| Sliding | Fixed size with a slide shorter than the size, so windows overlap and a record can belong to several | 10-minute windows starting every 5 minutes |
+| Session | Variable size; a window grows while records keep arriving within a gap duration, and closes after a gap with no input | One window per user visit, closed after 30 idle minutes |
+
+In PySpark the three types map to two functions: `window()` for tumbling and sliding windows and `session_window()` for session windows.[^ss-apis]
+
+```python
+from pyspark.sql.functions import window, session_window
+
+events.groupBy(window("ts", "5 minutes"))                 # tumbling
+events.groupBy(window("ts", "10 minutes", "5 minutes"))   # sliding
+events.groupBy("user", session_window("ts", "30 minutes")) # session
+```
+
+### State
+
+Aggregations, joins and deduplication must remember earlier records, so the engine keeps **state** between inputs. Structured Streaming keeps it in a state store, with an optional RocksDB-based provider.[^ss-apis] Flink keeps task state in memory and moves large state to on-disk structures.[^flink-arch] State grows without bound unless something says when old entries can be dropped; in event-time queries that signal is the watermark.[^ss-apis]
+
+### Triggers, latency and throughput
+
+A **trigger** decides when an engine computes and emits results. Engines that group records into small batches gain throughput and simpler fault tolerance, but each batch adds scheduling overhead that sets a floor on latency. Engines that keep long-lived tasks and handle each record as it arrives reach lower latency.[^ss-rtm]
+
+## Execution models
+
+<Hatnote>Main article: [Structured Streaming](/wiki/Structured_Streaming)</Hatnote>
+
+Two execution models are common:
+
+- **Micro-batch**: the engine runs the query as a series of small batch jobs. This is the default in [Structured Streaming](/wiki/Structured_Streaming), with end-to-end latencies as low as about 100 milliseconds and exactly-once guarantees.[^ss-index]
+- **Continuous or record-at-a-time**: long-running operators process each record as it arrives. Kafka Streams describes its processing as one record at a time, with millisecond latency.[^kstreams] Flink processes unbounded streams continuously and keeps state local to each task for low latency.[^flink-arch]
+
+Spark offers three modes on the same DataFrame API. The Spark 4.3 documentation compares them as follows:[^ss-rtm]
+
+| Spark mode | Typical latency | Processing guarantee | Supported queries |
+| --- | --- | --- | --- |
+| Micro-batch (default) | About 100 ms | Exactly-once | All streaming operations |
+| Real-time Mode (Spark 4.1.0 and later) | Millisecond scale | Exactly-once | Stateless queries; since Spark 4.3.0 also deduplication, aggregation and JVM `transformWithState` |
+| Continuous Processing (experimental) | About 1 ms | At-least-once | Map-like operations only; the documentation calls it legacy and points to Real-time Mode |
+
+In Real-time Mode, the trigger duration (default 5 minutes) is mainly a checkpoint interval, not a latency target; records are processed and emitted as they arrive.[^ss-rtm]
+
+## Comparison with batch processing
+
+|  | Batch processing | Stream processing |
+| --- | --- | --- |
+| Input | Bounded; all data present at start | Unbounded; data keeps arriving |
+| Completeness | Known when the job starts | Estimated, usually with a watermark |
+| Output | Produced once, at the end | Produced incrementally and updated |
+| Failure recovery | Rerun the job | Restart from a checkpoint and replay the source |
+
+The boundary is not strict. Structured Streaming's available-now trigger processes all data present at start and then stops, which runs a streaming query as an incremental batch job.[^ss-apis] In a [streaming lakehouse](/wiki/Streaming_lakehouse), the same table is written by a stream and read by batch queries.
+
+## See also
+
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Watermark](/wiki/Watermark)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Streaming lakehouse](/wiki/Streaming_lakehouse)
+- [Spark Streaming (DStreams)](/wiki/Spark_Streaming_(DStreams))
+- [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines)
+
+## References
+
+[^flink-arch]: [What is Apache Flink? Architecture](https://flink.apache.org/what-is-flink/flink-architecture/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^dataflow]: Tyler Akidau, Robert Bradshaw, Craig Chambers, Slava Chernyak, Rafael J. Fernández-Moctezuma, Reuven Lax, Sam McVeety, Daniel Mills, Frances Perry, Eric Schmidt, Sam Whittle. [The Dataflow Model: A Practical Approach to Balancing Correctness, Latency, and Cost in Massive-Scale, Unbounded, Out-of-Order Data Processing](https://www.vldb.org/pvldb/vol8/p1792-Akidau.pdf). *Proceedings of the VLDB Endowment, Vol. 8, No. 12*, 2015. Retrieved 2026-11-22.
+[^flink-learn]: [Learn Flink: Hands-On Training](https://nightlies.apache.org/flink/flink-docs-stable/docs/learn-flink/overview/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^flink-time]: [Timely Stream Processing](https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/time/). *Apache Software Foundation (Apache Flink 2.3 documentation)*. Retrieved 2026-11-22.
+[^kstreams]: [Kafka Streams Core Concepts](https://kafka.apache.org/44/streams/core-concepts/). *Apache Software Foundation (Apache Kafka 4.4 documentation)*. Retrieved 2026-11-22.
+[^ss-apis]: [Structured Streaming: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ss-rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ss-index]: [Structured Streaming Programming Guide (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/index.html). *Apache Software Foundation*. Retrieved 2026-11-22.

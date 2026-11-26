@@ -1,0 +1,102 @@
+---
+title: "Spark.mllib (RDD-based API)"
+displayTitle: "spark.mllib (RDD-based API)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software" name="spark.mllib (RDD-based API)">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 0.8.0 (as MLlib)</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala, with Python and Java APIs</Field>
+  <Field name="type">Machine learning API (RDD-based)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[MLlib: RDD-based API guide](https://spark.apache.org/docs/4.3.0/mllib-guide.html)</Field>
+  <Field name="repo">[github.com/apache/spark (mllib/.../mllib)](https://github.com/apache/spark/tree/v4.3.0/mllib/src/main/scala/org/apache/spark/mllib)</Field>
+  <Field name="related">[MLlib](/wiki/MLlib), [RDD](/wiki/RDD), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (docs/ml-guide.md, docs/mllib-guide.md, docs/ml-migration-guide.md, docs/mllib-pmml-model-export.md, python/pyspark/mllib/), the v2.0.0 to v2.4.0 tags of docs/ml-guide.md, the Spark 2.0.0 and 4.0.0 release notes and SPARK-30934</Verified>
+
+<Status level="maintenance" since="Apache Spark 2.0.0">Use the DataFrame-based `spark.ml` API of [MLlib](/wiki/MLlib) instead. Only bug fixes are accepted. The package as a whole is not deprecated in any release up to 4.3.0 and is still included.[^guide][^r200]</Status>
+
+**spark.mllib** is the original, [RDD](/wiki/RDD)-based API of [MLlib](/wiki/MLlib), the machine learning library of [Apache Spark](/wiki/Apache_Spark), found in the `org.apache.spark.mllib` package in Scala and Java and `pyspark.mllib` in Python.[^rddguide] Since Spark 2.0 it has been in maintenance mode: it receives bug fixes but no new features, and the DataFrame-based `spark.ml` package is the primary machine learning API.[^guide][^r200] The MLlib guide states that neither API is deprecated; spark.mllib is still part of Spark 4.3.0, but it cannot be used from a [Spark Connect](/wiki/Spark_Connect) client.[^guide][^connect]
+
+## Status
+
+**Is spark.mllib deprecated?** No, as a package it is in maintenance mode, not deprecated.
+
+- **Maintenance mode since 2.0.** The Spark 2.0.0 release notes say the DataFrame-based API became the primary API and the RDD-based API entered maintenance mode.[^r200] The MLlib guide at v4.3.0 says that MLlib still supports the RDD-based API with bug fixes and will not add new features to it.[^guide] The Python package docstring says the same for `pyspark.mllib`.[^pyinit]
+- **Planned removal that did not happen.** The MLlib guide in Spark 2.0.0 through 2.4.0 said the RDD-based API was "expected to be removed in Spark 3.0".[^guide240] The guide update for the 3.0 release removed that sentence, and the package was not removed. The package's Scala documentation at v4.3.0 still says the package "will be deprecated" once the DataFrame-based API reaches feature parity, while the MLlib guide says that parity was reached in the Spark 2.x releases; no release has deprecated it.[^n1][^guide][^jira30934]
+- **Individual APIs deprecated and removed.** Some classes and methods in the package were deprecated and later removed. Spark 3.0 removed, among others, the Scala classes `LogisticRegressionWithSGD`, `LinearRegressionWithSGD`, `LassoWithSGD` and `RidgeRegressionWithSGD` (deprecated in 2.0), and the `runs` parameter of `KMeans.train` (deprecated in 2.1).[^migration] For the SGD classes, removal meant the public API: at v4.3.0 the Scala classes remain with constructors private to the `mllib` package, used by the PySpark wrappers.[^n2] Those PySpark wrappers are still public in 4.3.0, marked deprecated since 2.0.0, and emit a `FutureWarning`.[^n3]
+- **No Spark Connect.** The Spark Connect documentation lists RDD and `SparkContext` as unsupported, so spark.mllib code needs a classic Spark application.[^connect] The DataFrame-based `pyspark.ml` API works on Spark Connect from Spark 4.0.0.[^n4]
+
+## What the package contains
+
+The RDD-based guide at v4.3.0 covers data types (local vectors and matrices, `LabeledPoint`, distributed matrices), basic statistics, linear models, naive Bayes, decision trees and tree ensembles, isotonic regression, alternating least squares, clustering (including streaming k-means), dimensionality reduction (SVD and PCA), feature extraction, frequent pattern mining (FP-growth, association rules, PrefixSpan), evaluation metrics, PMML model export and low-level optimization (SGD and L-BFGS).[^rddguide] Export to the Predictive Model Markup Language (PMML) is documented for spark.mllib models.[^n5]
+
+## spark.mllib compared with spark.ml
+
+|  | spark.mllib | spark.ml |
+| --- | --- | --- |
+| Input | [RDD](/wiki/RDD) of `LabeledPoint` or vectors | [DataFrame](/wiki/DataFrame) with a vector column |
+| Training call | Static `train` methods on algorithm objects | `Estimator.fit`, usually inside a `Pipeline` |
+| Vector type | `org.apache.spark.mllib.linalg.Vector` | `org.apache.spark.ml.linalg.Vector` |
+| New features | None (maintenance mode) | Yes |
+| Spark Connect | Not supported | Supported from Spark 4.0.0 (Python) |
+
+The two vector types are separate since Spark 2.0; the RDD-based API still depends on `spark.mllib.linalg`. To move data between them, the migration guide points to `asML` on an mllib vector or matrix, `Vectors.fromML` and `Matrices.fromML`, and the column converters in `MLUtils`.[^migration]
+
+## Migrating to spark.ml
+
+The Spark 3.0 entries in the migration guide name replacements for the removed classes: for example, `org.apache.spark.ml.classification.LogisticRegression` (or `LogisticRegressionWithLBFGS`) instead of `LogisticRegressionWithSGD`, and `org.apache.spark.ml.regression.LinearRegression` with `elasticNetParam` set to 1.0 instead of `LassoWithSGD`. The guide notes that default regularization differs: `regParam` was 0.01 for `LassoWithSGD` and `RidgeRegressionWithSGD`, but is 0.0 for `LinearRegression`.[^migration]
+
+## Example
+
+The same logistic regression in both APIs, in a classic PySpark session where `spark` is the `SparkSession`:
+
+```python
+# spark.mllib (RDD-based): classic mode only
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS
+from pyspark.mllib.regression import LabeledPoint
+
+rdd = spark.sparkContext.parallelize([
+    LabeledPoint(0.0, [1.1, 0.1]), LabeledPoint(1.0, [2.0, 1.0]),
+    LabeledPoint(0.0, [1.3, -0.5]), LabeledPoint(1.0, [2.2, 1.5])])
+old_model = LogisticRegressionWithLBFGS.train(rdd, iterations=10)
+
+# spark.ml (DataFrame-based): also runs on Spark Connect from 4.0.0
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.linalg import Vectors
+
+df = spark.createDataFrame([
+    (0.0, Vectors.dense(1.1, 0.1)), (1.0, Vectors.dense(2.0, 1.0)),
+    (0.0, Vectors.dense(1.3, -0.5)), (1.0, Vectors.dense(2.2, 1.5))],
+    ["label", "features"])
+new_model = LogisticRegression(maxIter=10).fit(df)
+```
+
+## See also
+
+- [MLlib](/wiki/MLlib)
+- [RDD](/wiki/RDD)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Streaming (DStreams)](/wiki/Spark_Streaming_(DStreams))
+
+## References
+
+[^guide]: [MLlib: Main Guide (docs/ml-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/ml-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r200]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^rddguide]: [MLlib: RDD-based API (docs/mllib-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/mllib-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^pyinit]: [python/pyspark/mllib/__init__.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/mllib/__init__.py). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^guide240]: [MLlib: Main Guide (docs/ml-guide.md at v2.4.0)](https://github.com/apache/spark/blob/v2.4.0/docs/ml-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n1]: [mllib/package.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/mllib/src/main/scala/org/apache/spark/mllib/package.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira30934]: [SPARK-30934: ML, GraphX 3.0 QA: Programming guide update and migration guide](https://issues.apache.org/jira/browse/SPARK-30934). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^migration]: [Migration Guide: MLlib (docs/ml-migration-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/ml-migration-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [PythonMLLibAPI.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/mllib/src/main/scala/org/apache/spark/mllib/api/python/PythonMLLibAPI.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [python/pyspark/mllib/classification.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/mllib/classification.py). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [SPARK-50812: Support pyspark.ml on Connect](https://issues.apache.org/jira/browse/SPARK-50812). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n5]: [PMML model export (docs/mllib-pmml-model-export.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/mllib-pmml-model-export.md). *Apache Software Foundation*. Retrieved 2026-11-22.

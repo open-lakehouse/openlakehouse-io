@@ -1,0 +1,121 @@
+---
+title: "User-defined function (Spark)"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">UDF, Spark UDF, PySpark UDF</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Python UDFs since Spark 1.3.0 (`pyspark.sql.functions.udf`)</Field>
+  <Field name="key_parts">Function body, return type, evaluation type (JVM, pickled Python, Arrow-optimized Python, pandas, Arrow)</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Pandas UDF](/wiki/Pandas_UDF), [Arrow-optimized Python UDF](/wiki/Arrow-optimized_Python_UDF), [Python UDTF](/wiki/Python_UDTF), [Apache Arrow](/wiki/Apache_Arrow), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (python/pyspark/sql/functions/builtin.py, python/pyspark/sql/pandas/functions.py, SQLConf.scala, the PySpark Arrow, Arrow UDF and UDF user guides, the PySpark migration guide, docs/sql-ref-functions-udf-scalar.md, docs/sql-ref-syntax-ddl-create-sql-function.md), the Spark 2.3.0, 3.5.0, 4.1.0, 4.2.0 and 4.3.0 release notes, and two Databricks engineering blog posts</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **user-defined function** (**UDF**) is a function written by the user in Scala, Java, Python or SQL and registered with Spark so that it can be called on columns of a [DataFrame](/wiki/DataFrame) or in a Spark SQL query, like a built-in function.[^scalar] A scalar UDF acts on one row and returns one value.[^scalar] PySpark offers several kinds of Python UDF that differ in how data moves between the Java virtual machine (JVM) and the Python worker: pickled Python UDFs, [Arrow-optimized Python UDFs](/wiki/Arrow-optimized_Python_UDF), [pandas UDFs](/wiki/Pandas_UDF) and Arrow UDFs. The choice decides how much serialization overhead each call pays.[^guide]
+
+## What kinds of UDF does Spark support?
+
+The PySpark user guide for Spark 4.3.0 names three main categories of Python UDF: scalar Python UDFs, pandas UDFs and Arrow UDFs.[^guide]
+
+- **Scalar Python UDFs** take and return Python objects one row at a time. The objects are serialized with pickle (through cloudpickle) or with [Apache Arrow](/wiki/Apache_Arrow).[^guide]
+- **Pandas UDFs**, also called vectorized UDFs, take and return pandas `Series` or `DataFrame` objects and work on a batch of rows at a time; Arrow carries the data.[^guide]
+- **Arrow UDFs** take and return `pyarrow.Array` objects (or iterators of them) directly, without converting to pandas.[^guide][^arrowudf]
+
+JVM UDFs are written in Scala or Java with `udf(...)` and `spark.udf.register`, and the class `UserDefinedFunction` provides `asNonNullable`, `asNondeterministic` and `withName`.[^scalar] Spark SQL also has SQL UDFs, created with `CREATE FUNCTION ... RETURN`, whose body is a SQL expression or query and which can return a scalar or a table.[^sqlfn] Functions that return a table from Python are [Python user-defined table functions](/wiki/Python_UDTF).
+
+## Spark UDF types compared
+
+|  | JVM UDF (Scala/Java) | Pickled Python UDF | Arrow-optimized Python UDF | Pandas UDF | Arrow UDF |
+| --- | --- | --- | --- | --- | --- |
+| How it is defined | `udf(...)`, `spark.udf.register`[^scalar] | `@udf(..., useArrow=False)` or with `spark.sql.execution.pythonUDF.arrow.enabled=false`[^upgrade] | `@udf` (default since Spark 4.2) or `useArrow=True`[^upgrade] | `@pandas_udf` with pandas type hints[^arrowpandas] | `@arrow_udf`, or `@udf` with `pyarrow.Array` type hints[^arrowudf] |
+| Where the code runs | Inside the executor JVM | Python worker process | Python worker process | Python worker process | Python worker process |
+| Unit of work for the function | One row | One row[^guide] | One row; data moves in Arrow batches[^arrowpandas] | A batch, as pandas `Series` or `DataFrame`[^guide] | A batch, as `pyarrow.Array`[^arrowudf] |
+| JVM to Python serialization | None | Pickle (cloudpickle)[^guide] | Arrow[^guide] | Arrow[^guide] | Arrow, with no pandas conversion[^arrowudf] |
+| Available since | Spark 1.3.0 (`functions.udf` in Scala)[^scalafn] | Spark 1.3.0[^udfapi] | Spark 3.5.0 (SPARK-40307); default in 4.2.0[^r350][^r420] | Spark 2.3.0[^pandasapi] | Spark 4.1.0 (SPARK-52214)[^r410] |
+
+## Which UDF type is fastest?
+
+The performance tiers follow from how much work each call spends moving data between the JVM and Python. A JVM UDF runs in the executor JVM and needs no transfer to Python. Every Python UDF runs in a separate Python worker process, so its input and output must cross from the JVM to Python and back; PySpark uses Arrow to make that transfer efficient.[^arrowpandas]
+
+Among Python UDFs, pickled UDFs pay the most serialization overhead. The PySpark user guide says they rely on cloudpickle and meet performance bottlenecks with large inputs and outputs.[^guide] When Databricks engineers introduced pandas UDFs for Spark 2.3 in 2017, they wrote that row-at-a-time Python UDFs "suffer from high serialization and invocation overhead", which led many pipelines to write UDFs in Java or Scala and call them from Python; their benchmark found pandas UDFs 3 to over 100 times faster than row-at-a-time UDFs.[^blog2017]
+
+Arrow-optimized Python UDFs keep the row-at-a-time function but replace pickle with Arrow for the transfer. In a Databricks benchmark for Spark 3.5, an Arrow-optimized Python UDF ran about 1.6 times faster than a pickled UDF on one transformation, and about 1.9 times faster when UDFs were chained, on a 32 GB dataset.[^blog2023] These are measured results for one cluster and dataset, not general guarantees.
+
+Pandas UDFs and Arrow UDFs are vectorized: the function receives a whole batch, so library code (pandas or PyArrow compute functions) can process many rows per call. Arrow UDFs keep the columnar layout end to end and avoid the extra copies of a pandas conversion.[^arrowudf] The batch size for Arrow transfers is `spark.sql.execution.arrow.maxRecordsPerBatch`, default 10,000 rows.[^arrowpandas]
+
+A Python UDF is opaque to the Spark optimizer. Spark 4.3.0 adds an experimental option, `spark.sql.experimental.optimizer.transpilePyUDFs` (default `false`), that tries to rewrite simple Python UDFs as Catalyst expressions; it requires ANSI mode and does not yet work with [Spark Connect](/wiki/Spark_Connect).[^sqlconf][^r430]
+
+## How to write a UDF in PySpark
+
+The following PySpark example defines the same string function three ways. It runs on Spark 4.3.0 with PyArrow installed.
+
+```python
+import pandas as pd
+import pyarrow as pa
+import pyarrow.compute as pc
+from pyspark.sql.functions import udf, pandas_udf, arrow_udf
+
+# Scalar Python UDF: one row per call (Arrow-optimized by default since Spark 4.2)
+@udf(returnType="int")
+def slen(s: str) -> int:
+    return len(s)
+
+# Pandas UDF: one pandas Series per batch
+@pandas_udf("string")
+def upper_pd(s: pd.Series) -> pd.Series:
+    return s.str.upper()
+
+# Arrow UDF: one pyarrow.Array per batch
+@arrow_udf("string")
+def upper_pa(s: pa.Array) -> pa.Array:
+    return pc.ascii_upper(s)
+
+df = spark.createDataFrame([("John Doe",)], ["name"])
+df.select(slen("name"), upper_pd("name"), upper_pa("name")).show()
+```
+
+A Python UDF can be registered for SQL with `spark.udf.register("slen", slen)` and then called as `SELECT slen(name) FROM t`.[^udfapi]
+
+## What changed in Spark 4.x?
+
+- **Spark 4.0.0** added keyword arguments for Python UDFs.[^udfapi]
+- **Spark 4.1.0** added Arrow UDFs (`arrow_udf`, SPARK-52214) and Arrow UDTFs (`arrow_udtf`, SPARK-52979). From 4.1.0, `udf` also creates a vectorized UDF when the type hints match a pandas UDF or Arrow UDF pattern and `useArrow` is not set.[^r410][^udfapi]
+- **Spark 4.2.0** made regular Python UDFs Arrow-optimized by default: `spark.sql.execution.pythonUDF.arrow.enabled` now defaults to `true` (SPARK-54555). Setting it to `false` restores pickled UDFs.[^upgrade][^r420]
+
+The pandas UDF API dates from Spark 2.3.0.[^pandasapi] Arrow-optimized Python UDFs were introduced in Spark 3.5.0.[^r350]
+
+## Limitations
+
+SQL boolean expressions do not short-circuit around a UDF: in `WHERE cond AND udf(x)` the UDF may be called on every row regardless of `cond`, so a UDF that can fail on some inputs must handle them itself.[^arrowudf]
+
+## See also
+
+- [Pandas UDF](/wiki/Pandas_UDF)
+- [Arrow-optimized Python UDF](/wiki/Arrow-optimized_Python_UDF)
+- [Python UDTF](/wiki/Python_UDTF)
+- [Python data source API (Spark)](/wiki/Python_data_source_API_(Spark))
+- [Apache Arrow](/wiki/Apache_Arrow)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Encoder (Spark)](/wiki/Encoder_(Spark))
+
+## References
+
+[^scalar]: [Scalar User Defined Functions (UDFs) (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-functions-udf-scalar.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^guide]: [Chapter 5: Unleashing UDFs & UDTFs (PySpark 4.3.0 user guide)](https://spark.apache.org/docs/4.3.0/api/python/user_guide/udfandudtf.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^arrowudf]: [Arrow Python UDFs (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/tutorial/sql/arrow_python_udf.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlfn]: [CREATE FUNCTION (SQL) (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-ddl-create-sql-function.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^upgrade]: [Upgrading PySpark (PySpark 4.3.0 migration guide)](https://spark.apache.org/docs/4.3.0/api/python/migration_guide/pyspark_upgrade.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^arrowpandas]: [Apache Arrow in PySpark (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/tutorial/sql/arrow_pandas.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^scalafn]: [sql/api/src/main/scala/org/apache/spark/sql/functions.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/api/src/main/scala/org/apache/spark/sql/functions.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^udfapi]: [python/pyspark/sql/functions/builtin.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r420]: [Spark Release 4.2.0](https://spark.apache.org/releases/spark-release-4-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pandasapi]: [python/pyspark/sql/pandas/functions.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/pandas/functions.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r410]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^blog2017]: [Introducing Pandas UDF for PySpark](https://www.databricks.com/blog/2017/10/30/introducing-vectorized-udfs-for-pyspark.html). *Databricks*, 2017-10-30. Retrieved 2026-11-23.
+[^blog2023]: [Arrow-optimized Python UDFs in Apache Spark 3.5](https://www.databricks.com/blog/arrow-optimized-python-udfs-apache-sparktm-35). *Databricks*, 2023-11-06. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r430]: [Spark Release 4.3.0](https://spark.apache.org/releases/spark-release-4-3-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.

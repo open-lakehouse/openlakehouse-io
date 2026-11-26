@@ -1,0 +1,105 @@
+---
+title: "Spark standalone cluster manager"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 0.6.0</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala</Field>
+  <Field name="type">Cluster manager bundled with Apache Spark</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[Spark Standalone Mode](https://spark.apache.org/docs/4.3.0/spark-standalone.html)</Field>
+  <Field name="repo">[github.com/apache/spark (core/.../deploy)](https://github.com/apache/spark/tree/v4.3.0/core/src/main/scala/org/apache/spark/deploy)</Field>
+  <Field name="related">[Spark on YARN](/wiki/Spark_on_YARN), [Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [spark-submit](/wiki/Spark-submit)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/spark-standalone.md, docs/cluster-overview.md, docs/submitting-applications.md, docs/core-migration-guide.md, docs/job-scheduling.md) and the Spark 0.6.0 release notes</Verified>
+
+The **Spark standalone cluster manager** is the cluster manager that ships with [Apache Spark](/wiki/Apache_Spark): a master process and one worker process per node, started with scripts in Spark's `sbin` directory, that allocate executors to Spark applications without an external resource manager such as YARN or Kubernetes.[^standalone][^overview] It needs only a Spark distribution on each node, and it offers high availability through standby masters coordinated by Apache ZooKeeper.[^standalone] The standalone cluster manager is one of the three cluster managers that Spark 4.3.0 supports, with [Hadoop YARN](/wiki/Spark_on_YARN) and [Kubernetes](/wiki/Spark_on_Kubernetes).[^overview]
+
+## Is the standalone cluster manager deprecated?
+
+No. The standalone cluster manager is not deprecated in Spark 4.3.0. The Spark 4.3.0 cluster mode overview lists it as a supported cluster manager, and recent releases still change it: Spark 4.1 turned on the master's REST API by default, and Spark 4.3 changed which environment variables are forwarded to a driver submitted in cluster mode.[^overview][^coremig] Only individual settings have been deprecated, such as `SPARK_WORKER_INSTANCES`; the migration guide recommends one worker per node with several executors instead.[^coremig]
+
+## History
+
+Spark 0.6.0 added the standalone deploy mode, so that a cluster could be launched with only Java and Spark installed on each machine. At that time Spark otherwise ran on Apache Mesos.[^n1] Mesos support was later removed from Spark; see [Apache Mesos support in Spark](/wiki/Apache_Mesos_support_in_Spark).
+
+## How does a standalone cluster work?
+
+A standalone cluster has one active **master** and any number of **workers**. The master tracks the workers and their free cores and memory, and launches executors on them for each application. Its web UI is on port 8080 by default, and it accepts applications at a `spark://HOST:PORT` URL, port 7077 by default. Each worker has its own web UI on port 8081.[^standalone]
+
+The cluster is started either by hand (`sbin/start-master.sh`, then `sbin/start-worker.sh spark://HOST:7077` on each node) or with launch scripts that read a `conf/workers` file of host names and reach each host over SSH. `sbin/start-all.sh` starts the master and all workers; `sbin/start-connect-server.sh` starts a [Spark Connect](/wiki/Spark_Connect) server on the local machine.[^standalone] The daemons can also all run on one machine for testing.[^standalone]
+
+Executor placement depends on `spark.executor.cores`. When it is set, the master can start several executors of one application on the same worker if the worker has enough cores and memory. When it is not set, each executor takes all available cores on its worker, so one application gets at most one executor per worker in each scheduling round.[^standalone] `--total-executor-cores` caps the total cores an application takes.[^standalone]
+
+## How are applications submitted?
+
+Applications are submitted with [spark-submit](/wiki/Spark-submit) and `--master spark://HOST:7077`. In `client` mode the driver runs in the submitting process; in `cluster` mode the master launches the driver on one of the workers and the client exits once submission is done.[^standalone] The Spark 4.3.0 documentation states that standalone cluster mode is not supported for Python applications, so PySpark jobs on a standalone cluster run in client mode.[^submit]
+
+```bash
+# Start a one-node cluster and run a PySpark job on it (client mode)
+./sbin/start-master.sh
+./sbin/start-worker.sh spark://$(hostname):7077
+./bin/spark-submit \
+  --master spark://$(hostname):7077 \
+  --total-executor-cores 4 \
+  --executor-memory 2g \
+  examples/src/main/python/pi.py 100
+```
+
+In cluster mode, `--supervise` makes the master restart the driver if it exits with a non-zero code.[^standalone] The master also has a REST API for submitting, querying and killing drivers on `spark.master.rest.port` (default 6066). Since Spark 4.1 the master starts this REST API by default; `spark.master.rest.enabled=false` restores the earlier behavior.[^standalone][^coremig]
+
+## How does high availability work?
+
+By default the standalone master is a single point of failure for scheduling: `spark.deploy.recoveryMode` is `NONE`.[^standalone] Spark 4.3.0 offers these recovery modes:[^standalone]
+
+| `spark.deploy.recoveryMode` | How it works | Use |
+| --- | --- | --- |
+| `ZOOKEEPER` | Several masters connect to the same ZooKeeper ensemble (`spark.deploy.zookeeper.url`, `spark.deploy.zookeeper.dir`). One is elected leader; if it dies, a standby is elected and recovers the state. | Production high availability |
+| `FILESYSTEM` | The master writes application and worker registrations to `spark.deploy.recoveryDirectory` and recovers them when it restarts. | Single-node recovery after a restart |
+| `ROCKSDB` | Like `FILESYSTEM`, but the state is kept in RocksDB. | Single-node recovery |
+| `CUSTOM` | A class given in `spark.deploy.recoveryMode.factory` provides the persistence. | Custom stores |
+
+With ZooKeeper, failover from the time the leader goes down takes between one and two minutes according to the Spark documentation, and it affects only the scheduling of new applications; applications already running continue.[^standalone] Applications and workers list every master in the URL, for example `spark://host1:7077,host2:7077`, so that they can find the current leader at registration.[^submit] If several masters run without a correct ZooKeeper configuration, each one considers itself the leader and they schedule independently.[^standalone]
+
+## When is the standalone cluster manager used today?
+
+The Spark documentation describes the standalone manager as a simple cluster manager included with Spark that makes it easy to set up a cluster.[^overview] It fits cases where Spark is the only workload on a set of machines and no YARN or Kubernetes cluster is available, single-machine test clusters, and hosting a [Spark Connect](/wiki/Spark_Connect) server started with the bundled launch scripts.[^standalone] The standalone manager supports dynamic allocation, and workers started with `spark.shuffle.service.enabled=true` run the external shuffle service. Because an executor takes all of a worker's cores when `spark.executor.cores` is not set, the Spark documentation recommends setting it explicitly when dynamic allocation is on.[^jobsched]
+
+Security is off by default. The Spark documentation warns that a standalone cluster open to an untrusted network must have authentication configured, and notes that the standalone manager lacks the fine-grained access control of other resource managers.[^standalone]
+
+## Standalone compared with YARN and Kubernetes
+
+|  | Spark standalone | [Spark on YARN](/wiki/Spark_on_YARN) | [Spark on Kubernetes](/wiki/Spark_on_Kubernetes) |
+| --- | --- | --- | --- |
+| Master URL | `spark://HOST:7077` | `yarn` (address from the Hadoop configuration) | `k8s://HOST:PORT` |
+| Resource manager | Spark master and workers | YARN ResourceManager and NodeManagers | Kubernetes API server; driver and executors run in pods |
+| Default `spark.executor.cores` | All available cores on the worker | 1 | 1 |
+
+Sources: the Spark 4.3.0 standalone, YARN, Kubernetes and submission guides.[^standalone][^k8s][^yarn][^submit][^ssargs][^config]
+
+## See also
+
+- [Spark on YARN](/wiki/Spark_on_YARN)
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [spark-submit](/wiki/Spark-submit)
+- [Apache Mesos support in Spark](/wiki/Apache_Mesos_support_in_Spark)
+- [Executor](/wiki/Executor)
+- [Driver (Apache Spark)](/wiki/Driver_(Apache_Spark))
+
+## References
+
+[^standalone]: [Spark Standalone Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-standalone.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^overview]: [Cluster Mode Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/cluster-overview.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^coremig]: [Migration Guide: Spark Core (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/core-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Spark Release 0.6.0](https://spark.apache.org/releases/spark-release-0-6-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^submit]: [Submitting Applications (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/submitting-applications.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^yarn]: [Running Spark on YARN (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-yarn.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ssargs]: [SparkSubmitArguments.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/deploy/SparkSubmitArguments.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.

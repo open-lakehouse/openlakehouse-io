@@ -1,0 +1,86 @@
+---
+title: "Velox"
+categories: ["Query engines", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">Meta, with contributors from other companies</Field>
+  <Field name="initial_release">2021 (GitHub repository created)</Field>
+  <Field name="written_in">C++</Field>
+  <Field name="type">Execution engine library</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[velox-lib.io](https://velox-lib.io)</Field>
+  <Field name="repo">[github.com/facebookincubator/velox](https://github.com/facebookincubator/velox)</Field>
+  <Field name="related">[Apache Gluten](/wiki/Apache_Gluten), [Apache Spark](/wiki/Apache_Spark), [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)), [Apache DataFusion Comet](/wiki/Apache_DataFusion_Comet)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the facebookincubator/velox README, LICENSE, repository metadata and tags, the VLDB 2022 Velox paper, Meta's "Introducing Velox" post, the apache/gluten README (main and v1.7.0) and Velox getting-started guide at v1.7.0, and the prestodb/presto presto-native-execution README</Verified>
+
+**Velox** is an open source C++ library that provides the execution layer of a data processing engine: columnar vectors, vectorized expression evaluation, functions and relational operators, which other systems embed instead of writing their own.[^readme] Meta created Velox, and it is developed with IBM/Ahana, Intel, Voltron Data, Microsoft, ByteDance and other companies under the Apache License 2.0.[^readme] For [Apache Spark](/wiki/Apache_Spark), Velox is one of the two native backends of [Apache Gluten](/wiki/Apache_Gluten), a plugin that offloads Spark SQL execution from the JVM to native code.[^gluten]
+
+## What does Velox provide?
+
+Velox takes a fully optimized query plan as input and runs it. It does not include a SQL parser, a DataFrame layer or a query optimizer, so it is meant for developers who build or speed up engines, not for end users.[^readme]
+
+The Velox README lists these components:[^readme]
+- **Type**: a type system with scalar, complex and nested types such as structs, maps and arrays.
+- **Vector**: an Arrow-compatible columnar memory layout with flat, dictionary, constant and sequence (run-length) encodings, lazy materialization and out-of-order writes.
+- **Expression evaluation**: a vectorized engine that evaluates expressions on vector-encoded data.
+- **Functions**: vectorized scalar, aggregate and window functions that follow Presto and Spark semantics.
+- **Operators**: scans, writes, projections, filters, grouping, ordering, shuffle and exchange, hash, merge and nested loop joins, unnest and others.
+- **I/O**: a connector interface for data sources and sinks, with ORC/DWRF, Parquet and Nimble file formats and storage adapters for S3, HDFS, GCS, ABFS and local files.
+- **Network serializers**: wire formats including PrestoPage and Spark's UnsafeRow.
+- **Resource management**: memory arenas, buffer management, tasks, drivers, thread pools, spilling and caching.
+
+The Velox source tree keeps Spark and Presto function sets in separate directories, `velox/functions/sparksql` and `velox/functions/prestosql`, so that each engine gets its own SQL dialect behavior.[^funcs] Developers can add their own types, functions, operators, file formats, storage adapters and serializers.[^readme]
+
+## How is Velox used with Apache Spark?
+
+Velox runs Spark SQL through Apache Gluten. Gluten converts Spark's physical plan into a Substrait plan, passes it over JNI to a native backend, which builds and runs native operators, and returns results to Spark as columnar batches. Operators that the backend does not support fall back to vanilla Spark, with columnar-to-row and row-to-columnar conversions between them.[^gluten] Gluten v1.7.0 supports two backends, ClickHouse and Velox, and Spark 3.3, 3.4, 3.5, 4.0 and 4.1.[^gluten]
+
+A Spark application turns on the Gluten Velox backend with the Gluten plugin, off-heap memory and Gluten's columnar shuffle manager. The configuration below is taken from the Gluten v1.7.0 Velox guide; the off-heap size is an example value.[^glutenvelox]
+
+```
+spark.plugins            org.apache.gluten.GlutenPlugin
+spark.memory.offHeap.enabled  true
+spark.memory.offHeap.size     20g
+spark.shuffle.manager    org.apache.spark.shuffle.sort.ColumnarShuffleManager
+```
+
+Gluten's main branch also documents an experimental GPU mode in which Velox plan nodes are replaced by operators built on NVIDIA cuDF; see [GPU acceleration in Spark](/wiki/GPU_acceleration_in_Spark).[^glutengpu] For other native engines for Spark, such as [Apache DataFusion Comet](/wiki/Apache_DataFusion_Comet), see [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)).
+
+## Which other engines use Velox?
+
+Prestissimo, the native worker of Presto in the `presto-native-execution` directory of the prestodb/presto repository, implements the Presto worker REST API in C++ on top of Velox.[^prestissimo] Meta's March 2023 post describes Prestissimo as replacing Presto Java workers with a Velox-based C++ process, and names Spark (through Gluten) and TorchArrow, a PyTorch data preprocessing library, as the other main integrations at the time.[^meta]
+
+## What is the history of Velox?
+
+The facebookincubator/velox repository on GitHub was created on 23 July 2021.[^repo] Meta engineers described the design in the paper "Velox: Meta's Unified Execution Engine", published in the Proceedings of the VLDB Endowment, volume 15 (2022).[^paper] Meta's 2023 post states that Velox was already being integrated with more than a dozen data systems at Meta, including Presto and Spark.[^meta]
+
+Velox does not publish GitHub releases with version numbers; its repository uses date-based tags such as `v2026.10.23.00`.[^tags] Velox requires at least GCC 11 or Clang 15 to build.[^readme]
+
+## How does Velox differ from a query engine?
+
+Velox is a library, not a complete query engine. A system such as Spark or Presto keeps its own SQL parsing, optimization, scheduling and cluster management, and hands Velox the plan fragment to run on one machine.[^readme][^meta] Without a plugin such as Gluten, Spark runs plans on its own JVM execution layer, described in [Project Tungsten](/wiki/Project_Tungsten).
+
+## See also
+
+- [Apache Gluten](/wiki/Apache_Gluten)
+- [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))
+- [Apache DataFusion Comet](/wiki/Apache_DataFusion_Comet)
+- [GPU acceleration in Spark](/wiki/GPU_acceleration_in_Spark)
+- [Project Tungsten](/wiki/Project_Tungsten)
+- [Apache Spark](/wiki/Apache_Spark)
+
+## References
+
+[^readme]: [Velox README](https://github.com/facebookincubator/velox/blob/main/README.md). *GitHub*. Retrieved 2026-11-23.
+[^gluten]: [Apache Gluten README (v1.7.0)](https://github.com/apache/gluten/blob/v1.7.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^funcs]: [velox/functions](https://github.com/facebookincubator/velox/tree/main/velox/functions). *GitHub*. Retrieved 2026-11-23.
+[^glutenvelox]: [Gluten Velox backend getting started (v1.7.0)](https://github.com/apache/gluten/blob/v1.7.0/docs/get-started/Velox.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^glutengpu]: [GPU Acceleration in Velox/Gluten (VeloxGPU.md, main branch)](https://github.com/apache/gluten/blob/main/docs/backends/velox/get-started/VeloxGPU.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^prestissimo]: [Prestissimo: C++ Presto Worker Implementation using Velox](https://github.com/prestodb/presto/blob/master/presto-native-execution/README.md). *GitHub*. Retrieved 2026-11-23.
+[^meta]: [Introducing Velox: An open source unified execution engine](https://engineering.fb.com/2023/03/09/open-source/velox-open-source-execution-engine/). *Meta*, 2023-03-09. Retrieved 2026-11-23.
+[^repo]: [facebookincubator/velox](https://github.com/facebookincubator/velox). *GitHub*. Retrieved 2026-11-23.
+[^paper]: [Velox: Meta's Unified Execution Engine](https://www.vldb.org/pvldb/vol15/p3372-pedreira.pdf). *VLDB Endowment*. Retrieved 2026-11-23.
+[^tags]: [Tags, facebookincubator/velox](https://github.com/facebookincubator/velox/tags). *GitHub*. Retrieved 2026-11-23.

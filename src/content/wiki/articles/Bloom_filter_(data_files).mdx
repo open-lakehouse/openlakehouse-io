@@ -1,0 +1,78 @@
+---
+title: "Bloom filter (data files)"
+categories: ["Concepts", "Glossary terms", "Apache Parquet"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Parquet bloom filter, ORC bloom filter, split block bloom filter (SBBF)</Field>
+  <Field name="field">Data layout; query optimization</Field>
+  <Field name="key_parts">Per-column filter stored in the file, expected number of distinct values, false positive probability, reader-side check</Field>
+  <Field name="implementations">[Apache Parquet](/wiki/Apache_Parquet), Apache ORC, [Apache Iceberg](/wiki/Apache_Iceberg) (write properties), [Apache Spark](/wiki/Apache_Spark) (reader and writer options)</Field>
+  <Field name="related">[Runtime filter](/wiki/Runtime_filter), [Predicate pushdown](/wiki/Predicate_pushdown), [Apache Parquet](/wiki/Apache_Parquet)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">BloomFilter.md at apache-parquet-format-2.12.0, the parquet-hadoop README at apache-parquet-1.17.0 (the parquet-java version in the Spark 4.3.0 pom.xml), the v4.3.0 tag of apache/spark (docs/sql-data-sources-load-save-functions.md, docs/sql-data-sources-orc.md, pom.xml, SQLConf.scala), the Apache Iceberg 1.12.0 configuration docs, and the Delta Lake protocol at v4.4.1</Verified>
+
+A **bloom filter in a data file** is a compact, per-column structure that a writer stores inside a columnar file, such as an [Apache Parquet](/wiki/Apache_Parquet) or ORC file, so that a reader can tell that a value is definitely not in a row group without reading its data. It answers membership questions with "definitely no" or "probably yes" and never gives false negatives.[^spec] It is not the same thing as the bloom filter that [Apache Spark](/wiki/Apache_Spark) builds during a join, which is a [runtime filter](/wiki/Runtime_filter). This page compares the two and links to the detailed articles.
+
+## Which bloom filter is meant?
+
+|  | Bloom filter in a data file | Runtime bloom filter (Spark) |
+| --- | --- | --- |
+| Built when | Once, when the file is written | For each query, from the filtered side of a join[^rule] |
+| Stored | In the file, one filter per column chunk | In memory, discarded after the query |
+| Keys come from | The column values in that file | The join keys of the creation side |
+| Helps with | Equality and `IN` filters with literal values, on columns where min/max statistics do not separate files | Joins where one side is small and filtered and the other is large |
+| Skips | Row groups that cannot contain the value | Rows of the large side before the shuffle |
+| Turned on by | Writer properties per column (off by default) | `spark.sql.optimizer.runtime.bloomFilter.enabled` (default true)[^sqlconf] |
+| Main article | This page, [Apache Parquet](/wiki/Apache_Parquet), [Predicate pushdown](/wiki/Predicate_pushdown) | [Runtime filter](/wiki/Runtime_filter) |
+
+## Parquet bloom filters
+
+Parquet's bloom filter is the **split block bloom filter** (SBBF), which hashes values with xxHash (XXH64). The specification states its goal as predicate pushdown for high-cardinality columns using less space than dictionaries: minimum and maximum statistics cannot rule out a value that falls inside a column chunk's range, and a bloom filter can.[^spec]
+
+In parquet-java 1.17.0, the version bundled with Spark 4.3.0, the writer and reader properties are:[^pom][^pj]
+- `parquet.bloom.filter.enabled` (default false) turns on writing, for all columns or for one column with `#column.path`.
+- `parquet.bloom.filter.expected.ndv#column.path` sets the expected number of distinct values; without it the filter uses the maximum size.
+- `parquet.bloom.filter.fpp` sets the false positive probability (default 0.01).
+- `parquet.bloom.filter.max.bytes` caps the filter size (default 1048576 bytes).
+- `parquet.filter.bloom.enabled` (default true) lets the reader use bloom filters to skip row groups.
+
+Spark passes these as table or writer options. The Spark documentation shows a table created with `parquet.bloom.filter.enabled#favorite_color` set to true and `parquet.bloom.filter.expected.ndv#favorite_color` set to 1000000:[^loadsave]
+
+```python
+(users.write
+    .option("parquet.bloom.filter.enabled#user_email", "true")
+    .option("parquet.bloom.filter.expected.ndv#user_email", "1000000")
+    .parquet("/data/users"))
+```
+
+## Bloom filters in table formats and ORC
+
+- **[Delta Lake](/wiki/Delta_Lake)** does not define a table-level bloom filter in its open protocol: the Delta transaction log protocol at v4.4.1 has no bloom filter feature, and Delta's data files are Parquet files, so bloom filters in a Delta table are the Parquet column filters inside those files.[^deltaprotocol]
+- **[Apache Iceberg](/wiki/Apache_Iceberg)** sets Parquet bloom filters with the table property `write.parquet.bloom-filter-enabled.column.<col>` (not set by default), together with `write.parquet.bloom-filter-fpp.column.<col>` (default 0.01) and `write.parquet.bloom-filter-max-bytes` (default 1 MB). For ORC files it uses `write.orc.bloom.filter.columns` and `write.orc.bloom.filter.fpp` (default 0.05).[^icebergconf]
+- **Apache ORC** files written by Spark get bloom filters through the `orc.bloom.filter.columns` option.[^n1]
+
+## When do bloom filters in data files help?
+
+A bloom filter helps when a query filters a column for equality (or `IN`) and the minimum and maximum statistics do not exclude files, which is typical for high-cardinality, unsorted columns such as IDs, emails or UUIDs.[^spec] It adds little for range filters, which min/max statistics already handle, or for columns whose chunks are dictionary encoded, because a reader can already rule out values that are not in the dictionary.[^spec] A filter that is too small for the column's real number of distinct values has a high false positive rate, so setting the expected number of distinct values matters.[^pj]
+
+## See also
+
+- [Runtime filter](/wiki/Runtime_filter)
+- [Predicate pushdown](/wiki/Predicate_pushdown)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Dynamic partition pruning](/wiki/Dynamic_partition_pruning)
+
+## References
+
+[^spec]: [Parquet Bloom Filter (apache-parquet-format-2.12.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.12.0/BloomFilter.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rule]: [InjectRuntimeFilter.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/InjectRuntimeFilter.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pom]: [pom.xml (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/pom.xml). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^pj]: [parquet-hadoop README (apache-parquet-1.17.0)](https://github.com/apache/parquet-java/blob/apache-parquet-1.17.0/parquet-hadoop/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^loadsave]: [Generic Load/Save Functions (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-data-sources-load-save-functions.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^deltaprotocol]: [Delta Transaction Log Protocol (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md). *Delta Lake*. Retrieved 2026-11-23.
+[^icebergconf]: [Configuration (Iceberg 1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/docs/docs/configuration.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [ORC Files (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-data-sources-orc.html). *Apache Software Foundation*. Retrieved 2026-11-23.

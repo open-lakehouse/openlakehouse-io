@@ -1,0 +1,100 @@
+---
+title: "GraphX"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 0.9.0 (alpha); stable API since Spark 1.2.0</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala</Field>
+  <Field name="type">Graph processing library (RDD-based)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[GraphX Programming Guide](https://spark.apache.org/docs/4.3.0/graphx-programming-guide.html)</Field>
+  <Field name="repo">[github.com/apache/spark (graphx/)](https://github.com/apache/spark/tree/v4.3.0/graphx)</Field>
+  <Field name="related">[GraphFrames](/wiki/GraphFrames), [Apache Spark](/wiki/Apache_Spark)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (GraphX source and programming guide), the Spark 0.9.0, 1.2.0 and 4.0.0 to 4.3.0 release notes, SPARK-50857 and the October 2024 dev-list vote</Verified>
+
+<Status level="proposed">A dev-list vote to deprecate GraphX passed in October 2024, but the deprecation ticket (SPARK-50857) is still open and Spark 4.3.0 carries no deprecation annotation or notice for GraphX. The vote result described GraphX as not currently maintained and suggested [GraphFrames](/wiki/GraphFrames) as a migration target.[^jira50857]</Status>
+
+**GraphX** is the graph processing library of [Apache Spark](/wiki/Apache_Spark): it extends Spark's resilient distributed dataset (RDD) with a property graph, a directed multigraph with user-defined properties on each vertex and edge, and provides graph operators, a Pregel API and a library of graph algorithms.[^guide] GraphX still ships with Spark 4.3.0, but a 2024 proposal on the Spark dev mailing list noted no meaningful active development in the preceding three years.[^discuss] The Spark community then voted to deprecate it, and as of Spark 4.3.0 that decision has not been applied to the code or documentation.[^vote][^jira50857]
+
+## Status
+
+Whether GraphX is deprecated depends on which source is read, and the sources do not agree.
+
+- **Spark code and documentation (4.3.0):** The `graphx` module at the v4.3.0 tag has no `@deprecated` annotations on its public API, and the GraphX programming guide has no deprecation notice.[^guide] The Spark 4.0.0 to 4.3.0 release notes list no GraphX deprecation; the 4.0.0 notes deprecate SparkR and other APIs, but not GraphX.[^r400]
+- **Spark dev mailing list:** In September 2024 a thread on the Spark dev mailing list proposed deprecating GraphX before the 4.0 branch was cut, noting no meaningful active development for over three years.[^discuss] The vote that followed closed on 7 October 2024 and was declared passed, with two -1 votes. The result email proposed a documentation note saying that GraphX "is not currently maintained and if maintainers are not found may be removed in future minor versions", and recommended GraphFrames or openCypher on Spark as migration targets.[^vote]
+- **JIRA:** SPARK-50857, "Mark GraphX as deprecated", was opened in January 2025 with a link to the vote. It is unresolved and has no fix version.[^jira50857]
+- **GraphFrames documentation:** The GraphFrames project states that GraphX "is deprecated in the upstream Apache Spark and is not maintained anymore", and its quick start says GraphX was deprecated in Spark 4.0.x.[^gfabout][^gfquick] The GraphFrames blog links its statement that GraphX was deprecated to the dev-list discussion thread.[^n1] No Spark 4.x release includes a GraphX deprecation.
+
+In short: the Spark community voted to deprecate GraphX and the vote result described it as unmaintained, but no Spark release up to 4.3.0 marks it deprecated. The GraphX module and its API are still part of Spark 4.3.0. Both the vote result and the GraphFrames project point new graph work to [GraphFrames](/wiki/GraphFrames).
+
+## History
+
+GraphX first shipped as an alpha component in Spark 0.9.0, where the release notes recommended it over the older Bagel API.[^n2] In Spark 1.2.0 GraphX graduated from alpha and gained a stable API, with a guarantee that applications written against it would keep working in future Spark versions without code changes. The same release introduced the `aggregateMessages` API and deprecated `mapReduceTriplets`.[^n3]
+
+## Programming model
+
+A GraphX graph is a pair of distributed collections: a `VertexRDD` of vertex IDs and properties and an `EdgeRDD` of edges with properties. Like RDDs, graphs are immutable, distributed and fault tolerant; operators return new graphs.[^guide]
+
+The guide groups the API into:[^guide]
+- **Property and structural operators**, such as `mapVertices`, `reverse`, `subgraph` and `mask`.
+- **Join operators**, such as `joinVertices` and `outerJoinVertices`, that bring RDD data into a graph.
+- **Neighborhood aggregation** through `aggregateMessages`, which sends messages along edges and merges them at each vertex.
+- **Pregel**, a bulk-synchronous, vertex-centric API for iterative algorithms. The guide recommends it for iterative computation because it unpersists intermediate results correctly.
+- **Graph builders**, such as `GraphLoader.edgeListFile`, `Graph.apply` and `Graph.fromEdges`.
+
+The algorithm library at the v4.3.0 tag contains PageRank, connected components, strongly connected components, label propagation, shortest paths, triangle count and SVD++.[^n4]
+
+The following Scala example runs in the Spark 4.3 shell in classic mode, where `sc` is the `SparkContext`. It builds a three-vertex graph and runs dynamic PageRank until the ranks change by less than the tolerance.
+
+```scala
+import org.apache.spark.graphx.{Edge, Graph}
+
+val users = sc.parallelize(Seq((1L, "alice"), (2L, "bob"), (3L, "carol")))
+val follows = sc.parallelize(Seq(
+  Edge(1L, 2L, "follows"), Edge(2L, 3L, "follows"), Edge(3L, 1L, "follows")))
+
+val graph = Graph(users, follows)
+val ranks = graph.pageRank(0.0001).vertices
+
+ranks.join(users).collect().foreach { case (_, (rank, name)) =>
+  println(f"$name%s: $rank%.3f")
+}
+```
+
+## Limitations
+
+GraphX is built on RDDs and the `SparkContext`.[^guide] The Spark Connect documentation lists `SparkContext` and RDD as unsupported in Spark Connect for both Python and Scala, so GraphX programs need a classic Spark application rather than a [Spark Connect](/wiki/Spark_Connect) client.[^n5] Because GraphX works on RDDs, it does not use the Catalyst optimizer that plans DataFrame queries; the GraphFrames project cites this, and the memory cost of serializing JVM objects in RDDs, as reasons for its DataFrame-based design.[^gfabout]
+
+## Alternatives
+
+<Hatnote>Main article: [GraphFrames](/wiki/GraphFrames)</Hatnote>
+
+[GraphFrames](/wiki/GraphFrames) is a separate open source package that represents a graph as two Spark DataFrames (vertices and edges). It adds motif finding and runs through the DataFrame engine. It provides conversion to and from GraphX, and from version 0.10.0 it ships its own internal fork of GraphX for the algorithms that it does not yet implement natively.[^gfquick] The October 2024 vote result also named openCypher on Spark as a possible target.[^vote]
+
+## See also
+
+- [GraphFrames](/wiki/GraphFrames)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Connect](/wiki/Spark_Connect)
+- [Spark Streaming (DStreams)](/wiki/Spark_Streaming_(DStreams))
+
+## References
+
+[^jira50857]: [SPARK-50857: Mark GraphX as deprecated](https://issues.apache.org/jira/browse/SPARK-50857). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^guide]: [GraphX Programming Guide (docs/graphx-programming-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/graphx-programming-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^discuss]: [\[DISCUSS\] Deprecate GraphX OR Find new maintainers interested in GraphX OR leave it as is?](https://lists.apache.org/thread/qrvo6xrt8zvp5ss73z5spt9q89r0htwo). *dev@spark.apache.org*, 2024-09-29. Retrieved 2026-11-22.
+[^vote]: [Re: \[VOTE\] Officialy Deprecate GraphX in Spark 4](https://lists.apache.org/thread/2nd08qpr8nwbtog5bgnpfgkn1r42cd5m). *dev@spark.apache.org*, 2024-10-07. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^gfabout]: [About GraphFrames](https://graphframes.io/01-about/01-index.html). *GraphFrames*. Retrieved 2026-11-22.
+[^gfquick]: [Quick-Start](https://graphframes.io/02-quick-start/02-quick-start.html). *GraphFrames*. Retrieved 2026-11-22.
+[^n1]: [GraphFrames is back!](https://graphframes.io/05-blog/1000-graphframes-is-back.html). *GraphFrames*, 2025-08-01. Retrieved 2026-11-22.
+[^n2]: [Spark Release 0.9.0](https://spark.apache.org/releases/spark-release-0-9-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [Spark Release 1.2.0](https://spark.apache.org/releases/spark-release-1-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n4]: [graphx/src/main/scala/org/apache/spark/graphx/lib at v4.3.0](https://github.com/apache/spark/tree/v4.3.0/graphx/src/main/scala/org/apache/spark/graphx/lib). *GitHub*. Retrieved 2026-11-22.
+[^n5]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.

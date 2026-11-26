@@ -110,7 +110,7 @@ export const SiteFooter = () => {
               <li>
                 {/* The wiki is served by MediaWiki (vercel.json rewrite), not the SPA, so use a full page load. */}
                 <a href="/wiki/Main_Page" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Open Lakehouse Wiki
+                  Open Data Engineering Reference (wiki)
                 </a>
               </li>
             </ul>

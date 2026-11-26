@@ -1,0 +1,84 @@
+---
+title: "Unity Catalog"
+categories: ["Catalogs"]
+---
+
+<Infobox type="software">
+  <Field name="developer">Unity Catalog community, hosted by the LF AI & Data Foundation</Field>
+  <Field name="initial_release">2024-07-09 (v0.1.0)</Field>
+  <Field name="latest_release">0.7.0</Field>
+  <Field name="latest_release_date">2026-10-13</Field>
+  <Field name="written_in">Java</Field>
+  <Field name="type">[Data catalog](/wiki/Data_catalog)</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[unitycatalog.io](https://unitycatalog.io)</Field>
+  <Field name="repo">[github.com/unitycatalog/unitycatalog](https://github.com/unitycatalog/unitycatalog)</Field>
+  <Field name="related">[Delta Lake](/wiki/Delta_Lake), [Apache Iceberg](/wiki/Apache_Iceberg), [Iceberg REST catalog](/wiki/Iceberg_REST_catalog), [Apache Polaris](/wiki/Apache_Polaris)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Unity Catalog v0.7.0 GitHub release, unitycatalog.io documentation and the LF AI & Data announcement</Verified>
+
+**Unity Catalog** is an open source [data catalog](/wiki/Data_catalog) for tables, files, functions and machine learning models in an [open lakehouse](/wiki/Open_lakehouse). It records which data and AI assets exist, where their data is stored and who can use them, and query engines reach it through open REST APIs.[^what] The project is hosted by the LF AI & Data Foundation, part of the Linux Foundation, as a sandbox project.[^readme] This article covers the open source project (sometimes called Unity Catalog OSS), not the managed service of the same name.
+
+## History
+
+Databricks developed Unity Catalog and introduced it in 2021 as part of its commercial platform.[^lfai] On 13 June 2024, Databricks announced that it was releasing Unity Catalog as open source, with the server under the Apache License 2.0 and the API defined by an OpenAPI specification.[^dbblog]
+
+The LF AI & Data Foundation announced Unity Catalog as its newest sandbox project in June 2024, stating that Databricks had open sourced the project and donated it to the foundation.[^lfai] The first tagged release, v0.1.0, was published on GitHub on 9 July 2024.[^n1]
+
+The open source documentation describes Databricks Unity Catalog as a managed service that shares the same API lineage and has a larger feature set. The project documentation covers only the open source server.[^what]
+
+## Data model
+
+Unity Catalog organizes assets in a three-level namespace. A catalog is the top level, a schema belongs to one catalog, and every table has a three-part name of the form `catalog.schema.table`.[^quickstart]
+
+The assets that Unity Catalog governs are:[^what]
+- **Tables**: [Delta Lake](/wiki/Delta_Lake) tables, tables in other formats registered as external tables, and [Apache Iceberg](/wiki/Apache_Iceberg) tables. For managed Delta tables, the catalog allocates storage and coordinates commits.
+- **Views and metric views**: stored SQL or YAML definitions that an engine runs.
+- **Volumes**: governed directories for non-tabular files.
+- **Functions**: registered Python or SQL functions, which run in the caller's environment.
+- **Registered models**: MLflow models and their versions.
+
+## APIs
+
+Unity Catalog exposes three REST interfaces. The Unity Catalog REST API manages catalogs, schemas, tables, volumes and other objects. The Delta API serves catalog-managed Delta tables. The Iceberg REST Catalog API serves Iceberg clients.[^what]
+
+The Delta API was added in version 0.5.0. It lets Delta clients create, load, list, alter, rename and delete catalog-managed Delta tables, and it validates commits on the server before they land.[^n2]
+
+Unity Catalog implements the [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) specification at the path `/api/2.1/unity-catalog/iceberg`. Through this endpoint the server lists Iceberg tables, and lists Delta tables only when they carry UniForm Iceberg metadata.[^irc] Version 0.7.0 extended this endpoint so that any engine that supports the Iceberg REST protocol can create, write, read, rename and drop Iceberg tables in Unity Catalog.[^rel070] The project documentation shows [Apache Spark](/wiki/Apache_Spark), [DuckDB](/wiki/DuckDB), PyIceberg and DataFusion as clients of this endpoint.[^irc]
+
+## Access control and credential vending
+
+When authentication and authorization are enabled, the Unity Catalog server validates tokens from an external identity provider, maps them to known users, and checks ownership and privileges such as `USE_CATALOG`, `SELECT` and `MODIFY` on each request.[^what]
+
+Unity Catalog uses credential vending to give engines access to storage. The server holds the storage identity. After an authorization check, it returns a short-lived credential that is limited to one location and one kind of access, and the client then reads and writes data directly in object storage.[^vend]
+
+The documentation describes per-cloud mechanisms: an AWS STS session policy for Amazon S3, a user-delegation SAS token for Azure Data Lake Storage, and a downscoped Google STS token for Google Cloud Storage. Credentials cannot be recalled once issued, so revoking a grant blocks only new credentials. Access is all-or-nothing per location, so row and column filtering must be enforced by the engine.[^vend]
+
+## Use in an open lakehouse
+
+In an [open lakehouse](/wiki/Open_lakehouse), Unity Catalog acts as the shared catalog that several engines use for the same tables. Delta clients can use the Delta API, and Iceberg clients can use the Iceberg REST endpoint without a Unity Catalog connector.[^what][^rel070] The project documentation also includes guides for connecting Apache Spark and DuckDB.[^n3][^n4]
+
+## See also
+
+- [Data catalog](/wiki/Data_catalog)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Apache Polaris](/wiki/Apache_Polaris)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^what]: [What is Unity Catalog OSS?](https://unitycatalog.io/docs/explanation/what-is-unity-catalog/). *Unity Catalog project*. Retrieved 2026-11-22.
+[^readme]: [unitycatalog/unitycatalog README](https://github.com/unitycatalog/unitycatalog). *GitHub*. Retrieved 2026-11-22.
+[^lfai]: [Welcoming Unity Catalog to the LF AI & Data Foundation: A Milestone in Open Data and AI Governance](https://lfaidata.foundation/blog/2024/06/20/welcoming-unity-catalog-to-the-lf-ai-data-foundation-a-milestone-in-open-data-and-ai-governance/). *LF AI & Data Foundation*, 2024-06-20. Retrieved 2026-11-22.
+[^dbblog]: [Open Sourcing Unity Catalog](https://www.databricks.com/blog/open-sourcing-unity-catalog). *Databricks*, 2024-06-13. Retrieved 2026-11-22.
+[^n1]: [Release v0.1.0](https://github.com/unitycatalog/unitycatalog/releases/tag/v0.1.0). *GitHub*. Retrieved 2026-11-22.
+[^quickstart]: [Create your first catalog](https://unitycatalog.io/docs/quickstart/). *Unity Catalog project*. Retrieved 2026-11-22.
+[^n2]: [Release v0.5.0](https://github.com/unitycatalog/unitycatalog/releases/tag/v0.5.0). *GitHub*. Retrieved 2026-11-22.
+[^irc]: [Use Iceberg REST clients with Unity Catalog](https://unitycatalog.io/docs/how-to/iceberg-rest/). *Unity Catalog project*. Retrieved 2026-11-22.
+[^rel070]: [Release v0.7.0](https://github.com/unitycatalog/unitycatalog/releases/tag/v0.7.0). *GitHub*, 2026-10-13. Retrieved 2026-11-22.
+[^vend]: [Credential vending](https://unitycatalog.io/docs/explanation/credential-vending/). *Unity Catalog project*. Retrieved 2026-11-22.
+[^n3]: [Use Spark with Unity Catalog](https://unitycatalog.io/docs/how-to/configure-spark/). *Unity Catalog project*. Retrieved 2026-11-22.
+[^n4]: [Using DuckDB with Unity Catalog](https://unitycatalog.io/docs/how-to/duckdb/). *Unity Catalog project*. Retrieved 2026-11-22.

@@ -1,0 +1,101 @@
+---
+title: "Shuffle hash join"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Shuffled hash join, SHJ, `ShuffledHashJoin`</Field>
+  <Field name="field">Distributed query processing</Field>
+  <Field name="key_parts">Shuffle exchange, build side, stream side, per-partition hash table</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Sort-merge join](/wiki/Sort-merge_join), [Broadcast join](/wiki/Broadcast_join), [Shuffle](/wiki/Shuffle), [Adaptive Query Execution](/wiki/Adaptive_Query_Execution), [Cost-based optimizer (Spark)](/wiki/Cost-based_optimizer_(Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SparkStrategies.scala, joins.scala, ShuffledHashJoinExec.scala, SQLConf.scala, sql-performance-tuning.md and sql-ref-syntax-qry-select-hints.md)</Verified>
+
+A **shuffle hash join** is a distributed equality-join strategy that repartitions both inputs by the join keys, then builds a hash table from one input partition inside each join task.[^shjexec] In [Apache Spark](/wiki/Apache_Spark), the physical operator is named `ShuffledHashJoin`. Shuffle hash join avoids sorting both inputs, but it uses more task memory than a [sort-merge join](/wiki/Sort-merge_join) because every task constructs a hash table from its build-side partition.[^strategies]
+
+## How does a shuffle hash join work?
+
+A Spark shuffle hash join has three steps:[^shjexec]
+
+1. **Shuffle both inputs.** Spark uses compatible hash partitioning so equal join keys from both sides reach the same partition number.
+1. **Build a local hash table.** In every join task, Spark reads the selected **build-side** partition and creates a `HashedRelation` keyed by the join columns.
+1. **Probe the table.** The task streams rows from the other partition, called the **stream side**, and looks each key up in the local hash table.
+
+Unlike a [broadcast join](/wiki/Broadcast_join), shuffle hash join does not collect the complete build side at the [driver](/wiki/Driver_(Apache_Spark)) or send a full copy to every executor. Each task receives only its build partition. Unlike sort-merge join, shuffle hash join does not require the two shuffled partitions to be sorted before they are joined.
+
+## What does ShuffledHashJoin mean in EXPLAIN?
+
+A representative plan forced with a `SHUFFLE_HASH` hint has this shape:
+
+```
+*(3) ShuffledHashJoin [customer_id#1L], [customer_id#8L], Inner, BuildRight
+:- Exchange hashpartitioning(customer_id#1L, 200), ENSURE_REQUIREMENTS
+:  +- Scan parquet orders
++- Exchange hashpartitioning(customer_id#8L, 200), ENSURE_REQUIREMENTS
+   +- Scan parquet customers
+```
+
+The two `Exchange hashpartitioning` nodes show that both sides shuffle. `BuildRight` means each task builds its hash table from the right input partition and streams the left input partition through it. The absence of `Sort` operators is the main visual difference from a `SortMergeJoin` plan.
+
+## When does Spark pick shuffle hash join automatically?
+
+Without a hint, Spark 4.3.0 considers shuffle hash join after broadcast hash join. The non-adaptive planner chooses it only when all of these conditions hold:[^joins][^strategies]
+
+- `spark.sql.join.preferSortMergeJoin` is `false`; it defaults to `true`.[^sqlconf]
+- One input is estimated small enough to build a local hash map. Spark tests its total estimated bytes against the automatic broadcast threshold multiplied by the number of shuffle partitions.
+- That input is estimated to be much smaller than the other. Spark multiplies the candidate build-side size by `spark.sql.shuffledHashJoinFactor` and requires the result to be no larger than the other side.
+- The equality-key data types support Spark's binary hash equality, and the join type permits the selected build side.
+
+Because the default prefers sort-merge join, a static plan commonly uses `SortMergeJoin` for two non-broadcast inputs even when one is smaller. This preference reflects the planner's source comment that sort-merge join consumes less memory, while shuffled hash join can improve performance when one input is much smaller.[^sqlconf]
+
+## How does AQE choose shuffle hash join?
+
+[Adaptive Query Execution](/wiki/Adaptive_Query_Execution) can replace a planned sort-merge join after shuffle statistics reveal that every build-side partition is small enough for a local hash table. The threshold is `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`, which defaults to 0 bytes. For this preference to apply, the threshold must be at least `spark.sql.adaptive.advisoryPartitionSizeInBytes`, and every relevant partition must be no larger than the threshold.[^perf]
+
+Spark 4.3.0 also has `spark.sql.adaptive.convertSortMergeJoinToShuffledHashJoin.enabled`, on by default, as the master switch for this conversion.[^sqlconf] The zero-byte local-map threshold means that setting a useful positive threshold is still necessary before ordinary nonempty partitions qualify through this AQE rule.
+
+## How can a query request shuffle hash join?
+
+The `SHUFFLE_HASH` hint requests the strategy and identifies the preferred build relation:[^hints]
+
+```sql
+SELECT /*+ SHUFFLE_HASH(customers) */
+       orders.order_id, customers.region
+FROM orders
+JOIN customers
+  ON orders.customer_id = customers.customer_id;
+```
+
+If both relations carry `SHUFFLE_HASH` hints, Spark chooses the build side from the join type and relation statistics. A hint is not a guarantee: Spark cannot use the strategy when the join has no equality keys or the requested build side is invalid for that join type.[^hints][^strategies]
+
+## What are the tradeoffs?
+
+|  | Shuffle hash join | Sort-merge join | Broadcast hash join |
+| --- | --- | --- | --- |
+| Network work | Shuffles both inputs | Shuffles both inputs | Broadcasts one complete input; normally leaves the streamed input in place |
+| CPU work after shuffle | Builds and probes a hash table; no key sort | Sorts both inputs and merges ordered streams | Probes a hash table already distributed to each executor |
+| Memory scope | One build partition per concurrent task | Primarily sort and match buffers, which can spill | The complete built relation on the driver and a copy available to executors |
+| Best fit | Build partitions are reliably much smaller than stream partitions and fit in task memory | Both sides are large or build-side memory is uncertain | One complete side is small enough to broadcast |
+
+Shuffle hash join can outperform sort-merge join by avoiding sorts, especially when the build side is much smaller. It can also fail or slow sharply when a build partition is larger than estimated: constructing `HashedRelation` is memory-intensive, and skew can concentrate many build rows in one task.[^strategies][^shjexec] Increasing task concurrency can multiply this pressure because several tasks may build hash tables in the same executor at once.
+
+AQE can reduce the risk when runtime partition sizes are available, but AQE cannot make a single oversized or highly skewed build partition cheap merely by changing the operator. Splitting skewed partitions, filtering earlier, improving statistics, or using sort-merge join may be safer when build-side memory is uncertain.
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Sort-merge join](/wiki/Sort-merge_join)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Adaptive Query Execution](/wiki/Adaptive_Query_Execution)
+- [Shuffle](/wiki/Shuffle)
+
+## References
+
+[^shjexec]: [ShuffledHashJoinExec.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/joins/ShuffledHashJoinExec.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^strategies]: [SparkStrategies.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^joins]: [joins.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/joins.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^hints]: [Hints (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-ref-syntax-qry-select-hints.html). *Apache Software Foundation*. Retrieved 2026-11-23.

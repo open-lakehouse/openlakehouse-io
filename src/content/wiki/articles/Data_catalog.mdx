@@ -1,0 +1,85 @@
+---
+title: "Data catalog"
+categories: ["Concepts", "Catalogs"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Lakehouse catalog, metastore</Field>
+  <Field name="field">Data management, data governance</Field>
+  <Field name="key_parts">Namespaces, table metadata pointers, commit coordination, access control, credential vending</Field>
+  <Field name="implementations">[Unity Catalog](/wiki/Unity_Catalog), [Apache Polaris](/wiki/Apache_Polaris), Lakekeeper, any [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)</Field>
+  <Field name="related">[Open table format](/wiki/Open_table_format), [Open lakehouse](/wiki/Open_lakehouse)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the Iceberg REST catalog specification and OpenAPI file, the Apache Polaris documentation, the Unity Catalog OSS documentation, the Delta transaction log protocol and the Lakekeeper site</Verified>
+
+A **data catalog**, in a lakehouse, is the service that names tables and other data assets, records where each table's current metadata lives, coordinates commits, and decides who may read or write each asset. Engines ask the catalog which files make up a table and whether the current user may access them before they read any data. In an [open lakehouse](/wiki/Open_lakehouse), the catalog is reached through an open API, so that several engines share one view of the same tables. Open source examples include [Unity Catalog](/wiki/Unity_Catalog), [Apache Polaris](/wiki/Apache_Polaris) and other implementations of the [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) specification.
+
+## Role in a lakehouse
+
+An [open table format](/wiki/Open_table_format) describes how one table is stored, but it does not say how a table is found by name or how concurrent writers agree on its current version. The catalog fills both gaps.
+
+The Unity Catalog OSS documentation summarizes the catalog's job as answering three questions for an engine before it reads data: which files hold the table's data, whether the user may read them, and what the table's schema is.[^ucwhat]
+
+For [Apache Iceberg](/wiki/Apache_Iceberg) tables, the Apache Polaris documentation states that a catalog must store the current metadata pointer for each table (a mapping from table name to the location of its current metadata file) and must update that pointer atomically when a new table version is committed.[^polaris-docs] This atomic swap is the basis of Iceberg's serializable isolation.[^icespec]
+
+For [Delta Lake](/wiki/Delta_Lake) tables, the transaction log is stored alongside the data, so a table can be read without a separate metastore.[^deltaproto] The Delta protocol also defines catalog-managed tables, in which the managing catalog becomes the source of truth for whether a commit succeeded.[^deltaproto]
+
+## Functions
+
+A lakehouse catalog typically provides the following functions.
+
+- **Namespace.** Assets are organized in a hierarchy. Unity Catalog uses a three-level namespace, `catalog.schema.asset`.[^ucwhat] The Iceberg REST catalog API organizes tables into namespaces.[^restyaml]
+- **Metadata pointer and commits.** The catalog records each table's current version and accepts or rejects commits from writers.[^polaris-docs]
+- **Access control.** With authentication and authorization enabled, Unity Catalog OSS checks ownership and privileges such as `USE_CATALOG`, `SELECT` and `MODIFY` on every request.[^ucwhat]
+- **Credential vending.** The catalog issues short-lived storage credentials scoped to one table or volume, so that an engine can read or write only the data the user is allowed to access.[^ucwhat]
+- **Discovery.** Because namespaces, tables and schemas are available over an API, engines and AI agents can list what exists instead of inferring it from storage paths.[^olio-agentic]
+
+## The Iceberg REST catalog specification
+
+<Hatnote>Main article: [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)</Hatnote>
+
+The Iceberg REST catalog specification is an OpenAPI definition of a catalog API for Iceberg tables. The Iceberg project created it because pluggable catalogs had to be implemented separately in every language, which made it hard for engines and commercial offerings to support many catalogs. With the REST protocol, a new language or engine needs only one client implementation to work with any compliant catalog.[^icerest]
+
+The Iceberg documentation lists further benefits of the REST protocol: change-based commits that let the server resolve conflicts and retry, root metadata written by the catalog service, multi-table commits, lazy snapshot loading, and secure table sharing through credential vending or remote signing.[^icerest] The Iceberg documentation compares the role of the REST protocol to that of Hive's Thrift protocol for the Hive Metastore.[^icerest]
+
+A client signals delegated storage access with the `X-Iceberg-Access-Delegation` request header. The defined values are `vended-credentials`, `remote-signing` and `none`, and the server may honor any or none of the requested mechanisms.[^restyaml]
+
+## Open source catalogs
+
+| Catalog | Description | Table formats and APIs |
+| --- | --- | --- |
+| [Unity Catalog](/wiki/Unity_Catalog) | A catalog for tables, volumes, functions and models; an LF AI & Data project. Databricks created it and open sourced it in 2024.[^ucwhat][^uc-home] | Delta Lake and Iceberg; Unity Catalog REST API, UC Delta API and Iceberg REST catalog API[^uc-home] |
+| [Apache Polaris](/wiki/Apache_Polaris) | An Apache Software Foundation catalog for Apache Iceberg[^polaris] | Iceberg; implements the Iceberg REST API[^polaris] |
+| Lakekeeper | An Iceberg REST catalog written in Rust, under the Apache License[^lakekeeper] | Iceberg; Iceberg REST catalog API[^lakekeeper] |
+
+Apache Polaris lists Apache Spark, Apache Flink, Trino, Apache Doris, Dremio OSS and StarRocks among the engines that work with it through the Iceberg REST API.[^polaris] Unity Catalog lists Spark, DuckDB, PyIceberg and Daft among the clients with governed access.[^uc-home]
+
+## Catalogs and AI agents
+
+In an [agentic lakehouse](/wiki/Agentic_lakehouse), the catalog is the main control point for AI agents. It tells an agent which tables exist and which it may touch, and it vends storage credentials scoped to the agent's identity, so that an agent can be limited to writing in its own sandbox namespace.[^olio-agentic]
+
+## Limitations
+
+A catalog governs only access that passes through it. The Unity Catalog OSS documentation warns that anyone holding direct storage credentials can bypass the catalog's checks, so the storage must also be locked down as part of a secure deployment.[^ucwhat]
+
+## See also
+
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+- [Unity Catalog](/wiki/Unity_Catalog)
+- [Apache Polaris](/wiki/Apache_Polaris)
+- [Open table format](/wiki/Open_table_format)
+- [Open lakehouse](/wiki/Open_lakehouse)
+
+## References
+
+[^ucwhat]: [What is Unity Catalog OSS?](https://unitycatalog.io/docs/explanation/what-is-unity-catalog/). *Unity Catalog (LF AI & Data)*. Retrieved 2026-11-22.
+[^polaris-docs]: [Apache Polaris documentation (unreleased)](https://polaris.apache.org/in-dev/unreleased/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec](https://iceberg.apache.org/spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^deltaproto]: [Delta Transaction Log Protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-22.
+[^restyaml]: [Iceberg REST Catalog OpenAPI specification](https://github.com/apache/iceberg/blob/main/open-api/rest-catalog-open-api.yaml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^olio-agentic]: [The Agentic Lakehouse](https://openlakehouse.io/agentic-lakehouse). *openlakehouse.io*. Retrieved 2026-11-22.
+[^icerest]: [REST Catalog Spec](https://iceberg.apache.org/rest-catalog-spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^uc-home]: [Unity Catalog](https://unitycatalog.io/). *Unity Catalog (LF AI & Data)*. Retrieved 2026-11-22.
+[^polaris]: [Apache Polaris](https://polaris.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^lakekeeper]: [Lakekeeper](https://lakekeeper.io/). *Lakekeeper*. Retrieved 2026-11-22.

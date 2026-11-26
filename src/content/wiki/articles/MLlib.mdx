@@ -1,0 +1,100 @@
+---
+title: "MLlib"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="software">
+  <Field name="developer">[Apache Software Foundation](/wiki/Apache_Software_Foundation) ([Apache Spark](/wiki/Apache_Spark) project)</Field>
+  <Field name="initial_release">Spark 0.8.0 (RDD-based API); `spark.ml` previewed in Spark 1.2.0</Field>
+  <Field name="latest_release">Spark 4.3.0</Field>
+  <Field name="latest_release_date">2026-10-30</Field>
+  <Field name="written_in">Scala, with Python, Java and R APIs</Field>
+  <Field name="type">Machine learning library</Field>
+  <Field name="license">Apache License 2.0</Field>
+  <Field name="website">[MLlib Main Guide](https://spark.apache.org/docs/4.3.0/ml-guide.html)</Field>
+  <Field name="repo">[github.com/apache/spark (mllib/)](https://github.com/apache/spark/tree/v4.3.0/mllib)</Field>
+  <Field name="related">[spark.mllib (RDD-based API)](/wiki/Spark.mllib_(RDD-based_API)), [Apache Spark](/wiki/Apache_Spark), [Spark Connect](/wiki/Spark_Connect)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (docs/ml-guide.md, docs/ml-migration-guide.md, python/pyspark/ml/util.py, python/pyspark/ml/connect/, sql/connect/server/.../connect/ml/), the Spark 0.8.0, 1.2.0, 2.0.0, 3.5.0 and 4.0.0 release notes, SPARK-50812 and SPARK-50828</Verified>
+
+<Status level="active">MLlib is not deprecated. Its RDD-based `spark.mllib` package has been in maintenance mode since Spark 2.0; the DataFrame-based `spark.ml` package is the primary API.[^guide]</Status>
+
+**MLlib** is the machine learning library of [Apache Spark](/wiki/Apache_Spark). It provides distributed learning algorithms (classification, regression, clustering, collaborative filtering), feature transformations, ML Pipelines, model persistence and utilities such as linear algebra and statistics.[^guide] MLlib has two APIs: the DataFrame-based API in the `spark.ml` package, which is the primary API, and the older [RDD](/wiki/RDD)-based API in the `spark.mllib` package, which has been in maintenance mode since Spark 2.0.[^guide] Neither API, and not MLlib as a whole, is deprecated.[^guide]
+
+## Two APIs
+
+|  | `spark.ml` (DataFrame-based) | `spark.mllib` (RDD-based) |
+| --- | --- | --- |
+| Status in Spark 4.3.0 | Primary API; new features go here | Maintenance mode since Spark 2.0: bug fixes only, no new features |
+| Data type | [DataFrame](/wiki/DataFrame) with feature vector columns | [RDD](/wiki/RDD) of objects such as `LabeledPoint` |
+| Building blocks | Estimators, transformers, evaluators and pipelines | Algorithm objects with `train` methods |
+| Linear algebra types | `org.apache.spark.ml.linalg` | `org.apache.spark.mllib.linalg` |
+| Spark Connect | Supported from Spark 4.0.0 (Python) | Not supported, because Connect has no RDD API |
+
+Sources: the MLlib guide and migration guide,[^guide][^migration] the Spark Connect overview[^connect] and SPARK-50812.[^jira50812]
+
+The MLlib guide gives the reasons for the move to DataFrames: a friendlier API, Spark data sources, SQL queries, the Catalyst and Tungsten optimizations, one API across languages, and practical ML Pipelines, especially for feature transformations.[^guide]
+
+## What "Spark ML" means
+
+"Spark ML" is not an official name. The MLlib guide says it is sometimes used for the DataFrame-based API, because of the `org.apache.spark.ml` package name and the early term "Spark ML Pipelines". The official name of the library, covering both APIs, is MLlib.[^guide] In code, `pyspark.ml` is the DataFrame-based API and `pyspark.mllib` is the RDD-based one.
+
+## History
+
+MLlib was introduced in Spark 0.8.0 as a library of machine learning and optimization algorithms, developed with the UC Berkeley MLbase project.[^n1] Spark 1.2.0 previewed a new set of machine learning APIs in a package called `spark.ml`, built around learning pipelines and using Spark SQL's SchemaRDD (the predecessor of the DataFrame) to represent datasets.[^n2] In Spark 2.0.0 the DataFrame-based API became the primary API and the RDD-based API entered maintenance mode.[^r200] The Spark 2.x versions of the MLlib guide said the RDD-based API was expected to be removed in Spark 3.0; that sentence was dropped from the guide for the 3.0 release, and the RDD-based API is still part of Spark 4.3.0.[^n3][^jira30934] See [spark.mllib (RDD-based API)](/wiki/Spark.mllib_(RDD-based_API)) for what was removed from that package.
+
+## MLlib and Spark Connect
+
+Spark has had two attempts at machine learning over [Spark Connect](/wiki/Spark_Connect).
+
+- **`pyspark.ml.connect` (Spark 3.5.0).** Spark 3.5.0 added a separate package, `pyspark.ml.connect`, with its own estimators, transformers, pipelines and cross-validation for Connect clients.[^n4] This package was deprecated in Spark 4.0.0 (SPARK-50828); its classes carry a `deprecated:: 4.0.0` note at the v4.3.0 tag.[^jira50828][^n5]
+- **`pyspark.ml` on Connect (Spark 4.0.0).** Spark 4.0.0 made the regular `pyspark.ml` API work on Spark Connect (SPARK-50812), listed as "ML on Spark Connect" in the release highlights.[^r400][^jira50812] When the session is remote, `pyspark.ml` sends fit and transform calls to the Connect server, which runs the Scala implementation in its ML handler.[^n6][^n7]
+
+The RDD-based `spark.mllib` API cannot run over Connect, because Connect does not support RDDs or the `SparkContext`.[^connect]
+
+## Example
+
+A DataFrame-based pipeline in PySpark. The same code runs in a classic session and, from Spark 4.0.0, in a Spark Connect session.
+
+```python
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.feature import VectorAssembler
+
+train = spark.createDataFrame(
+    [(0.0, 1.1, 0.1), (1.0, 2.0, 1.0), (0.0, 1.3, -0.5), (1.0, 2.2, 1.5)],
+    ["label", "x1", "x2"])
+
+pipeline = Pipeline(stages=[
+    VectorAssembler(inputCols=["x1", "x2"], outputCol="features"),
+    LogisticRegression(maxIter=10),
+])
+model = pipeline.fit(train)
+model.transform(train).select("label", "prediction").show()
+```
+
+## See also
+
+- [spark.mllib (RDD-based API)](/wiki/Spark.mllib_(RDD-based_API))
+- [RDD](/wiki/RDD)
+- [Apache Spark](/wiki/Apache_Spark)
+- [Spark Connect](/wiki/Spark_Connect)
+
+## References
+
+[^guide]: [MLlib: Main Guide (docs/ml-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/ml-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^migration]: [Migration Guide: MLlib (docs/ml-migration-guide.md at v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/docs/ml-migration-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^connect]: [Spark Connect Overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/spark-connect-overview.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira50812]: [SPARK-50812: Support pyspark.ml on Connect](https://issues.apache.org/jira/browse/SPARK-50812). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n1]: [Spark Release 0.8.0](https://spark.apache.org/releases/spark-release-0-8-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n2]: [Spark Release 1.2.0](https://spark.apache.org/releases/spark-release-1-2-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r200]: [Spark Release 2.0.0](https://spark.apache.org/releases/spark-release-2-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n3]: [MLlib: Main Guide (docs/ml-guide.md at v2.4.0)](https://github.com/apache/spark/blob/v2.4.0/docs/ml-guide.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira30934]: [SPARK-30934: ML, GraphX 3.0 QA: Programming guide update and migration guide](https://issues.apache.org/jira/browse/SPARK-30934). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n4]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^jira50828]: [SPARK-50828: Deprecate pyspark.ml.connect](https://issues.apache.org/jira/browse/SPARK-50828). *Apache Software Foundation JIRA*. Retrieved 2026-11-22.
+[^n5]: [python/pyspark/ml/connect/base.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/ml/connect/base.py). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^r400]: [Spark Release 4.0.0](https://spark.apache.org/releases/spark-release-4-0-0.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n6]: [python/pyspark/ml/util.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/ml/util.py). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^n7]: [sql/connect/server/.../connect/ml (v4.3.0)](https://github.com/apache/spark/tree/v4.3.0/sql/connect/server/src/main/scala/org/apache/spark/sql/connect/ml). *Apache Software Foundation*. Retrieved 2026-11-22.

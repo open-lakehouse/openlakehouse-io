@@ -1,0 +1,95 @@
+---
+title: "Spark Kubernetes shuffle storage"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Spark local storage on Kubernetes, spark-local-dir volumes</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">`emptyDir` scratch volumes, `spark-local-dir-*` volumes, on-demand persistent volume claims, `KubernetesLocalDiskShuffleDataIO`</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [Executor](/wiki/Executor), [Spark on Kubernetes](/wiki/Spark_on_Kubernetes), [Executor decommissioning](/wiki/Executor_decommissioning), [Spark Kubernetes pod template](/wiki/Spark_Kubernetes_pod_template)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/running-on-kubernetes.md, docs/job-scheduling.md, docs/configuration.md, docs/core-migration-guide.md, deploy/k8s/Config.scala, KubernetesLocalDiskShuffleDataIO.scala) and SPARK-25262, SPARK-28042, SPARK-32971, SPARK-35182, SPARK-35416, SPARK-35593</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **shuffle storage on Kubernetes** is the set of pod volumes where executors write [shuffle](/wiki/Shuffle) files and spill data; by default these are Kubernetes `emptyDir` volumes that last only as long as the executor pod.[^k8s] Spark on Kubernetes has no external shuffle service, so shuffle files written by an [executor](/wiki/Executor) are normally lost when its pod goes away.[^jobsched] Spark offers RAM-backed volumes, host disks, persistent volume claims (PVCs) that the driver reuses, and a shuffle plugin that recovers files from reused PVCs.[^k8s]
+
+## Where does Spark write shuffle and spill data on Kubernetes by default?
+
+When no volume is configured as local storage, Spark on Kubernetes mounts one `emptyDir` volume for each directory in `spark.local.dir` or the `SPARK_LOCAL_DIRS` environment variable. If neither is set, Spark creates and configures a default directory.[^k8s]
+
+An `emptyDir` volume uses the ephemeral storage of the node and does not outlive the pod. Shuffle files on it disappear when the executor pod is deleted.[^k8s]
+
+## How does spark.kubernetes.local.dirs.tmpfs work?
+
+`spark.kubernetes.local.dirs.tmpfs` (default false, added in Spark 3.0.0) sets the medium of the scratch `emptyDir` volumes to `Memory`, so they are tmpfs, RAM-backed volumes.[^config][^n1] The documentation suggests it for nodes without local disks, where many executors writing to network-mounted storage can be slow.[^k8s]
+
+With tmpfs, data in the local directories counts against the pod's memory. The Spark documentation suggests raising `spark.{driver,executor}.memoryOverheadFactor` to leave room for it.[^k8s]
+
+## How do spark-local-dir volumes work?
+
+Any volume mounted through the Spark volume properties whose name starts with `spark-local-dir-` is used as local storage for shuffle and spill instead of the default `emptyDir`.[^k8s] Volume properties have the form `spark.kubernetes.executor.volumes.[VolumeType].[VolumeName].mount.path`, and the supported types are `hostPath`, `emptyDir`, `nfs` and `persistentVolumeClaim`.[^k8s]
+
+A `hostPath` volume puts local directories on a directory of the node itself; support for mapping `spark.local.dir` to `hostPath` volumes arrived in Spark 3.0.0.[^n2] The Spark documentation warns that `hostPath` volumes have known security weaknesses and advises cluster administrators to restrict them with the Pod Security Admission controller.[^k8s]
+
+## How do on-demand persistent volume claims work for shuffle?
+
+Setting a volume's `claimName` option to `OnDemand` makes Spark create one PVC per executor, with the size and storage class from the `sizeLimit` and `storageClass` options.[^k8s] Dynamic PVC creation and deletion for executors was added in Spark 3.1.0.[^n3] The Spark documentation recommends a PVC named `spark-local-dir-*` for jobs with large shuffles and sorts.[^k8s]
+
+```
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.claimName     OnDemand
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.storageClass  gp
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.options.sizeLimit     500Gi
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.path            /data
+spark.kubernetes.executor.volumes.persistentVolumeClaim.spark-local-dir-1.mount.readOnly        false
+```
+
+Since Spark 4.2.0, the `ExecutorPVCResizePlugin` plugin can grow the storage request of an executor's `spark-local-dir-*` PVCs while the executor runs. It is controlled by `spark.kubernetes.executor.pvc.resizeInterval` (default 5 minutes), `resizeThreshold` (default 0.5) and `resizeFactor` (default 1.0), and requires a storage class that allows volume expansion.[^k8s][^config]
+
+## Which configuration keys control PVC reuse?
+
+Three driver properties let on-demand PVCs outlive the executor that first used them.[^config][^k8s]
+
+| Property | Added in | Default in 4.3.0 | Effect |
+| --- | --- | --- | --- |
+| `spark.kubernetes.driver.ownPersistentVolumeClaim` | 3.2.0 | true | The driver pod, not the executor pod, owns on-demand PVCs |
+| `spark.kubernetes.driver.reusePersistentVolumeClaim` | 3.2.0 | true | The driver gives PVCs of deleted executors to new executors; requires driver ownership |
+| `spark.kubernetes.driver.waitToReusePersistentVolumeClaim` | 3.4.0 | false | The driver holds back new executors while it already owns as many PVCs as the job may have; requires both settings above |
+
+The first two properties defaulted to false when they were introduced. Since Spark 3.4, the driver owns PVCs and tries to reuse those not attached to live executors; setting both properties to false restores the earlier behaviour.[^migration] A pod in `Terminating` state has not yet released its PVCs, so the total number of PVCs can exceed the number of running executors.[^config]
+
+## What is KubernetesLocalDiskShuffleDataIO?
+
+`org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIO` is a built-in shuffle storage plugin that recovers shuffle data from reused PVCs, so a new executor that mounts a reused PVC tries to recover the shuffle data that dead executors left in its local directories.[^k8s][^execcomp] It was added in Spark 3.2.0 under SPARK-35593 and requires `spark.kubernetes.driver.reusePersistentVolumeClaim=true`.[^plugin][^n4]
+
+The documented setup mounts the PVC at a path such as `/data/spark-x/executor-x` and sets `spark.shuffle.sort.io.plugin.class` to the plugin class. The documentation also suggests enabling `spark.kubernetes.driver.waitToReusePersistentVolumeClaim`.[^k8s]
+
+## How does shuffle storage relate to dynamic allocation and decommissioning?
+
+Dynamic allocation needs shuffle files to survive executor removal. On other cluster managers the external shuffle service can do this, but Spark on Kubernetes does not support it, so setting `spark.shuffle.service.enabled` to true is not an option there.[^jobsched] The remaining options are shuffle tracking (`spark.dynamicAllocation.shuffleTracking.enabled`), shuffle block migration through [executor decommissioning](/wiki/Executor_decommissioning), or a shuffle plugin whose driver components support reliable storage.[^jobsched][^configdoc]
+
+Decommissioning and PVC reuse address different failures. Decommissioning copies shuffle blocks from an executor that is being shut down to other executors, or to `spark.storage.decommission.fallbackStorage.path`, before the pod ends.[^configdoc] PVC reuse with `KubernetesLocalDiskShuffleDataIO` recovers files after a pod is already gone, as long as its PVC survives.[^k8s]
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [Executor](/wiki/Executor)
+- [Executor decommissioning](/wiki/Executor_decommissioning)
+- [Spark Kubernetes pod template](/wiki/Spark_Kubernetes_pod_template)
+- [Spark on Kubernetes](/wiki/Spark_on_Kubernetes)
+- [Kubernetes Operator for Apache Spark](/wiki/Kubernetes_Operator_for_Apache_Spark)
+
+## References
+
+[^k8s]: [Running Spark on Kubernetes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/running-on-kubernetes.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Config.scala (Kubernetes resource manager, v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/Config.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-25262: Support tmpfs for local dirs in k8s](https://issues.apache.org/jira/browse/SPARK-25262). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n2]: [SPARK-28042: Support mapping spark.local.dir to hostPath volume](https://issues.apache.org/jira/browse/SPARK-28042). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^n3]: [SPARK-32971: Support dynamic PVC creation/deletion for K8s executors](https://issues.apache.org/jira/browse/SPARK-32971). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^migration]: [Migration Guide: Spark Core (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/core-migration-guide.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^execcomp]: [KubernetesLocalDiskShuffleExecutorComponents.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/shuffle/KubernetesLocalDiskShuffleExecutorComponents.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^plugin]: [KubernetesLocalDiskShuffleDataIO.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/resource-managers/kubernetes/core/src/main/scala/org/apache/spark/shuffle/KubernetesLocalDiskShuffleDataIO.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n4]: [SPARK-35593: Support shuffle data recovery on the reused PVCs](https://issues.apache.org/jira/browse/SPARK-35593). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^configdoc]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.

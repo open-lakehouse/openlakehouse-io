@@ -1,0 +1,92 @@
+---
+title: "Deletion vector"
+categories: ["Concepts", "Glossary terms", "Table formats"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">DV</Field>
+  <Field name="field">Table formats</Field>
+  <Field name="introduced">Delta Lake 2.3.0 (reads); Apache Iceberg format version 3</Field>
+  <Field name="key_parts">Bitmap of deleted row positions (64-bit Roaring bitmap), reference to one data file, cardinality</Field>
+  <Field name="implementations">[Delta Lake](/wiki/Delta_Lake), [Apache Iceberg](/wiki/Apache_Iceberg)</Field>
+  <Field name="related">[Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read), [Small files problem](/wiki/Small_files_problem), [Apache Parquet](/wiki/Apache_Parquet)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">Delta Lake PROTOCOL.md at tag v4.4.1 and the Delta Lake deletion vectors documentation, the Apache Iceberg table spec and Puffin spec at tag apache-iceberg-1.12.0, and the Iceberg maintenance documentation</Verified>
+
+A **deletion vector** (DV) is a compact bitmap, stored outside a data file, that marks which rows of that data file are deleted. Readers skip the marked rows, so a table can delete or update individual rows without rewriting the immutable data file that holds them.[^deltaproto][^icespec] Deletion vectors are one way of implementing the merge-on-read strategy for row-level changes. [Delta Lake](/wiki/Delta_Lake) and [Apache Iceberg](/wiki/Apache_Iceberg) (from format version 3) both define them, and the two encodings are closely related.
+
+## How it works
+
+A deletion vector is a set of row positions in one data file, counting from zero. In both formats the set is a 64-bit Roaring bitmap: each 64-bit position is split into a 32-bit key (the high bytes) and a 32-bit sub-position, and each key points to a 32-bit Roaring bitmap of sub-positions.[^deltaproto][^puffin] Roaring bitmaps switch between an integer array, a bitmap and run-length encoding per block of values, which keeps both sparse and dense deletes small.[^deltaproto]
+
+A row is deleted if its position is set in the deletion vector that applies to its data file. The table metadata records which data file a deletion vector belongs to and how many rows it removes (its cardinality).[^deltaproto][^icespec]
+
+| Approach | What is written for a one-row delete | What a reader does |
+| --- | --- | --- |
+| Copy-on-write | A new copy of the whole data file without the row | Reads the new data file |
+| Position delete file (Iceberg v2) | A file listing (data file path, row position) pairs | Treats a row as deleted if a delete file has an entry for its file and position |
+| Deletion vector | A bitmap for that single data file | Skips the set positions while reading the data file |
+
+The rows of this table are drawn from the Iceberg delete format definitions and the Delta Lake deletion vector documentation.[^icespec][^deltadoc]
+
+## Delta Lake
+
+In the Delta transaction log protocol, deletion vectors are a table feature. A table must use reader version 3 and writer version 7 and list `deletionVectors` in both its reader and writer features. Writers may only create new deletion vectors when the table property `delta.enableDeletionVectors` is true, but readers must honour existing deletion vectors whether or not the property is set.[^deltaproto]
+
+A deletion vector is attached to a file's `add` or `remove` action through a descriptor with a `storageType`: `u` for a file whose path is derived from a UUID relative to the table, `p` for an absolute path, or `i` for a bitmap stored inline in the log, base85-encoded. The descriptor also holds the offset, size in bytes and cardinality. Deletion vector files live in the table root and can hold vectors for data files in several partitions.[^deltaproto]
+
+The protocol's reader requirement is that rows invalidated by a deletion vector must not be returned. Its writer requirement is that a file added with a deletion vector must carry a correct `numRecords` statistic.[^deltaproto]
+
+Support arrived across several releases. According to the Delta Lake documentation, scans with deletion vectors are available from 2.3.0, `DELETE` from 2.4.0, `UPDATE` from 3.0.0 and `MERGE` from 3.1.0. The same page marks the feature as being in experimental support mode.[^deltadoc]
+
+```sql
+-- Delta Lake: enable deletion vectors (upgrades the table protocol)
+ALTER TABLE events SET TBLPROPERTIES ('delta.enableDeletionVectors' = true);
+
+-- Later: rewrite every file that has soft-deleted rows
+REORG TABLE events APPLY (PURGE);
+```
+
+Enabling deletion vectors upgrades the table protocol, after which clients without deletion vector support cannot read the table. From Delta Lake 3.0 the table feature can be dropped again to restore compatibility.[^deltadoc]
+
+## Apache Iceberg
+
+Format version 3 of the Iceberg spec adds binary deletion vectors. They are stored as the `deletion-vector-v1` blob type in Puffin files and tracked in delete manifests by file location, blob offset (`content_offset`) and length (`content_size_in_bytes`), together with the referenced data file.[^icespec] One Puffin file can hold deletion vectors for many data files.[^icespec]
+
+Deletion vectors replace position delete files in version 3. Position delete files are deprecated, must not be added to v3 tables, and existing ones stay valid until the deletes for that data file are next updated, at which point they must be written into a deletion vector.[^icespec] Equality delete files are unaffected and remain the way to delete rows by column value.[^icespec]
+
+The spec allows at most one deletion vector per data file in a snapshot. Writers must merge new deletes with the existing vector or position delete files, so when a deletion vector is present, readers can ignore matching position delete files.[^icespec] At read time, a deletion vector applies to a data file when the paths match, the data file's sequence number is less than or equal to the vector's, and the partitions are equal.[^icespec]
+
+The Puffin blob wraps the bitmap with a length, the magic bytes `D1 D3 39 64` and a CRC-32 checksum. The Puffin spec says its big-endian length and checksum fields were chosen for compatibility with existing deletion vectors in Delta tables.[^puffin]
+
+## Compaction and purge
+
+A deletion vector hides rows but does not remove their bytes, so both projects provide ways to rewrite data files and drop the deleted rows physically.
+
+In Delta Lake, changes recorded in deletion vectors are applied when files are rewritten: by DML run with deletion vectors disabled, by `OPTIMIZE`, or by `REORG TABLE ... APPLY (PURGE)`. Only the last guarantees that every file with soft-deleted rows is rewritten. The old files remain until `VACUUM` removes them.[^deltadoc]
+
+In Iceberg, the spec requires that when a data file is removed, any deletion vector for it is removed from the delete manifests, though the Puffin file holding it need not be rewritten.[^icespec] The `rewrite_data_files` procedure can select data files for rewriting by the number of deletes or the ratio of deleted rows, and the `removeDanglingDeleteFiles` action drops deletion vectors whose data file is no longer live.[^iceproc][^icemaint]
+
+## Not to be confused with
+
+- **Position delete files** in Iceberg v2 also mark rows by position, but as rows in a separate data file that can reference many data files, rather than one bitmap per data file.[^icespec]
+- **Merge-on-read log files** in [Apache Hudi](/wiki/Apache_Hudi) record updates and deletes for a file group in log files that compaction merges into a new base file; Hudi's documentation describes them as log files, not deletion vectors.[^huditypes]
+
+## See also
+
+- [Copy-on-write and merge-on-read](/wiki/Copy-on-write_and_merge-on-read)
+- [Small files problem](/wiki/Small_files_problem)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Open table format](/wiki/Open_table_format)
+
+## References
+
+[^deltaproto]: [Delta Transaction Log Protocol (PROTOCOL.md at v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec (format/spec.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^puffin]: [Puffin file format (format/puffin-spec.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/puffin-spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^deltadoc]: [What are deletion vectors?](https://docs.delta.io/delta-deletion-vectors/). *Delta Lake*. Retrieved 2026-11-22.
+[^iceproc]: [Spark Procedures](https://iceberg.apache.org/docs/latest/spark-procedures/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^icemaint]: [Maintenance](https://iceberg.apache.org/docs/latest/maintenance/). *Apache Iceberg*. Retrieved 2026-11-22.
+[^huditypes]: [Table & Query Types (version 1.2.1)](https://hudi.apache.org/docs/table_types). *Apache Hudi*. Retrieved 2026-11-22.

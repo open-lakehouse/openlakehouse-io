@@ -1,0 +1,80 @@
+---
+title: "Speculative execution"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Speculation, speculative tasks, `spark.speculation`</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="key_parts">Straggler detection, duplicate task attempts, first attempt wins, output commit coordination</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Data skew](/wiki/Data_skew), [Accumulator](/wiki/Accumulator), [Exactly-once semantics](/wiki/Exactly-once_semantics), [Executor](/wiki/Executor)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/configuration.md, docs/rdd-programming-guide.md, docs/streaming/apis-on-dataframes-and-datasets.md, docs/sql-performance-tuning.md, core scheduler/TaskSetManager.scala, core scheduler/OutputCommitCoordinator.scala, sql adaptive/OptimizeSkewedJoin.scala) and the Delta Lake protocol at tag v4.4.1</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), **speculative execution** is a scheduler feature that launches a second copy of a task that is running much slower than the other tasks in its stage, on another [executor](/wiki/Executor), and uses whichever copy finishes first. It targets stragglers caused by a slow machine or disk, and is off by default (`spark.speculation=false`).[^config] Because the same task can run twice, any side effect that is not idempotent can happen twice.
+
+## How does speculation decide which tasks to copy?
+
+Spark checks for slow tasks every `spark.speculation.interval`. Speculation for a stage starts only after a fraction `spark.speculation.quantile` of its tasks has finished; then a running task is a candidate if it is `spark.speculation.multiplier` times slower than the median of the finished tasks and has run at least `spark.speculation.minTaskRuntime`.[^config]
+
+| Setting | Default | Since | Meaning |
+| --- | --- | --- | --- |
+| `spark.speculation` | false | 0.6.0 | Turn speculation on |
+| `spark.speculation.interval` | 100ms | 0.6.0 | How often to look for slow tasks |
+| `spark.speculation.multiplier` | 3 | 0.6.0 | How many times slower than the median a task must be |
+| `spark.speculation.quantile` | 0.9 | 0.6.0 | Fraction of tasks that must be done before speculating in a stage |
+| `spark.speculation.minTaskRuntime` | 100ms | 3.2.0 | Minimum run time before a task can be speculated |
+| `spark.speculation.task.duration.threshold` | none | 3.0.0 | Speculate stages with few tasks once a task runs longer than this |
+| `spark.speculation.efficiency.enabled` | true | 3.4.0 | Speculate only tasks that are inefficient by data processing rate or duration |
+
+<small>Source: Spark 4.3.0 configuration reference.[^config]</small>
+
+The duration threshold helps stages that have no more tasks than one executor has slots, where the median rule has too few finished tasks to work with.[^config] With `spark.speculation.efficiency.enabled`, a task is speculated only if its data processing rate is below the stage average times a multiplier, or if its duration exceeds the threshold times `spark.speculation.efficiency.longRunTaskFactor`.[^config]
+
+## What happens when a speculative copy finishes?
+
+When one attempt of a task succeeds, the scheduler kills the other running attempts of the same task, with the reason "another attempt succeeded".[^tsm] The killed attempt may have already done part of its work.
+
+For file output written through Spark's commit protocol, the **output commit coordinator** on the driver decides which attempt may commit each partition, with a "first committer wins" policy. This keeps two attempts from both committing their output files.[^occ] Table formats add their own commit on top. In [Delta Lake](/wiki/Delta_Lake), a table snapshot consists of the `add` actions in committed log entries, so a data file written by an attempt whose transaction never committed is not part of the table.[^delta]
+
+## Side effects with non-idempotent writes
+
+Code that writes to an external system directly from tasks is outside the commit coordinator. With speculation on, two attempts of the same task can run that code at the same time, and the killed attempt may have written some or all of its data before it was stopped.[^tsm] Examples are:
+
+- `foreach` or `foreachPartition` code that inserts rows into a database, posts to an HTTP API or sends messages to a queue;
+- UDFs with side effects, such as writing a log record per row;
+- [Accumulator](/wiki/Accumulator) updates inside transformations, which the Spark docs say may be applied more than once when tasks are re-executed.[^rddguide]
+
+The same duplication can happen without speculation, from task retries, so code that writes externally should be idempotent anyway: use upserts or `MERGE` keyed on a stable ID, or write to a staging location and commit once from the driver. In [Structured Streaming](/wiki/Structured_Streaming), `foreachBatch` gives only at-least-once write guarantees by default, and the docs suggest using the batch ID passed to the function to deduplicate output.[^ss] See [Exactly-once semantics](/wiki/Exactly-once_semantics).
+
+## When to use speculation
+
+Speculation helps when tasks are slow because of the machine they run on, for example a node with a failing disk or a noisy neighbour. It does not help with [data skew](/wiki/Data_skew), because a copy of a skewed task has the same amount of data and is just as slow. For skewed joins, Spark's [Adaptive Query Execution](/wiki/Adaptive_Query_Execution) can split large partitions instead.[^perf] In Spark 4.3.0 this applies to sort-merge and shuffled hash joins, and only to a side the join type allows to split: the left side of inner, cross, left semi, left anti and left outer joins, and the right side of inner, cross and right outer joins. It also applies to the streamed side of a broadcast hash join when `spark.sql.adaptive.localShuffleReader.enabled` is false. It does not split skewed aggregations, windows or full outer joins; for those, see [salting](/wiki/Salting).[^skewrule] Each speculative copy also uses a task slot that another task could have used.
+
+```
+spark.speculation                          true
+spark.speculation.multiplier               3
+spark.speculation.quantile                 0.9
+spark.speculation.minTaskRuntime           30s
+```
+
+## See also
+
+- [Data skew](/wiki/Data_skew)
+- [Accumulator](/wiki/Accumulator)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Executor](/wiki/Executor)
+- [Dynamic allocation](/wiki/Dynamic_allocation)
+
+## References
+
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tsm]: [TaskSetManager.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/TaskSetManager.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^occ]: [OutputCommitCoordinator.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/OutputCommitCoordinator.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta]: [Delta Transaction Log Protocol: Action Reconciliation (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md#action-reconciliation). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^rddguide]: [RDD Programming Guide: Accumulators (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#accumulators). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss]: [Structured Streaming Programming Guide: APIs on DataFrames and Datasets (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^perf]: [Performance Tuning (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-performance-tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^skewrule]: [OptimizeSkewedJoin.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/OptimizeSkewedJoin.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

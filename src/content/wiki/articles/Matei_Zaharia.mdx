@@ -1,0 +1,55 @@
+---
+title: "Matei Zaharia"
+categories: ["People"]
+---
+
+<Infobox type="person">
+  <Field name="known_for">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="role">Computer scientist</Field>
+  <Field name="affiliations">University of California, Berkeley; [Databricks](/wiki/Databricks)</Field>
+  <Field name="projects">[Apache Spark](/wiki/Apache_Spark), [Delta Lake](/wiki/Delta_Lake), Apache Mesos, MLflow</Field>
+  <Field name="website">[people.eecs.berkeley.edu/~matei](https://people.eecs.berkeley.edu/~matei/)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">his UC Berkeley EECS homepage, the UC Berkeley EECS dissertation record, and the April 2026 ACM Prize in Computing announcement</Verified>
+
+**Matei Zaharia** is a computer scientist known for starting [Apache Spark](/wiki/Apache_Spark), an open source engine for large-scale data processing. He is an associate professor of electrical engineering and computer sciences (EECS) at the University of California, Berkeley, where he works on computer systems and artificial intelligence in the Sky Lab, and a cofounder and chief technology officer (CTO) of [Databricks](/wiki/Databricks).[^berkeley][^acm]
+
+## Career and work
+
+Zaharia started the Apache Spark project during his PhD at the University of California, Berkeley, in 2009.[^acm] Spark began as a research project at the Berkeley AMPLab and was open sourced in 2010.[^spark-history] During the same period he also co-started the Apache Mesos cluster resource manager and Spark Streaming.[^berkeley]
+
+Zaharia completed his doctorate at the EECS Department of the University of California, Berkeley. His 2014 dissertation, "An Architecture for Fast and General Data Processing on Large Clusters", was advised by Scott Shenker and Ion Stoica.[^thesis] He is an associate professor of EECS at Berkeley and a member of the Sky Lab research group.[^berkeley]
+
+Zaharia is a cofounder of Databricks and is its chief technology officer.[^berkeley][^acm] At Databricks he helped develop [Delta Lake](/wiki/Delta_Lake) and started MLflow, an open source platform for managing the machine learning lifecycle.[^berkeley][^acm]
+
+## Contributions to the open lakehouse
+
+Zaharia's work underlies several components used in an [open lakehouse](/wiki/Open_lakehouse). [Apache Spark](/wiki/Apache_Spark) is one of the engines that reads and writes [open table formats](/wiki/Open_table_format) and runs batch, SQL, streaming and machine learning workloads on a single engine.[^spark-history] [Delta Lake](/wiki/Delta_Lake), which he co-developed, adds transactional guarantees to tables stored on cloud object storage, which the ACM Prize announcement describes as bringing reliability to large data stored in object stores.[^acm] [Structured Streaming](/wiki/Structured_Streaming), the stream processing API built on the Spark SQL engine, descends from the earlier Spark Streaming work he co-started.[^berkeley]
+
+In 2026 the Association for Computing Machinery named Zaharia the recipient of the 2025 ACM Prize in Computing "for his visionary development of distributed data systems and computing infrastructure, which has enabled large-scale machine learning, analytics, and AI at a global scale".[^acm] His other recognitions include the SIGMOD Systems Award in 2022 for Apache Spark and the ACM Doctoral Dissertation Award in 2014.[^berkeley]
+
+## Selected works
+
+- Matei Zaharia, Mosharaf Chowdhury, Tathagata Das, Ankur Dave, Justin Ma, Murphy McCauley, Michael J. Franklin, Scott Shenker and Ion Stoica, "Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing", NSDI 2012.[^n1]
+- Benjamin Hindman, Andy Konwinski, Matei Zaharia, Ali Ghodsi, Anthony D. Joseph, Randy Katz, Scott Shenker and Ion Stoica, "Mesos: A Platform for Fine-Grained Resource Sharing in the Data Center", NSDI 2011.[^n2]
+- Matei Zaharia, "An Architecture for Fast and General Data Processing on Large Clusters", PhD dissertation, University of California, Berkeley, 2014.[^thesis]
+- Matei Zaharia, Reynold S. Xin, Patrick Wendell, Tathagata Das, Michael Armbrust, Ankur Dave, Xiangrui Meng, Josh Rosen, Shivaram Venkataraman, Michael J. Franklin, Ali Ghodsi, Joseph Gonzalez, Scott Shenker and Ion Stoica, "Apache Spark: A Unified Engine for Big Data Processing", Communications of the ACM, 2016.[^n3]
+
+## See also
+
+- [Apache Spark](/wiki/Apache_Spark)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Open lakehouse](/wiki/Open_lakehouse)
+- [Unity Catalog](/wiki/Unity_Catalog)
+
+## References
+
+[^berkeley]: [Matei Zaharia's Homepage](https://people.eecs.berkeley.edu/~matei/). *University of California, Berkeley*. Retrieved 2026-11-23.
+[^acm]: [ACM Prize in Computing Honors Matei Zaharia for Foundational Contributions to Data and Machine Learning Systems](https://www.prnewswire.com/news-releases/acm-prize-in-computing-honors-matei-zaharia-for-foundational-contributions-to-data-and-machine-learning-systems-302737161.html). *Association for Computing Machinery, via PR Newswire*, 2026-04-08. Retrieved 2026-11-23.
+[^spark-history]: [History](https://spark.apache.org/history.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^thesis]: [An Architecture for Fast and General Data Processing on Large Clusters](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2014/EECS-2014-12.html). *EECS Department, University of California, Berkeley*, 2014-02-03. Retrieved 2026-11-23.
+[^n1]: [Resilient Distributed Datasets: A Fault-Tolerant Abstraction for In-Memory Cluster Computing](https://www.usenix.org/conference/nsdi12/technical-sessions/presentation/zaharia). *USENIX Association*, 2012. Retrieved 2026-11-23.
+[^n2]: [Mesos: A Platform for Fine-Grained Resource Sharing in the Data Center](https://www.usenix.org/legacy/events/nsdi11/tech/full_papers/Hindman.pdf). *USENIX Association*, 2011. Retrieved 2026-11-23.
+[^n3]: [Apache Spark: A Unified Engine for Big Data Processing](https://dl.acm.org/doi/10.1145/2934664). *Communications of the ACM*, 2016-11. Retrieved 2026-11-23.

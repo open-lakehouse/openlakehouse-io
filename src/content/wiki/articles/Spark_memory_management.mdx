@@ -1,0 +1,76 @@
+---
+title: "Spark memory management"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Unified memory model, unified memory manager</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 1.6.0 (unified memory manager)</Field>
+  <Field name="key_parts">Reserved memory, user memory, unified region (execution and storage), memory overhead, off-heap memory</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Executor](/wiki/Executor), [Executor memory overhead](/wiki/Executor_memory_overhead), [Spill (memory)](/wiki/Spill_(memory)), [Caching and persistence](/wiki/Caching_and_persistence), [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark), [Project Tungsten](/wiki/Project_Tungsten)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/tuning.md, docs/configuration.md, core/memory/UnifiedMemoryManager.scala) and SPARK-10000</Verified>
+
+**Spark memory management** is the way [Apache Spark](/wiki/Apache_Spark) divides the memory of each [executor](/wiki/Executor) between running tasks, cached data, user code and the JVM itself. Since Spark 1.6.0, a **unified memory manager** lets execution memory (for shuffles, joins, sorts and aggregations) and storage memory (for cached data) share one region and borrow from each other.[^spark10000][^tuning] Memory outside the JVM heap is requested separately as [executor memory overhead](/wiki/Executor_memory_overhead).
+
+## How is executor memory divided?
+
+An executor's JVM heap is set by `spark.executor.memory` (default `1g`).[^config] Spark splits the heap into three parts:
+
+| Part | Size | What it holds |
+| --- | --- | --- |
+| Reserved memory | 300 MiB, fixed | Kept back by Spark; the heap must be at least 1.5 times this (450 MiB) or the executor does not start[^umm] |
+| User memory | (heap − 300 MiB) × (1 − `spark.memory.fraction`), 40% by default | User data structures, Spark internal metadata, and a margin for unusually large records[^tuning] |
+| Unified region (M) | (heap − 300 MiB) × `spark.memory.fraction` (default 0.6) | Execution memory and storage memory, shared[^tuning] |
+
+For an 8 GiB heap with the defaults, the unified region is (8192 − 300) × 0.6 ≈ 4,735 MiB and user memory is about 3,157 MiB. This follows the formula in `UnifiedMemoryManager`, which subtracts the 300 MiB reserve from the heap size the JVM reports (`Runtime.getRuntime.maxMemory`) and multiplies the rest by `spark.memory.fraction`; the JVM may report slightly less than `spark.executor.memory`, so the real figures can be a little lower.[^umm][^tuning]
+
+## Execution memory and storage memory
+
+**Execution memory** is used for computation in shuffles, joins, sorts and aggregations. **Storage memory** is used for caching and for propagating internal data across the cluster.[^tuning]
+
+The two share the unified region M. When no execution memory is in use, storage can take all of M, and the other way round. Execution can evict cached blocks to get memory back, but only until storage falls to a protected share R, set by `spark.memory.storageFraction` (default 0.5 of M). Storage cannot evict execution memory.[^tuning] Applications that do not cache can therefore use the whole region for execution, and applications that cache keep at least R for their blocks.[^tuning]
+
+When execution memory runs out, tasks [spill](/wiki/Spill_(memory)) to disk instead of failing. When storage memory runs out, cached blocks are dropped in least-recently-used order, or written to disk if their storage level allows it.[^rddguide] The Spark docs recommend leaving both fractions at their defaults for most workloads.[^tuning]
+
+## Off-heap memory
+
+With `spark.memory.offHeap.enabled` (default false) set to true, Spark can use off-heap memory for certain operations, in an amount set by `spark.memory.offHeap.size` (default 0, must be positive when enabled). This memory is outside the JVM heap and does not change heap usage, so the heap should be shrunk if the total must fit a fixed limit.[^config] The `OFF_HEAP` storage level, marked experimental in the Spark docs, caches data in this memory.[^rddguide] Spark's task memory manager allocates the memory pages for sorting, hashing and shuffle either on the heap or, with this setting, off-heap; see [Project Tungsten](/wiki/Project_Tungsten).[^tmm]
+
+## Memory outside the heap
+
+On YARN and Kubernetes, the container for an executor is the sum of `spark.executor.memory`, `spark.executor.memoryOverhead`, `spark.memory.offHeap.size` and `spark.executor.pyspark.memory`.[^config] Overhead covers JVM overheads, interned strings and other native memory, and by default is 10% of executor memory with a minimum of 384 MiB. Python worker memory is part of the overhead unless `spark.executor.pyspark.memory` is set.[^config] See [Executor memory overhead](/wiki/Executor_memory_overhead).
+
+## Example
+
+```
+spark.executor.memory              8g
+spark.executor.cores               4
+spark.memory.fraction              0.6
+spark.memory.storageFraction       0.5
+spark.memory.offHeap.enabled       true
+spark.memory.offHeap.size          2g
+```
+
+With this configuration on YARN or Kubernetes, each executor container is sized at 8 GiB of heap plus about 819 MiB of overhead (10% of 8 GiB) plus 2 GiB of off-heap memory. The four tasks that run at once on the executor share one pool of execution memory.[^config]
+
+## See also
+
+- [Executor](/wiki/Executor)
+- [Executor memory overhead](/wiki/Executor_memory_overhead)
+- [Spill (memory)](/wiki/Spill_(memory))
+- [Caching and persistence](/wiki/Caching_and_persistence)
+- [Garbage collection in Spark](/wiki/Garbage_collection_in_Spark)
+- [Project Tungsten](/wiki/Project_Tungsten)
+
+## References
+
+[^spark10000]: [SPARK-10000: Consolidate storage and execution memory management](https://issues.apache.org/jira/browse/SPARK-10000). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^tuning]: [Tuning Spark (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/tuning.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^umm]: [UnifiedMemoryManager.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/memory/UnifiedMemoryManager.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rddguide]: [RDD Programming Guide: RDD Persistence (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/rdd-programming-guide.html#rdd-persistence). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tmm]: [TaskMemoryManager.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/memory/TaskMemoryManager.java). *Apache Software Foundation*. Retrieved 2026-11-23.

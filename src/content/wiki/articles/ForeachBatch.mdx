@@ -1,0 +1,112 @@
+---
+title: "ForeachBatch"
+displayTitle: "foreachBatch"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept" name="foreachBatch">
+  <Field name="also_known_as">`DataStreamWriter.foreachBatch`</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="introduced">Apache Spark 2.4.0</Field>
+  <Field name="key_parts">User function called once per micro-batch with the batch DataFrame and the batch id</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark) (Scala, Java, Python; Spark Connect since 3.5.0)</Field>
+  <Field name="related">[Output mode](/wiki/Output_mode), [Exactly-once semantics](/wiki/Exactly-once_semantics), [Delta Lake](/wiki/Delta_Lake), [Streaming checkpoint](/wiki/Streaming_checkpoint)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (Using Foreach and ForeachBatch) and Real-time Mode guide, `python/pyspark/sql/streaming/readwriter.py` at tag v4.3.0 of apache/spark, SPARK-24565, the Delta Lake table streaming and merge documentation, and the Databricks foreachBatch page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), **foreachBatch** is a sink that calls a user function once for every micro-batch, passing the batch's output as an ordinary DataFrame together with a unique batch id, so that any batch API can be used to write it. It is the standard way to write a stream to a system that has a batch writer but no streaming sink, to write one batch to several places, and to apply row-level upserts, such as a [Delta Lake](/wiki/Delta_Lake) `MERGE`, from a streaming query. foreachBatch was added in Spark 2.4.0 and is available in Scala, Java and Python.[^ss-fb][^jira]
+
+## How does foreachBatch work?
+
+The function takes two arguments: a DataFrame with the micro-batch's output, and the batch id.[^ss-fb] Inside it, the DataFrame is a batch DataFrame, so every batch operation and writer works, including operations that streaming DataFrames do not support.[^ss-fb]
+
+```python
+def write_batch(batch_df, batch_id):
+    batch_df.write.format("jdbc").options(**jdbc_options).mode("append").save()
+
+(stream_df.writeStream
+    .foreachBatch(write_batch)
+    .option("checkpointLocation", "/checkpoints/to_jdbc")
+    .start())
+```
+
+foreachBatch works only in micro-batch execution. It does not work with the continuous trigger, where `foreach` is the alternative, and it is not supported in Real-time Mode, which processes records one at a time.[^ss-fb][^rtm] The `foreach` sink, also available since Spark 2.4 in Python, calls user code per row through `open`, `process` and `close` methods.[^ss-fb]
+
+foreachBatch has supported Spark Connect since Spark 3.5.0. In Spark Connect mode it behaves differently: the function does not have access to variables defined outside it.[^rw]
+
+## Is foreachBatch exactly-once?
+
+By default, foreachBatch gives only at-least-once write guarantees. If a query fails after the function has written a batch but before the batch is recorded in the commit log, the batch runs again after restart. The batch id makes exactly-once possible: the function can use it to detect and skip a batch that was already written.[^ss-fb] For the same batch id, the output DataFrame is guaranteed to be the same, provided every operation in the query is deterministic.[^rw] See [Exactly-once semantics](/wiki/Exactly-once_semantics) and [Streaming checkpoint](/wiki/Streaming_checkpoint).
+
+### Idempotent writes to Delta Lake
+
+Delta Lake supports this directly. The writer options `txnAppId` (any unique string, such as the query id) and `txnVersion` (a monotonically increasing number, such as the batch id) identify a write, and Delta ignores a write whose combination it has already committed.[^delta-stream]
+
+```python
+app_id = "orders_to_two_tables"
+
+def write_twice(batch_df, batch_id):
+    batch_df.persist()
+    (batch_df.write.format("delta").mode("append")
+        .option("txnAppId", app_id).option("txnVersion", batch_id)
+        .saveAsTable("main.sales.orders"))
+    (batch_df.filter("amount > 1000").write.format("delta").mode("append")
+        .option("txnAppId", app_id).option("txnVersion", batch_id)
+        .saveAsTable("main.sales.large_orders"))
+    batch_df.unpersist()
+```
+
+If the checkpoint is deleted and the query restarts with a new one, batch ids start again from 0, so the query must use a different `txnAppId`; otherwise Delta ignores its writes as duplicates.[^delta-stream]
+
+## How are upserts written from a stream?
+
+Streaming sinks for table formats append rows or replace the table; the Delta Lake and [Apache Iceberg](/wiki/Apache_Iceberg) Spark sinks support append and complete [output modes](/wiki/Output_mode).[^delta-stream][^iceberg] To update existing rows, the query runs a `MERGE` inside foreachBatch. The Delta Lake documentation uses this pattern to write streaming aggregates in update mode, which it describes as much more efficient than complete mode, to apply a stream of change data, and to deduplicate with an insert-only merge.[^delta-merge]
+
+```python
+from delta.tables import DeltaTable
+
+target = DeltaTable.forName(spark, "main.sales.customer_totals")
+
+def upsert(batch_df, batch_id):
+    (target.alias("t")
+        .merge(batch_df.alias("s"), "s.customer_id = t.customer_id")
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute())
+
+(totals_stream.writeStream
+    .foreachBatch(upsert)
+    .outputMode("update")
+    .option("checkpointLocation", "/checkpoints/customer_totals")
+    .start())
+```
+
+The Delta documentation warns that the merge must be idempotent, because a restart can apply the same batch more than once. Because merge reads its input more than once, the reported input rate can be a multiple of the real one, and caching the batch before the merge avoids the extra reads.[^delta-merge] Databricks states that foreachBatch is required for Delta Lake merge operations in Structured Streaming.[^db-fb]
+
+## Common pitfalls
+
+- **Recomputation.** Each action on the batch DataFrame can recompute the batch, including re-reading the source. Writing to several places should be wrapped in `persist()` and `unpersist()`.[^ss-fb]
+- **State reloads.** In a stateful query, several actions on the same batch DataFrame, such as `count()` then `collect()`, evaluate the query several times and reload state each time; the Spark guide recommends persisting the DataFrame inside the function.[^ss-fb]
+- **Empty batches.** The function can receive an empty DataFrame, and code that assumes rows can fail. Databricks gives examples where a Delta source produces an empty micro-batch, such as an `OPTIMIZE` with no files to process.[^db-fb]
+- **End-to-end semantics.** Operations applied inside foreachBatch are outside Spark's incremental planning, so the user has to reason about their correctness across batches and retries.[^ss-fb]
+
+## See also
+
+- [Output mode](/wiki/Output_mode)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Streaming checkpoint](/wiki/Streaming_checkpoint)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Streaming deduplication](/wiki/Streaming_deduplication)
+- [Structured Streaming](/wiki/Structured_Streaming)
+
+## References
+
+[^ss-fb]: [Structured Streaming: ForeachBatch (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#foreachbatch). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jira]: [SPARK-24565: Add API for in Structured Streaming for exposing output rows of each microbatch as a DataFrame](https://issues.apache.org/jira/browse/SPARK-24565). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^rw]: [python/pyspark/sql/streaming/readwriter.py (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/streaming/readwriter.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta-stream]: [Table streaming reads and writes](https://docs.delta.io/latest/delta-streaming.html). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^iceberg]: [Spark Structured Streaming (Apache Iceberg 1.12.0)](https://iceberg.apache.org/docs/latest/spark-structured-streaming/). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta-merge]: [Table deletes, updates, and merges: Upsert from streaming queries using foreachBatch](https://docs.delta.io/latest/delta-update.html#upsert-from-streaming-queries-using-foreachbatch). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^db-fb]: [Use foreachBatch to write to arbitrary data sinks](https://docs.databricks.com/aws/en/structured-streaming/foreach). *Databricks*. Retrieved 2026-11-23.

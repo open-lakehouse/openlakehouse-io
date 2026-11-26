@@ -1,0 +1,94 @@
+---
+title: "Stream-static join"
+categories: ["Concepts", "Glossary terms", "Pipelines and orchestration", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Stream-table join, stream enrichment join</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="introduced">Apache Spark 2.0</Field>
+  <Field name="key_parts">A streaming DataFrame, a static (batch) DataFrame or table, join keys; no streaming state</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark); related forms in [Apache Flink](/wiki/Apache_Flink) SQL (temporal and lookup joins)</Field>
+  <Field name="related">[Stream-stream join](/wiki/Stream-stream_join), [Delta Lake](/wiki/Delta_Lake), [Broadcast join](/wiki/Broadcast_join), [Stateful stream processing](/wiki/Stateful_stream_processing)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (join operations, support matrix) and Real-time Mode guide, the Databricks "Work with joins" page, and the Apache Flink 2.3 SQL "Joins" page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), a **stream-static join** joins a streaming DataFrame with a static DataFrame, for example a stream of orders with a table of customers. Each micro-batch of the stream is joined with the static side, and the join keeps no streaming state, so it needs no [watermark](/wiki/Watermark). Structured Streaming has supported stream-static joins, inner and some outer types, since Spark 2.0.[^ss-ss] It is the usual way to enrich events with reference or dimension data held in a lakehouse table.
+
+## How does a stream-static join work?
+
+The static side is an ordinary batch DataFrame read with `spark.read`, and the streaming side comes from `spark.readStream`. The join is written like a batch join:[^ss-ss]
+
+```python
+customers = spark.read.table("main.crm.customers")          # static side
+orders = spark.readStream.table("main.sales.orders")       # streaming side
+
+enriched = orders.join(customers, "customer_id", "left_outer")
+
+(enriched.writeStream
+    .option("checkpointLocation", "/checkpoints/orders_enriched")
+    .toTable("main.sales.orders_enriched"))
+```
+
+Because only the streaming side changes, each batch's new rows are joined with the static data and the result is final; nothing is buffered for later matches. The Spark guide states that stream-static joins are not stateful and need no state management.[^ss-ss] This is the main difference from a [stream-stream join](/wiki/Stream-stream_join), which buffers both inputs.
+
+## Which join types are supported?
+
+The support matrix in Spark 4.3.0 allows only the join types in which the streaming side's rows can be completed from the static side alone:[^ss-matrix]
+
+| Left input | Right input | Inner | Left outer | Right outer | Full outer | Left semi |
+| --- | --- | --- | --- | --- | --- | --- |
+| Stream | Static | Yes | Yes | No | No | Yes |
+| Static | Stream | Yes | No | Yes | No | No |
+
+The unsupported types would need to emit a static row once it is clear that no streaming row will ever match it, which cannot be known for an unbounded stream without state.
+
+## How is the static side refreshed?
+
+The Databricks documentation, for a static side stored in [Delta Lake](/wiki/Delta_Lake), states that each micro-batch joins the latest valid version of the static Delta table with the records of that micro-batch. The static table should therefore change slowly. If it changes between runs, reprocessing the same streaming data can give different results, so the output is not deterministic while the static side is changing.[^db-join]
+
+Rows already written are not revised when the static side changes later. An order joined with a customer's old address keeps the old address in the output, because the join keeps no state with which to revisit it.[^ss-ss] Pipelines that need updates on both sides use a [stream-stream join](/wiki/Stream-stream_join) or a materialized view instead; Databricks recommends a materialized view for incremental results of an inner join.[^db-join]
+
+## Stream-static joins in Real-time Mode
+
+Real-time Mode, added in Spark 4.1.0, supports stream-static joins only when the static side is broadcast with the `broadcast(...)` hint, because the join must not add a shuffle.[^rtm]
+
+```python
+from pyspark.sql.functions import broadcast
+
+enriched = orders.join(broadcast(customers), "customer_id")
+```
+
+In micro-batch mode the hint is optional and follows the usual [join strategy](/wiki/Join_strategy_hints) rules.
+
+## Stream-static join vs stream-stream join
+
+|  | Stream-static join | Stream-stream join |
+| --- | --- | --- |
+| Inputs | One streaming, one batch DataFrame[^ss-ss] | Two streaming DataFrames[^ss-sts] |
+| State | None[^ss-ss] | Both inputs buffered in the state store[^ss-sts] |
+| Watermark | Not needed[^db-join] | Needed to bound state; required for outer and semi joins[^ss-sts] |
+| Since | Spark 2.0[^ss-ss] | Spark 2.3[^ss-sts] |
+| Real-time Mode (Spark 4.3.0) | Supported with a broadcast static side[^rtm] | Not supported[^rtm] |
+
+## Comparison with Flink
+
+[Apache Flink](/wiki/Apache_Flink) SQL has two related joins. A **temporal join** joins against a versioned table, so that each row can be matched with the version valid at its event time. A **lookup join** enriches a table with data queried from an external system; one side needs a processing-time attribute and the other must be backed by a lookup source connector.[^flink-join] A Spark stream-static join against a Delta table is closest to a processing-time lookup: each batch sees the table as it is when the batch runs.[^db-join]
+
+## See also
+
+- [Stream-stream join](/wiki/Stream-stream_join)
+- [Broadcast join](/wiki/Broadcast_join)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Medallion architecture](/wiki/Medallion_architecture)
+
+## References
+
+[^ss-ss]: [Structured Streaming: Stream-static Joins (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#stream-static-joins). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-matrix]: [Structured Streaming: Support matrix for joins in streaming queries (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#support-matrix-for-joins-in-streaming-queries). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^db-join]: [Work with joins on Databricks](https://docs.databricks.com/aws/en/transform/join). *Databricks*. Retrieved 2026-11-23.
+[^rtm]: [Real-time Mode (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/real-time-mode.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-sts]: [Structured Streaming: Stream-stream Joins (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#stream-stream-joins). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^flink-join]: [Joins (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/sql/reference/queries/joins/). *Apache Software Foundation*. Retrieved 2026-11-23.

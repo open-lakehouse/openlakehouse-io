@@ -1,0 +1,84 @@
+---
+title: "Push-based shuffle"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Push-based shuffle merge, `spark.shuffle.push`</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 3.2.0 (SPARK-30602)</Field>
+  <Field name="key_parts">Block pushing from map tasks, merger locations on external shuffle services, merged shuffle partitions, merge finalization</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) on YARN with the [external shuffle service](/wiki/External_shuffle_service)</Field>
+  <Field name="related">[Shuffle](/wiki/Shuffle), [External shuffle service](/wiki/External_shuffle_service), [Dynamic allocation](/wiki/Dynamic_allocation)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (docs/configuration.md, push-based shuffle section and spark.shuffle.push.\* settings) and SPARK-30602</Verified>
+
+**Push-based shuffle** is an [Apache Spark](/wiki/Apache_Spark) [shuffle](/wiki/Shuffle) mode in which map tasks push their shuffle blocks to remote [external shuffle services](/wiki/External_shuffle_service), which merge the blocks for each shuffle partition, so that reduce tasks can read a few large merged files instead of many small blocks. It was added in Spark 3.2.0 through the SPIP in SPARK-30602.[^spark30602] It is off by default and, in Spark 4.3.0, supported only for Spark on YARN with the external shuffle service.[^config] The Spark 4.3.0 documentation describes it without a deprecated or experimental label.
+
+## What problem does push-based shuffle solve?
+
+In a regular Spark shuffle, every reduce task fetches one block from every map task's output. The number of blocks therefore grows with the number of map tasks times the number of reduce tasks, and each block can be small. The SPIP describes large Spark-on-YARN deployments where the external shuffle service stores shuffle files on hard disks, and where these many small, random reads make the shuffle a scaling bottleneck and a source of inefficiency.[^spark30602]
+
+## What does push-based shuffle change?
+
+- **Map side.** After a map task writes its shuffle output as usual, Spark pushes the blocks, on a best-effort basis, to a set of external shuffle services chosen as **merger locations** for the shuffle.[^config]
+- **Merge.** Each merger appends the pushed blocks for a partition into one merged shuffle file. After all map tasks are done, the driver waits `spark.shuffle.push.finalize.timeout` (default 10s) and then asks the mergers to finalize the merge.[^config]
+- **Reduce side.** Reduce tasks read a combination of merged shuffle partitions and original shuffle blocks. Blocks that were not pushed or not merged are still fetched the normal way, which is why the push can be best effort.[^config]
+
+The result, according to the Spark docs, is that small random disk reads by the external shuffle services become large sequential reads, and that reduce tasks may also get better data locality, which reduces network I/O.[^config] The docs describe the goal as improving both the reliability and the performance of the shuffle.[^config]
+
+## Which cluster managers support push-based shuffle?
+
+| Cluster manager | Push-based shuffle |
+| --- | --- |
+| YARN, with the external shuffle service | Supported[^config] |
+| Standalone | Not supported[^config] |
+| Kubernetes | Not supported; Spark on Kubernetes has no external shuffle service[^config][^jobsched] |
+
+The Spark docs state that push-based shuffle helps long-running jobs and queries with large disk I/O during shuffle, and is currently not well suited to jobs that run quickly on a small amount of shuffle data.[^config]
+
+## How to enable push-based shuffle
+
+Push-based shuffle needs a setting on both sides. On the server side, the external shuffle service in each NodeManager must use the merging implementation; on the client side, the application turns pushing on.[^config]
+
+```
+# External shuffle service (server side), for example in the YARN shuffle service configuration
+spark.shuffle.push.server.mergedShuffleFileManagerImpl  org.apache.spark.network.shuffle.RemoteBlockPushResolver
+
+# Application (client side)
+spark.shuffle.service.enabled   true
+spark.shuffle.push.enabled      true
+```
+
+The server-side default, `NoOpMergedShuffleFileManager`, disables push-based shuffle.[^config]
+
+## Main settings
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `spark.shuffle.push.enabled` | false | Turn on pushing on the client side |
+| `spark.shuffle.push.finalize.timeout` | 10s | Time the driver waits after all map tasks finish before finalizing the merge |
+| `spark.shuffle.push.maxBlockSizeToPush` | 1m | Larger blocks are not pushed and are fetched the normal way |
+| `spark.shuffle.push.maxBlockBatchSize` | 3m | Maximum size of a batch of blocks in one push request |
+| `spark.shuffle.push.minShuffleSizeToWait` | 500m | Below this total shuffle size, the driver finalizes at once without waiting |
+| `spark.shuffle.push.minCompletedPushRatio` | 1.0 | Fraction of map partitions that must finish pushing before finalization starts |
+| `spark.shuffle.push.mergersMinStaticThreshold` | 5 | Minimum number of merger locations needed to use push-based shuffle for a stage |
+| `spark.shuffle.push.mergersMinThresholdRatio` | 0.05 | Minimum merger locations as a ratio of the reduce stage's partitions; the larger of the two minimums applies |
+
+<small>Source: Spark 4.3.0 configuration reference.[^config]</small>
+
+If a stage cannot get enough merger locations, it does not use push-based shuffle. For example, a reduce stage with 100 partitions needs at least 5 merger locations with the default ratio.[^config]
+
+## See also
+
+- [Shuffle](/wiki/Shuffle)
+- [External shuffle service](/wiki/External_shuffle_service)
+- [Dynamic allocation](/wiki/Dynamic_allocation)
+- [Executor](/wiki/Executor)
+
+## References
+
+[^spark30602]: [SPARK-30602: SPIP: Support push-based shuffle to improve shuffle efficiency](https://issues.apache.org/jira/browse/SPARK-30602). *Apache Software Foundation JIRA*. Retrieved 2026-11-23.
+[^config]: [Spark Configuration: Push-based shuffle overview (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/configuration.html#push-based-shuffle-overview). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^jobsched]: [Job Scheduling (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/job-scheduling.html). *Apache Software Foundation*. Retrieved 2026-11-23.

@@ -1,0 +1,102 @@
+---
+title: "Open lakehouse"
+categories: ["Concepts"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Open data lakehouse</Field>
+  <Field name="field">Data engineering, data management</Field>
+  <Field name="introduced">2020 (term "lakehouse"); formalized in a 2021 paper</Field>
+  <Field name="key_parts">Object storage, [Apache Parquet](/wiki/Apache_Parquet), [Open table formats](/wiki/Open_table_format), [Data catalog](/wiki/Data_catalog), query engines</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi), [Unity Catalog](/wiki/Unity_Catalog), [Apache Polaris](/wiki/Apache_Polaris), [Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino), [DuckDB](/wiki/DuckDB)</Field>
+  <Field name="related">[Agentic lakehouse](/wiki/Agentic_lakehouse), [Medallion architecture](/wiki/Medallion_architecture)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the CIDR 2021 lakehouse paper, the Databricks January 2020 lakehouse post, the Apache Iceberg and Delta Lake specifications, the Unity Catalog OSS and Apache Polaris documentation</Verified>
+
+An **open lakehouse** is a data platform architecture in which tables are stored as open file formats on low-cost object storage, managed by an open [table format](/wiki/Open_table_format), registered in an open [data catalog](/wiki/Data_catalog), and processed by any compatible engine. It combines the cheap, directly accessible storage of a data lake with the transactions, versioning and performance features of a data warehouse. The word "open" means that no layer depends on a single vendor: data written by one engine can be read by another without copying or conversion.
+
+## Definition
+
+The lakehouse paper presented at the Conference on Innovative Data Systems Research (CIDR) in January 2021 defines a lakehouse as a data management system built on low-cost, directly accessible storage that also provides analytical database features such as ACID transactions, data versioning, auditing, indexing, caching and query optimization.[^cidr] The same paper characterizes lakehouses by open direct-access data formats such as Apache Parquet and ORC, first-class support for machine learning and data science, and state-of-the-art performance.[^cidr]
+
+An open lakehouse applies that definition with an added constraint: the formats, the table specification, the catalog interface and the engines are open source or openly specified. The openlakehouse.io guides describe this as an architecture assembled from open table formats, open catalogs, open compute engines and open machine learning tools, on storage the organization controls.[^olio-osde]
+
+## History
+
+Databricks described the lakehouse as a new, open architecture that combines elements of data lakes and data warehouses in a blog post published on 30 January 2020.[^dbx2020] The CIDR 2021 paper by Michael Armbrust, Ali Ghodsi, Reynold Xin and Matei Zaharia set out the argument in academic form.[^cidr]
+
+The CIDR paper frames the lakehouse as a third generation of analytics platforms. The first generation loaded operational data into on-premises data warehouses that coupled compute and storage. The second generation put raw data into data lakes, which are low-cost storage systems with a file API holding open formats such as Parquet and ORC, and copied a subset of that data into a warehouse for business intelligence.[^cidr] The lakehouse removes the second copy by adding warehouse features directly on top of the lake.
+
+The enabling technology, according to the paper, is a metadata layer over the files in the lake. The paper names [Delta Lake](/wiki/Delta_Lake) (begun at Databricks in 2016), [Apache Iceberg](/wiki/Apache_Iceberg) (started at Netflix) and [Apache Hudi](/wiki/Apache_Hudi) (started at Uber) as systems of this kind.[^cidr] These metadata layers are now usually called open table formats.
+
+## Architecture
+
+An open lakehouse is usually described as a stack of independent layers. Each layer talks to the next through a published specification, so any one layer can be replaced.
+
+| Layer | Role | Open source examples |
+| --- | --- | --- |
+| Object storage | Holds data files and metadata files | Any S3-compatible store, HDFS |
+| File format | Stores rows in columnar files | [Apache Parquet](/wiki/Apache_Parquet)[^parquet] |
+| Table format | Groups files into tables with snapshots and atomic commits | [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake), [Apache Hudi](/wiki/Apache_Hudi) |
+| Catalog | Names tables, stores the pointer to current metadata, enforces access | [Unity Catalog](/wiki/Unity_Catalog), [Apache Polaris](/wiki/Apache_Polaris), any [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) |
+| Engines | Read and write tables for SQL, batch, streaming and machine learning | [Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino), [DuckDB](/wiki/DuckDB) |
+| Pipelines and orchestration | Define and schedule transformations | [Spark Declarative Pipelines](/wiki/Spark_Declarative_Pipelines), [Structured Streaming](/wiki/Structured_Streaming), [Apache Airflow](/wiki/Apache_Airflow) |
+
+The table format is the layer that turns a directory of files into a table. In Apache Iceberg, every change writes a new metadata file and replaces the old one with an atomic swap, which gives readers serializable isolation without locks.[^icespec] In Delta Lake, writers add a new entry to a transaction log stored next to the data, and readers use the log to select the files that make up one consistent snapshot.[^deltaproto]
+
+The catalog is the layer that makes tables discoverable and governable. The CIDR paper notes that a metadata layer can check whether a client may access a table before giving it credentials to read the underlying files.[^cidr] Unity Catalog OSS implements this as credential vending: the catalog issues short-lived storage credentials scoped to one table or volume.[^ucwhat]
+
+## What makes a lakehouse open
+
+A lakehouse is open when each interface between layers is public and implemented by more than one project. In practice this covers four interfaces: the data file format (for example Parquet), the table format specification (for example the Iceberg table spec or the Delta transaction log protocol), the catalog API (for example the [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) specification), and the engine connectors that read them.
+
+The Iceberg REST catalog specification is a common example of an open interface. The Iceberg project created it so that a new language or engine can work with any catalog through one client implementation.[^icerest] Apache Polaris implements this API and lists Apache Spark, Apache Flink, Trino and other engines as clients.[^polaris]
+
+Openness across table formats is partial. Delta Lake's Universal Format (UniForm) generates Iceberg metadata for a Delta table so that Iceberg clients can read it from the same data files.[^uniform] Apache XTable, an incubating Apache project, translates metadata between Hudi, Delta Lake and Iceberg.[^xtable]
+
+## Comparison with data warehouses and data lakes
+
+| Property | Data warehouse | Data lake | Open lakehouse |
+| --- | --- | --- | --- |
+| Storage | Managed by the warehouse | Files on low-cost storage | Files on low-cost storage |
+| Data format | Internal to the system | Open file formats | Open file formats plus an open table format |
+| ACID transactions | Yes | No | Yes, through the table format |
+| Access by other engines | Through the warehouse only | Direct file access | Direct access through the table format and catalog |
+
+The comparison follows the generations described in the CIDR 2021 paper.[^cidr]
+
+## Limitations
+
+The CIDR 2021 paper noted that Delta Lake, Iceberg and Hudi supported transactions on only one table at a time, and that storing a transaction log in an object store limits the commit rate because of object store latency.[^cidr] The Iceberg REST catalog specification lists multi-table commits among the features the REST protocol enables.[^icerest]
+
+Catalog-based access control applies only to requests that go through the catalog. The Unity Catalog OSS documentation warns that anyone with direct storage credentials can bypass catalog checks, so the storage itself must also be locked down.[^ucwhat]
+
+## Use with AI agents
+
+<Hatnote>Main article: [Agentic lakehouse](/wiki/Agentic_lakehouse)</Hatnote>
+
+An [agentic lakehouse](/wiki/Agentic_lakehouse) is an open lakehouse designed so that AI agents can find, query and change data under platform-enforced controls. It adds agent tools, often served over the [Model Context Protocol](/wiki/Model_Context_Protocol), declarative pipelines that the platform validates before they run, and policies on every tool call.[^olio-agentic]
+
+## See also
+
+- [Open table format](/wiki/Open_table_format)
+- [Data catalog](/wiki/Data_catalog)
+- [Medallion architecture](/wiki/Medallion_architecture)
+- [Agentic lakehouse](/wiki/Agentic_lakehouse)
+- [Iceberg REST catalog](/wiki/Iceberg_REST_catalog)
+
+## References
+
+[^cidr]: Michael Armbrust, Ali Ghodsi, Reynold Xin, Matei Zaharia. [Lakehouse: A New Generation of Open Platforms that Unify Data Warehousing and Advanced Analytics](https://www.cidrdb.org/cidr2021/papers/cidr2021_paper17.pdf). *CIDR 2021*, January 2021. Retrieved 2026-11-22.
+[^olio-osde]: [Open source data engineering](https://openlakehouse.io/open-source-data-engineering). *openlakehouse.io*. Retrieved 2026-11-22.
+[^dbx2020]: [What is a Lakehouse?](https://www.databricks.com/blog/2020/01/30/what-is-a-data-lakehouse.html). *Databricks*, 30 January 2020. Retrieved 2026-11-22.
+[^parquet]: [Apache Parquet](https://parquet.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec](https://iceberg.apache.org/spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^deltaproto]: [Delta Transaction Log Protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-22.
+[^ucwhat]: [What is Unity Catalog OSS?](https://unitycatalog.io/docs/explanation/what-is-unity-catalog/). *Unity Catalog (LF AI & Data)*. Retrieved 2026-11-22.
+[^icerest]: [REST Catalog Spec](https://iceberg.apache.org/rest-catalog-spec/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^polaris]: [Apache Polaris](https://polaris.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^uniform]: [Universal Format (UniForm)](https://docs.delta.io/delta-uniform/). *Delta Lake*. Retrieved 2026-11-22.
+[^xtable]: [Apache XTable (Incubating)](https://xtable.apache.org/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^olio-agentic]: [The Agentic Lakehouse](https://openlakehouse.io/agentic-lakehouse). *openlakehouse.io*. Retrieved 2026-11-22.

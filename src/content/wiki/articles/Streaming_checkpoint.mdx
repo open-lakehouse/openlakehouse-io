@@ -1,0 +1,99 @@
+---
+title: "Streaming checkpoint"
+categories: ["Concepts", "Glossary terms", "Apache Spark", "Pipelines and orchestration"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Checkpoint location, `checkpointLocation`</Field>
+  <Field name="field">[Stream processing](/wiki/Stream_processing)</Field>
+  <Field name="key_parts">Offset log (`offsets/`), commit log (`commits/`), state (`state/`), query metadata (`metadata`)</Field>
+  <Field name="implementations">[Structured Streaming](/wiki/Structured_Streaming) in [Apache Spark](/wiki/Apache_Spark)</Field>
+  <Field name="related">[Checkpointing (Spark)](/wiki/Checkpointing_(Spark)), [State store](/wiki/State_store), [Exactly-once semantics](/wiki/Exactly-once_semantics), [Flink checkpoint and savepoint](/wiki/Flink_checkpoint_and_savepoint)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the Spark 4.3.0 Structured Streaming programming guide (recovering from failures, recovery semantics after changes) and miscellaneous notes, and `StreamingCheckpointConstants.scala`, `StreamingQueryCheckpointMetadata.scala`, `StreamMetadata.scala`, `CommitLog.scala`, `OffsetSeq.scala` and `SQLConf.scala` at tag v4.3.0 of apache/spark, the Delta Lake table streaming documentation and the Apache Flink 2.3 "Checkpoints vs. Savepoints" page</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark) [Structured Streaming](/wiki/Structured_Streaming), a **streaming checkpoint** is the directory, set with the `checkpointLocation` option, where a streaming query records which input offsets each micro-batch covered, which batches finished, and the state of its stateful operators, so that after a failure or a restart the query continues exactly where it stopped.[^ss-ckpt] A checkpoint belongs to one query. Some changes to the query can be made between restarts from the same checkpoint and others cannot. Lineage checkpoints of RDDs and DataFrames are a different feature; see [Checkpointing (Spark)](/wiki/Checkpointing_(Spark)).
+
+## What is inside a streaming checkpoint?
+
+At tag v4.3.0, Spark names four entries under the checkpoint root: `offsets`, `commits`, `state` and `metadata`.[^consts]
+
+| Entry | Contents | Written |
+| --- | --- | --- |
+| `offsets/` | The offset log: one file per batch with the offsets of every source for that batch, plus a set of session configurations that must stay fixed for the query[^offsetseq] | Before the batch is processed[^commitlog] |
+| `commits/` | The commit log: one file per batch that marks the batch as complete[^commitlog] | After the batch succeeds, before the next batch starts[^commitlog] |
+| `state/` | Versioned files of the [state store](/wiki/State_store), per stateful operator and partition | At the end of each batch of a stateful query |
+| `metadata` | The query's unique id, which stays the same across restarts[^streammeta] | When the query first starts |
+
+The order of writes is what makes recovery work. For each batch, Spark writes the batch's offsets to the offset log, processes the batch, and then writes the batch to the commit log.[^commitlog] On restart, a batch that has an offset entry but no commit entry is run again with exactly the same offsets. Combined with a replayable source and an idempotent or transactional sink, this gives the end-to-end guarantee described in [Exactly-once semantics](/wiki/Exactly-once_semantics).
+
+Spark keeps a bounded history. `spark.sql.streaming.minBatchesToRetain` (default 100, since 2.1.1) is the minimum number of batches that stay recoverable; state, offset and commit log files older than that are eligible for cleanup.[^sqlconf]
+
+The checkpoint location must be a path in an HDFS-compatible, fault-tolerant file system, such as HDFS or an object store.[^ss-ckpt] `spark.sql.streaming.checkpointLocation` sets a default parent directory for queries that do not set the option.[^sqlconf]
+
+## What is safe to change between restarts?
+
+The Spark guide lists which query changes are allowed when restarting from the same checkpoint. "Allowed" means the query starts, but whether the result is well defined depends on the change; "not allowed" means the restart is likely to fail with unpredictable errors.[^ss-changes]
+
+| Change | Verdict | Example |
+| --- | --- | --- |
+| Number or type of input sources | Not allowed | Adding a second Kafka source |
+| Source rate limits | Allowed | Adding `maxOffsetsPerTrigger` |
+| Subscribed topics or input files | Generally not allowed | `subscribe` from `topic` to `newTopic` |
+| Sink type | Some combinations | File sink to Kafka sink is allowed; Kafka sink to file sink is not |
+| File sink output directory | Not allowed | Changing `path` |
+| Kafka sink topic | Allowed | Changing `topic` |
+| Filters and projections | Allowed; a different output schema only if the sink accepts it | Adding a `where` |
+| Stateful operators (aggregation keys or aggregates, deduplication columns, stream-stream join type or keys, user state schema) | Not allowed | Adding a grouping column |
+
+Some configurations are also fixed for the life of a checkpoint. The Spark notes name `spark.sql.shuffle.partitions` (state is hash-partitioned by key, so the number of state partitions cannot change), `spark.sql.streaming.stateStore.providerClass` and `spark.sql.streaming.multipleWatermarkPolicy`; to change them, start a new query with a new checkpoint.[^misc] Spark stores the values of these and other state-related configurations in the offset log and reuses them on restart, whatever the session sets.[^offsetseq]
+
+[transformWithState](/wiki/TransformWithState) is an exception for user state: state variables can be added and removed between runs, and with `spark.sql.streaming.stateStore.encodingFormat` set to `avro`, fields of a state variable's value can be added, removed, widened or reordered.[^tws]
+
+## What happens if the checkpoint is deleted?
+
+Without its checkpoint, a query starts as a new query: sources start from their configured starting position, state is empty, and batch ids start again from 0. Sinks that deduplicate by batch id must be told. The [Delta Lake](/wiki/Delta_Lake) documentation warns that a query restarted with a new checkpoint must use a different `txnAppId` in [foreachBatch](/wiki/ForeachBatch) writes; otherwise its writes are ignored as duplicates.[^delta]
+
+Delta Lake's `VACUUM` skips directories whose names begin with an underscore, so a checkpoint can be kept next to the table it writes, for example in `<table>/_checkpoints`.[^delta]
+
+## Example
+
+```python
+(spark.readStream.format("kafka")
+    .option("kafka.bootstrap.servers", "broker:9092")
+    .option("subscribe", "orders")
+    .option("maxOffsetsPerTrigger", 100000)   # safe to change between restarts
+    .load()
+    .writeStream
+    .option("checkpointLocation", "s3a://lake/checkpoints/orders_bronze")
+    .toTable("main.sales.orders_bronze"))
+```
+
+## Comparison with Flink checkpoints
+
+[Apache Flink](/wiki/Apache_Flink) also uses the word checkpoint. A Flink checkpoint is a recovery mechanism for unexpected job failures; Flink creates, owns and releases it without user action, and deletes it when the user terminates the job unless retention is configured. A Flink **savepoint** is created with the same mechanism but is owned by the user and designed for portability, for example for upgrades and redeployment; the Flink documentation compares the two to backups and recovery logs in a database.[^flink-cvs] See [Flink checkpoint and savepoint](/wiki/Flink_checkpoint_and_savepoint).
+
+A Spark streaming checkpoint is closer to a retained Flink checkpoint: it is a directory the user names, it stays after the query stops, and a restarted or changed query reads it, within the limits listed above.[^ss-ckpt][^ss-changes]
+
+## See also
+
+- [Checkpointing (Spark)](/wiki/Checkpointing_(Spark))
+- [State store](/wiki/State_store)
+- [Exactly-once semantics](/wiki/Exactly-once_semantics)
+- [Structured Streaming](/wiki/Structured_Streaming)
+- [Trigger (Structured Streaming)](/wiki/Trigger_(Structured_Streaming))
+
+## References
+
+[^ss-ckpt]: [Structured Streaming: Recovering from Failures with Checkpointing (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#recovering-from-failures-with-checkpointing). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^consts]: [StreamingCheckpointConstants.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/runtime/StreamingCheckpointConstants.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^offsetseq]: [OffsetSeq.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/checkpointing/OffsetSeq.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^commitlog]: [CommitLog.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/checkpointing/CommitLog.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^streammeta]: [StreamMetadata.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/runtime/StreamMetadata.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (Apache Spark v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ss-changes]: [Structured Streaming: Recovery Semantics after Changes in a Streaming Query (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/apis-on-dataframes-and-datasets.html#recovery-semantics-after-changes-in-a-streaming-query). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^misc]: [Structured Streaming: Miscellaneous Notes (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/additional-information.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^tws]: [Structured Streaming: transformWithState, State Schema Evolution (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/streaming/structured-streaming-transform-with-state.html#state-schema-evolution). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^delta]: [Table streaming reads and writes](https://docs.delta.io/latest/delta-streaming.html). *Delta Lake (Linux Foundation)*. Retrieved 2026-11-23.
+[^flink-cvs]: [Checkpoints vs. Savepoints (Apache Flink 2.3)](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/ops/state/checkpoints_vs_savepoints/). *Apache Software Foundation*. Retrieved 2026-11-23.

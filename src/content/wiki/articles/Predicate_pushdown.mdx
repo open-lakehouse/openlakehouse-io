@@ -1,0 +1,107 @@
+---
+title: "Predicate pushdown"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Filter pushdown, data skipping (at the file level)</Field>
+  <Field name="field">Query optimization</Field>
+  <Field name="key_parts">Data source API, file format statistics (Parquet row groups, page indexes, bloom filters), table format metadata, catalog</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark), [Trino](/wiki/Trino), [DuckDB](/wiki/DuckDB), [Apache Parquet](/wiki/Apache_Parquet), [Apache Iceberg](/wiki/Apache_Iceberg), [Delta Lake](/wiki/Delta_Lake)</Field>
+  <Field name="related">[Partition](/wiki/Partition), [Open table format](/wiki/Open_table_format), [Data catalog](/wiki/Data_catalog)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">the v4.3.0 tag of apache/spark (connector read interfaces, PushDownUtils.scala, FileSourceStrategy.scala, SQLConf.scala, docs), EXPLAIN runs on a Spark 4.3.1-SNAPSHOT build, the parquet-format 2.12.0 Thrift definition and parquet.apache.org docs, the Apache Iceberg 1.12.0 spec and REST catalog OpenAPI definition, and the Delta Lake protocol at v4.4.1</Verified>
+
+**Predicate pushdown** is a query optimization in which an engine sends the filter conditions of a query (the predicates in a `WHERE` clause) down to the layer that reads the data, so that rows, files or whole partitions that cannot match are never read. In an [open lakehouse](/wiki/Open_lakehouse) the predicate can travel through several layers: from the engine to the data source connector, from the connector to the file format, from the table format's metadata, and sometimes to the [data catalog](/wiki/Data_catalog). Each layer skips data in a different way, and a predicate may be used at one layer and not at another.
+
+## Engine to data source
+
+In [Apache Spark](/wiki/Apache_Spark), a connector built on the Data Source V2 API opts in to pushdown by implementing mix-in interfaces on its `ScanBuilder`. `SupportsPushDownFilters` (since Spark 3.0.0) receives filters as `org.apache.spark.sql.sources.Filter` objects.[^spdf] `SupportsPushDownV2Filters` (since 3.3.0) receives V2 `Predicate` objects and is the preferred interface.[^spdv2] Sibling interfaces push down column pruning, limits, aggregates, top-N and joins.[^readpkg]
+
+The source returns the predicates it cannot fully apply, and Spark evaluates those after the scan. A predicate can also be **partially** pushed: the Spark interface uses the Parquet row-group filter as its example of a filter that the source uses to skip data but that Spark must still evaluate on the rows that come back.[^spdf] Pushdown therefore reduces the data read; it does not always remove the `Filter` operator from the plan.
+
+Spark can also push filters that it learns only at runtime. With `SupportsRuntimeV2Filtering` (since 3.4.0), a scan can drop planned input partitions using predicates that Spark infers during execution, for example from the other side of a join.[^runtime] Dynamic partition pruning, on by default (`spark.sql.optimizer.dynamicPartitionPruning.enabled`), uses a join key to generate a predicate on a partition column.[^sqlconf]
+
+For its built-in file sources, Spark sorts filters into four groups: filters on partition columns, which prune directories; filters on bucket columns, which can prune files; filters on data columns, which are pushed into the file reader; and filters that must be evaluated again after the scan.[^fss]
+
+## Engine to file format
+
+<Hatnote>Main article: [Apache Parquet](/wiki/Apache_Parquet)</Hatnote>
+
+[Apache Parquet](/wiki/Apache_Parquet) files carry statistics that a reader can compare with a predicate before decoding data:
+
+- **Column chunk statistics.** The file metadata holds optional statistics for each column chunk in each row group, including minimum and maximum values and a null count.[^thrift] A reader skips a row group when, for example, its maximum is below the lower bound of a range filter.
+- **Page index.** The optional column index stores lower and upper bounds for each data page, and the offset index locates pages by row number, so a reader can skip pages inside a row group.[^pageindex]
+- **Bloom filters.** Minimum and maximum values cannot rule out a value that falls inside the range. A split block bloom filter answers whether a value might be present; it can return false positives but never false negatives, which makes it useful for equality filters on high-cardinality columns.[^bloom]
+
+In Spark, Parquet filter pushdown is controlled by `spark.sql.parquet.filterPushdown` (default true); ORC has the equivalent `spark.sql.orc.filterPushdown`.[^sparkparquet][^sqlconf]
+
+## Table format metadata
+
+Table formats keep statistics for each data file in their metadata, so an engine can skip whole files before opening any of them.
+
+In [Apache Iceberg](/wiki/Apache_Iceberg), scan planning first skips manifests whose partition summaries show no match. For the remaining manifests, Iceberg converts the query's predicates into partition predicates using the partition spec each manifest was written with, and then filters data files by the column lower and upper bounds and counts stored in the manifests.[^ispec] Because partition values come from transforms, a filter on a timestamp column can prune files of a table partitioned by `day(ts)`.[^ispec]
+
+In [Delta Lake](/wiki/Delta_Lake), `add` actions in the transaction log can carry per-file statistics (record count, per-column minimum and maximum values and null counts), which the protocol describes as usable for eliminating files based on query predicates.[^dproto] Delta Lake collects these statistics automatically on write for columns up to the position set by `delta.dataSkippingNumIndexedCols`.[^dskip]
+
+## Catalog
+
+Some catalogs accept predicates too. Spark pushes some partition predicates to the Hive metastore so that it lists only matching partitions (`spark.sql.hive.metastorePartitionPruning`, default true).[^sqlconf] The [Iceberg REST catalog](/wiki/Iceberg_REST_catalog) specification defines a server-side scan planning endpoint (`planTableScan`) whose request includes a filter predicate, so the catalog service can plan which files a client reads.[^rest]
+
+## When pushdown does not happen
+
+A predicate is pushed only if the engine can translate it into a form the source understands. Common reasons it stays in the engine:
+
+- **Casts on the column.** Comparing a string column with a number makes Spark cast the column (`cast(code as bigint) = 7`), which has no translation to a source filter. Only `IsNotNull(code)` is pushed in the example below.
+- **Functions and UDFs.** A predicate such as `upper(code) = 'A'` or a user-defined function cannot be compared with stored minimum and maximum values, so it is evaluated after the scan.
+- **Non-deterministic expressions.** Spark does not push down non-deterministic filters, such as one that uses `rand()`, because a source might evaluate them a different number of times than Spark does.[^pdu][^fss]
+- **Missing statistics.** File skipping needs statistics on the filtered column; Delta Lake, for example, collects none for columns past `delta.dataSkippingNumIndexedCols`.[^dskip]
+
+## How to check
+
+In Spark, `EXPLAIN` shows what was pushed. For a file scan, `PartitionFilters` lists predicates used to prune directories, `PushedFilters` lists filters handed to the file reader, and `DataFilters` lists data-column predicates before translation. The following output, from a Spark 4.3.1-SNAPSHOT build, shows a partition column filter, a pushed range filter, and a cast that blocks pushdown (paths shortened):
+
+```
+EXPLAIN SELECT order_id FROM orders
+WHERE order_date = DATE'2026-11-01' AND amount > 100;
+
+FileScan parquet spark_catalog.default.orders[order_id#20L,amount#21,order_date#23]
+  DataFilters: [isnotnull(amount#21), (amount#21 > 100.0)],
+  PartitionFilters: [isnotnull(order_date#23), (order_date#23 = 2026-11-01)],
+  PushedFilters: [IsNotNull(amount), GreaterThan(amount,100.0)]
+
+EXPLAIN SELECT order_id FROM orders WHERE code = 7;   -- code is a STRING
+
+Filter (isnotnull(code#22) AND (cast(code#22 as bigint) = 7))
++- FileScan parquet ... PushedFilters: [IsNotNull(code)]
+```
+
+A filter listed in `PushedFilters` can still appear in a `Filter` operator above the scan, because Parquet skips data by row group and page, not by row. The plan shows what was pushed, not how much data was skipped; the SQL tab of the Spark web UI shows run-time metrics for the scan, such as `number of output rows` and `scan time`.[^spdf][^webui]
+
+## See also
+
+- [Partition](/wiki/Partition)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Delta Lake](/wiki/Delta_Lake)
+- [Open table format](/wiki/Open_table_format)
+
+## References
+
+[^spdf]: [SupportsPushDownFilters.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownFilters.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^spdv2]: [SupportsPushDownV2Filters.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsPushDownV2Filters.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^readpkg]: [org.apache.spark.sql.connector.read package (v4.3.0)](https://github.com/apache/spark/tree/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^runtime]: [SupportsRuntimeV2Filtering.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/java/org/apache/spark/sql/connector/read/SupportsRuntimeV2Filtering.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^fss]: [FileSourceStrategy.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FileSourceStrategy.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^thrift]: [parquet.thrift (apache-parquet-format-2.12.0)](https://github.com/apache/parquet-format/blob/apache-parquet-format-2.12.0/src/main/thrift/parquet.thrift). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^pageindex]: [Page Index](https://parquet.apache.org/docs/file-format/pageindex/). *Apache Parquet*. Retrieved 2026-11-22.
+[^bloom]: [Bloom Filter](https://parquet.apache.org/docs/file-format/bloomfilter/). *Apache Parquet*. Retrieved 2026-11-22.
+[^sparkparquet]: [Parquet Files (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/sql-data-sources-parquet.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^ispec]: [Iceberg Table Spec (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^dproto]: [Delta Transaction Log Protocol (v4.4.1)](https://github.com/delta-io/delta/blob/v4.4.1/PROTOCOL.md). *Delta Lake*. Retrieved 2026-11-22.
+[^dskip]: [Optimizations](https://docs.delta.io/optimizations-oss/). *Delta Lake*. Retrieved 2026-11-22.
+[^rest]: [rest-catalog-open-api.yaml (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/open-api/rest-catalog-open-api.yaml). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^pdu]: [PushDownUtils.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/v2/PushDownUtils.scala). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^webui]: [Web UI (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/web-ui.html). *Apache Software Foundation*. Retrieved 2026-11-22.

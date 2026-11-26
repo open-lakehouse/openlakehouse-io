@@ -1,0 +1,93 @@
+---
+title: "Iceberg File Format API"
+categories: ["Concepts", "Glossary terms", "Table formats"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">FormatModel API; pluggable file formats in Iceberg</Field>
+  <Field name="field">Table formats, data file input and output</Field>
+  <Field name="introduced">Apache Iceberg 1.11.0 (May 2026)</Field>
+  <Field name="key_parts">`FormatModel`, `FormatModelRegistry`, read and write builders, compatibility test kit</Field>
+  <Field name="implementations">[Apache Iceberg](/wiki/Apache_Iceberg) Java library (Parquet, ORC, Avro; Spark, Flink, Arrow and generic object models)</Field>
+  <Field name="related">[Apache Parquet](/wiki/Apache_Parquet), [Apache ORC](/wiki/Apache_ORC), [Open table format](/wiki/Open_table_format), [Logical type](/wiki/Logical_type)</Field>
+</Infobox>
+
+<Verified date="2026-11-22">Apache Iceberg source at tags apache-iceberg-1.10.0, 1.11.0 and 1.12.0, the 1.11.0 and 1.12.0 release notes, the File Format API announcement post, GitHub issue apache/iceberg#12225 and its pull requests, and the dev@iceberg.apache.org discussion and vote threads</Verified>
+
+The **Iceberg File Format API** is a set of Java interfaces in [Apache Iceberg](/wiki/Apache_Iceberg) that puts every data file format behind one common reader and writer contract, so that engines read and write Iceberg data files through a registry instead of format-specific code. A format supplies a `FormatModel`, which pairs a file format with an in-memory object model (for example Spark rows or Flink rows) and builds readers and writers for it; the `FormatModelRegistry` stores the available models.[^blog] The API shipped in Iceberg 1.11.0 with implementations for Parquet, ORC and Avro.[^pr15254][^releases] Support for additional formats, such as Vortex and Lance, is discussed and prototyped but is not part of any release.
+
+## Status
+
+The File Format API is a released part of the Iceberg Java library, not a change to the Iceberg table specification.
+
+- **Shipped.** The 1.11.0 release notes, for the release of 19 May 2026, list the File Format API interfaces and the Parquet, ORC and Arrow format model implementations.[^releases] The `org.apache.iceberg.formats` package is absent at tag apache-iceberg-1.10.0 and present at 1.11.0 and 1.12.0.[^javadoc111] Iceberg 1.12.0, released on 29 September 2026, carries the same package.[^releases][^javadoc112]
+- **Not shipped.** No new data file format has been added through the API. At 1.12.0 the Java `FileFormat` enumeration lists Puffin, ORC, Parquet, Avro and the metadata JSON file, and Appendix A of the table spec defines type mappings only for Avro, Parquet and ORC.[^fileformat][^icespec] A proof-of-concept pull request for Lance through the API was opened in March 2026 as a draft not intended for merge, and was closed.[^lance]
+- **Documentation.** As of November 2026 the versioned Iceberg documentation has no page for the API; a pull request proposing one is open.[^docspr]
+
+## Motivation
+
+Before the API, Iceberg's Java code supported Parquet, Avro and ORC through format-specific readers and writers in each engine integration. The proposal issue states that new version 3 features, such as new column types and default values, need changes at the file format level, and that because these changes were made separately per format, not every feature was available for every format. It also names emerging formats, Vortex and Lance, as candidates for use cases such as fast random access.[^issue]
+
+The announcement post describes the old code as fragmented: Spark, Flink and the generic Java implementation each kept their own format-specific readers, writers and feature handling, with large branching code paths, so that projection, filtering and delete file handling needed separate work for each format and engine pair.[^blog]
+
+## How it works
+
+A `FormatModel<D, S>` names the `FileFormat` it handles, the Java class of the rows it produces and consumes (`D`), and the class of the engine schema (`S`). It returns a `ReadBuilder` for an input file and a `ModelWriteBuilder` for an output file.[^javadoc112] Engines can define their own object models and register them, which lets custom in-memory representations use Iceberg's file format handling.[^javadoc112]
+
+Engines then ask the registry for a builder by file format and row class, instead of branching on the format themselves.[^blog]
+
+```java
+// Builders obtained from the registry (method names as given in the announcement post)
+FormatModelRegistry.readBuilder(fileFormat, clazz, inputFile);
+FormatModelRegistry.dataWriteBuilder(fileFormat, clazz, outputFile);
+FormatModelRegistry.equalityDeleteWriteBuilder(fileFormat, clazz, outputFile);
+FormatModelRegistry.positionDeleteWriteBuilder(fileFormat, clazz, outputFile);
+```
+
+At 1.12.0 the Iceberg source tree contains format models for Avro, Parquet and ORC, a generic model for Iceberg records, an Arrow model for vectorized reads, and Spark and Flink models.[^releases][^pr15254][^pr15329][^pr15328] The position delete writer builder is documented as applying to format version 2 tables only, since version 3 tables must not add position delete files and use [deletion vectors](/wiki/Deletion_vector) instead.[^pr15980][^icespec]
+
+### Compatibility test kit
+
+The announcement post called a Technology Compatibility Kit (TCK) the most important next step, to validate correctness, type support and compatibility of new format implementations.[^blog] A first TCK was merged in March 2026 and is part of 1.11.0, and further TCK tests (for example for the writer builder) were added for 1.12.0.[^tck][^tck2]
+
+## History
+
+Péter Váry opened the proposal issue and a discussion thread on the Iceberg dev mailing list on 11 February 2025, with a linked design document.[^issue][^discuss] The first implementation was a single large pull request that changed the interfaces, the format implementations and the engines together; the interfaces were later split into a separate pull request.[^pr12298]
+
+In May 2025 a vote on the proposal was called on the dev list; it listed the expected results as the same performance, a formal API, simpler engine and format code, better testability, and the ability to introduce or deprecate file formats with little disruption.[^vote] Review continued on the design document and pull requests.
+
+On 6 February 2026 Ryan Blue wrote on the dev list that the API was ready to be committed, starting with the interfaces pull request, with the aim of including it in the next release to help unblock the DataFusion Comet integration.[^discuss] The interfaces were merged that day, and the Spark and Flink integrations followed on 17 and 18 February 2026.[^pr15329][^pr12774][^pr15328] The project announced the finalized API on 20 February 2026, and it shipped in 1.11.0.[^blog][^releases]
+
+## Planned work
+
+The announcement post lists next steps that were not part of the release: moving the Spark Comet reader to a format model so it can live in the Comet repository, a full Vortex integration, completing the TCK, and column families (vertically split files that allow partial updates without rewriting whole files).[^blog] These are plans, not shipped features.
+
+## See also
+
+- [Apache Iceberg](/wiki/Apache_Iceberg)
+- [Apache Parquet](/wiki/Apache_Parquet)
+- [Logical type](/wiki/Logical_type)
+- [Deletion vector](/wiki/Deletion_vector)
+- [Open table format](/wiki/Open_table_format)
+
+## References
+
+[^blog]: [Introducing the Apache Iceberg File Format API](https://iceberg.apache.org/blog/apache-iceberg-file-format-api/). *Apache Software Foundation*, 2026-02-20. Retrieved 2026-11-22.
+[^pr15254]: [Core, Data: Implementation of AvroFormatModel (#15254)](https://github.com/apache/iceberg/pull/15254). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^releases]: [Releases (1.11.0 and 1.12.0 release notes)](https://iceberg.apache.org/releases/). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^javadoc111]: [Package org.apache.iceberg.formats (Iceberg 1.11.0 Javadoc)](https://iceberg.apache.org/javadoc/1.11.0/org/apache/iceberg/formats/package-summary.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^javadoc112]: [Interface FormatModel (Iceberg 1.12.0 Javadoc)](https://iceberg.apache.org/javadoc/1.12.0/org/apache/iceberg/formats/FormatModel.html). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^fileformat]: [FileFormat.java (apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/api/src/main/java/org/apache/iceberg/FileFormat.java). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^icespec]: [Iceberg Table Spec (format/spec.md at apache-iceberg-1.12.0)](https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/format/spec.md). *Apache Software Foundation*. Retrieved 2026-11-22.
+[^lance]: [Core, Data, Lance: Add Lance file format support via File Format API (#15751)](https://github.com/apache/iceberg/pull/15751). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^docspr]: [Docs: Add a File Format API page (#18587)](https://github.com/apache/iceberg/pull/18587). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^issue]: [File Format API (#12225)](https://github.com/apache/iceberg/issues/12225). *GitHub, apache/iceberg*, 2025-02-11. Retrieved 2026-11-22.
+[^pr15329]: [Core, Data, Flink: Moving Flink to use the new FormatModel API (#15329)](https://github.com/apache/iceberg/pull/15329). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^pr15328]: [Core, Data, Spark: Moving Spark to use the new FormatModel API (#15328)](https://github.com/apache/iceberg/pull/15328). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^pr15980]: [Docs: Document that positionDeleteWriteBuilder is for format-version 2 tables only (#15980)](https://github.com/apache/iceberg/pull/15980). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^tck]: [Data, Spark, Flink: Add TCK for File Format API (#15441)](https://github.com/apache/iceberg/pull/15441). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^tck2]: [Data: Add TCK for Writer builder in FileFormat API (#16575)](https://github.com/apache/iceberg/pull/16575). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^discuss]: [\[DISCUSS\] FileFormat API proposal](https://lists.apache.org/thread/ovyh52m2b6c1hrg4fhw3rx92bzr793n2). *dev@iceberg.apache.org*, 2025-02-11. Retrieved 2026-11-22.
+[^pr12298]: [Core: Interface based DataFile reader and writer API (#12298)](https://github.com/apache/iceberg/pull/12298). *GitHub, apache/iceberg*. Retrieved 2026-11-22.
+[^vote]: [\[VOTE\] File Format API](https://lists.apache.org/thread/m49y4w9xz9l92nydnyoxrpwhz9k7d3zj). *dev@iceberg.apache.org*, 2025-05-15. Retrieved 2026-11-22.
+[^pr12774]: [Core, Data: File Format API interfaces (#12774)](https://github.com/apache/iceberg/pull/12774). *GitHub, apache/iceberg*. Retrieved 2026-11-22.

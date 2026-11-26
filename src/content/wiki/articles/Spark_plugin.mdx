@@ -1,0 +1,114 @@
+---
+title: "Spark plugin"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">SparkPlugin, driver plugin, executor plugin</Field>
+  <Field name="field">Extension APIs</Field>
+  <Field name="key_parts">SparkPlugin, DriverPlugin, ExecutorPlugin, PluginContext (metrics, configuration, driver RPC), spark.plugins</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (since 3.0.0)</Field>
+  <Field name="related">[Spark listener](/wiki/Spark_listener), [Executor](/wiki/Executor), [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark)), [Apache Gluten](/wiki/Apache_Gluten), [DataFusion Comet](/wiki/DataFusion_Comet)</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (SparkPlugin.java, DriverPlugin.java, ExecutorPlugin.java, PluginContext.java, config/package.scala, docs/monitoring.md), Spark JIRA SPARK-29397, the Apache Gluten v1.7.0 README, the Apache DataFusion Comet 1.2.0 README and source, and the spark-rapids v26.10.0 configuration docs</Verified>
+
+A **Spark plugin** is a class implementing `org.apache.spark.api.plugin.SparkPlugin` that [Apache Spark](/wiki/Apache_Spark) loads into an application at startup, running one component inside the driver and one inside every [executor](/wiki/Executor). Plugins can initialize resources before tasks run, publish custom metrics through Spark's metrics system, react to task start and end on executors, and send messages from executors to the driver. The API was added in Spark 3.0.0 and is marked as a developer API.[^sparkplugin][^n1]
+
+## How do you load a Spark plugin?
+
+Plugins are loaded by listing their class names in `spark.plugins` (since 3.0.0). A second setting, `spark.plugins.defaultList`, is prepended to it, so that a platform can put its plugins in the default configuration file and users can still add more on the command line without overwriting them. Duplicate plugins are ignored.[^coreconf][^monitoring]
+
+```bash
+spark-submit \
+  --jars my-plugin.jar \
+  --conf spark.plugins=com.example.MyPlugin \
+  app.py
+```
+
+The plugin jar must be on the classpath of both the driver and the executors, because Spark creates one instance in each.
+
+## What are the parts of the plugin API?
+
+A `SparkPlugin` returns two optional components. The driver component has a single instance per application, inside the driver; the executor component has one instance in each executor that Spark starts.[^sparkplugin]
+
+**DriverPlugin** (since 3.0.0) has these methods:[^driver]
+- `init(SparkContext, PluginContext)` runs early in driver startup, before the task scheduler is initialized, and blocks startup until it returns. The map it returns is passed to every executor plugin's `init`.
+- `registerMetrics(appId, PluginContext)` runs later, once the application ID is known. Metrics added to the context's registry by then are published as a metrics source named after the plugin.
+- `receive(Object)` handles messages sent from executor plugins.
+- `shutdown()` runs when the driver stops.
+
+**ExecutorPlugin** (since 3.0.0) has these methods:[^executor]
+- `init(PluginContext, Map<String, String> extraConf)` runs during executor startup and blocks it. Executor metrics must be registered here; metrics registered later may not show up.
+- `onTaskStart()`, `onTaskSucceeded()` and `onTaskFailed(TaskFailedReason)` (all since 3.1.0) run on the task's own thread. The documentation warns against expensive work here, such as calls to remote services, because they run for every task.
+- `shutdown()` runs during executor shutdown and blocks it.
+
+**PluginContext** gives both sides a Dropwizard `MetricRegistry`, the `SparkConf`, the executor ID, the host name and the resources assigned to the process. On executors, `send(Object)` sends a message to the driver plugin without waiting, and `ask(Object)` waits for a reply, up to `spark.rpc.askTimeout`.[^context]
+
+## Example: counting failed tasks per executor
+
+```scala
+package com.example
+
+import java.util.{Collections, Map => JMap}
+import com.codahale.metrics.Counter
+import org.apache.spark.TaskFailedReason
+import org.apache.spark.api.plugin._
+
+class TaskFailurePlugin extends SparkPlugin {
+  override def driverPlugin(): DriverPlugin = null   // no driver-side component
+
+  override def executorPlugin(): ExecutorPlugin = new ExecutorPlugin {
+    private var failures: Counter = _
+
+    override def init(ctx: PluginContext, extraConf: JMap[String, String]): Unit = {
+      failures = ctx.metricRegistry().counter("failedTasks")
+    }
+
+    override def onTaskFailed(reason: TaskFailedReason): Unit = failures.inc()
+  }
+}
+```
+
+Loaded with `--conf spark.plugins=com.example.TaskFailurePlugin`, the counter appears in each executor's metrics under the `plugin.<Plugin Class Name>` namespace, alongside Spark's own executor metrics.[^monitoring]
+
+## What is built on the Spark plugin API?
+
+The plugin API is the entry point for several projects that replace or extend Spark's execution:
+- **[Apache Gluten](/wiki/Apache_Gluten)** offloads compute-intensive SQL processing to native engines such as Velox and ClickHouse while reusing Spark's control flow. It translates Spark physical plans into Substrait plans and is enabled with `spark.plugins=org.apache.gluten.GlutenPlugin`.[^n2] Gluten graduated from the Apache Incubator on 2026-02-18.[^n3]
+- **[DataFusion Comet](/wiki/DataFusion_Comet)** (Apache DataFusion Comet), which describes itself as an accelerator for Apache Spark that runs on commodity hardware, is enabled with `spark.plugins=org.apache.spark.CometPlugin`. Its `CometPlugin` class implements both a driver and an executor plugin.[^n4][^n5]
+- **RAPIDS Accelerator for Apache Spark**, from NVIDIA, runs SQL operations on GPUs and is enabled with `spark.plugins=com.nvidia.spark.SQLPlugin`.[^n6]
+
+## Spark plugin vs Spark listener
+
+|  | Spark plugin | [Spark listener](/wiki/Spark_listener) |
+| --- | --- | --- |
+| Runs on | Driver and every executor[^sparkplugin] | Driver only, on the listener bus[^n7] |
+| Timing | Synchronous; `init` blocks startup[^driver][^executor] | Asynchronous; events can be dropped if a queue is full |
+| Can publish metrics | Yes, through the metrics system[^context] | No built-in metrics registry |
+| Configured with | `spark.plugins`[^coreconf] | `spark.extraListeners`[^coreconf] |
+| Typical use | Native or GPU execution engines, executor-side instrumentation | Lineage, auditing, job monitoring |
+
+## See also
+
+- [Spark listener](/wiki/Spark_listener)
+- [Executor](/wiki/Executor)
+- [Native execution engine (Spark)](/wiki/Native_execution_engine_(Spark))
+- [Apache Gluten](/wiki/Apache_Gluten)
+- [DataFusion Comet](/wiki/DataFusion_Comet)
+
+## References
+
+[^sparkplugin]: [SparkPlugin.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/api/plugin/SparkPlugin.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [SPARK-29397: Create new plugin interface for driver and executor plugins](https://issues.apache.org/jira/browse/SPARK-29397). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^coreconf]: [config/package.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/internal/config/package.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^monitoring]: [Monitoring and Instrumentation (Spark 4.3.0)](https://spark.apache.org/docs/4.3.0/monitoring.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^driver]: [DriverPlugin.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/api/plugin/DriverPlugin.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^executor]: [ExecutorPlugin.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/api/plugin/ExecutorPlugin.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^context]: [PluginContext.java (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/java/org/apache/spark/api/plugin/PluginContext.java). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [Apache Gluten README (v1.7.0)](https://github.com/apache/gluten/blob/v1.7.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n3]: [Gluten Project Incubation Status](https://incubator.apache.org/projects/gluten.html). *Apache Incubator*. Retrieved 2026-11-23.
+[^n4]: [Apache DataFusion Comet README (1.2.0)](https://github.com/apache/datafusion-comet/blob/1.2.0/README.md). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n5]: [Plugins.scala (Comet 1.2.0)](https://github.com/apache/datafusion-comet/blob/1.2.0/spark/src/main/scala/org/apache/spark/Plugins.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n6]: [RAPIDS Accelerator for Apache Spark Configuration (v26.10.0)](https://github.com/NVIDIA/spark-rapids/blob/v26.10.0/docs/configs.md). *NVIDIA*. Retrieved 2026-11-23.
+[^n7]: [LiveListenerBus.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/core/src/main/scala/org/apache/spark/scheduler/LiveListenerBus.scala). *Apache Software Foundation*. Retrieved 2026-11-23.

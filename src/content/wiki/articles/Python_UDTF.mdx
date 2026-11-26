@@ -1,0 +1,100 @@
+---
+title: "Python UDTF"
+categories: ["Concepts", "Glossary terms", "Apache Spark"]
+---
+
+<Infobox type="concept">
+  <Field name="also_known_as">Python user-defined table function, `@udtf`</Field>
+  <Field name="field">Distributed data processing</Field>
+  <Field name="introduced">Apache Spark 3.5.0 (SPARK-43797)</Field>
+  <Field name="key_parts">Handler class with `eval`; optional `__init__`, `analyze`, `terminate`, `cleanup`; output schema; table arguments</Field>
+  <Field name="implementations">[Apache Spark](/wiki/Apache_Spark) (PySpark)</Field>
+  <Field name="related">[User-defined function (Spark)](/wiki/User-defined_function_(Spark)), [Arrow-optimized Python UDF](/wiki/Arrow-optimized_Python_UDF), [Python data source API (Spark)](/wiki/Python_data_source_API_(Spark))</Field>
+</Infobox>
+
+<Verified date="2026-11-23">the v4.3.0 tag of apache/spark (the PySpark UDTF tutorial, python/pyspark/sql/functions/builtin.py, python/pyspark/sql/udtf.py, python/pyspark/sql/connect/udtf.py, examples/src/main/python/sql/udtf.py, SQLConf.scala, the PySpark migration guide) and the Spark 3.5.0 and 4.1.0 release notes</Verified>
+
+In [Apache Spark](/wiki/Apache_Spark), a **Python UDTF** (**Python user-defined table function**) is a Python class, registered with PySpark, whose `eval` method can return zero or more rows for each call, so that the function produces a whole table instead of a single value.[^tut] A UDTF is called in the `FROM` clause of a SQL query or directly from Python, and its arguments can be scalar expressions or one input table.[^tut] Python UDTFs were introduced in Spark 3.5.0.[^r350]
+
+## What is a Python UDTF used for?
+
+The PySpark user guide recommends a Python UDTF when a function must generate several rows and columns and benefit from Python libraries.[^guide] It lists these use cases:[^guide]
+- Exploding nested data such as arrays or structs into multiple rows.
+- Splitting strings into several rows or columns.
+- Generating rows from input ranges, such as sequences of numbers, timestamps or dates.
+- Computations that need Python libraries, such as statistical functions or machine learning inference, where a SQL table function would not be enough.
+
+A scalar [UDF](/wiki/User-defined_function_(Spark)) returns exactly one value per input row; a UDTF can return any number of rows, each with several columns.[^guide]
+
+## How do you write a Python UDTF?
+
+A Python UDTF is a class with a required `eval` method that yields output rows as tuples, lists or `pyspark.sql.Row` objects. Optional methods are `__init__` (called once per UDTF instance on the executor), `terminate` (called after all input rows of a partition have been processed, and able to yield more rows), `cleanup` (always called at the end, even after an error) and a static `analyze` method.[^tut]
+
+The output schema is a `StructType` or a DDL string, given in the `returnType` of the `@udtf` decorator or returned by `analyze`.[^tut] A one-column row must be yielded with a trailing comma, for example `yield x,`.[^tut]
+
+The following PySpark example runs on Spark 4.3.0. It defines a UDTF, calls it from Python, registers it and calls it from SQL, including with a `LATERAL` join.
+
+```python
+from pyspark.sql.functions import lit, udtf
+
+@udtf(returnType="word: string")
+class WordSplitter:
+    def eval(self, text: str):
+        for word in text.split(" "):
+            yield (word.strip(),)
+
+WordSplitter(lit("hello world")).show()
+
+spark.udtf.register("split_words", WordSplitter)
+spark.sql("SELECT * FROM split_words('hello world')").show()
+spark.sql(
+    "SELECT * FROM VALUES ('Hello World'), ('Apache Spark') t(text), "
+    "LATERAL split_words(text)"
+).show()
+```
+
+The example follows the UDTF examples shipped with Spark 4.3.0.[^ex]
+
+## How do table arguments work?
+
+A Python UDTF can take one input table as an argument, alongside scalar arguments. In SQL the table is passed with the `TABLE` keyword, either as `TABLE(t)` or as a subquery such as `TABLE(SELECT a, b FROM t)`. Each input row reaches `eval` as a `Row`.[^tut]
+
+The call can ask Spark to partition the input table: `PARTITION BY` guarantees that all rows with the same values of the partitioning expressions are consumed by one instance of the UDTF class, and `WITH SINGLE PARTITION` sends all rows to one instance. An `ORDER BY` clause sets the row order within each partition.[^tut] For example: `SELECT * FROM my_udtf(TABLE(events) PARTITION BY user_id ORDER BY ts)`.
+
+The `analyze` method can request the same partitioning, ordering and column selection itself, through the `partitionBy`, `withSinglePartition`, `orderBy` and `select` fields of `AnalyzeResult`, so that callers can write just `TABLE(t)`.[^tut] `analyze` also lets a UDTF compute its output schema from its arguments at query planning time, instead of declaring a fixed `returnType`.[^tut]
+
+An `eval` method can raise `SkipRestOfInputTableException` to skip the remaining rows of the current partition and go straight to `terminate`; any other exception aborts the UDTF and fails the query.[^tut]
+
+## Is a Python UDTF Arrow-optimized?
+
+Since Spark 4.2, Python UDTFs use [Apache Arrow](/wiki/Apache_Arrow) for data transfer by default: `spark.sql.execution.pythonUDTF.arrow.enabled` defaults to `true`, and setting it to `false` restores the earlier behaviour.[^upgrade][^sqlconf] The `useArrow` argument of `@udtf` overrides the configuration for one UDTF.[^builtin] The tutorial says Arrow helps most when each input row produces a large result table.[^tut] Arrow optimization for UDTFs was first added in Spark 3.5.0 (SPARK-43964).[^r350]
+
+An Arrow-optimized UDTF still runs `eval` on Python objects. Spark 4.1.0 added a separate decorator, `arrow_udtf` (SPARK-52979), whose `eval` receives PyArrow `RecordBatch` or `Array` objects and yields PyArrow tables or record batches, for vectorized processing without row-by-row overhead.[^builtin][^n1]
+
+## Limitations
+
+- A UDTF cannot create or reference the Spark session; trying to do so causes a serialization error.[^tut]
+- A UDTF call accepts at most one table argument.[^tut]
+- `terminate` may hold a whole partition in memory if the UDTF buffers rows until the end, and the tutorial warns about memory use in that pattern.[^tut]
+
+PySpark 4.3.0 also ships a Python UDTF implementation for [Spark Connect](/wiki/Spark_Connect) clients (`pyspark.sql.connect.udtf`).[^n2]
+
+## See also
+
+- [User-defined function (Spark)](/wiki/User-defined_function_(Spark))
+- [Arrow-optimized Python UDF](/wiki/Arrow-optimized_Python_UDF)
+- [Pandas UDF](/wiki/Pandas_UDF)
+- [Python data source API (Spark)](/wiki/Python_data_source_API_(Spark))
+- [Apache Arrow](/wiki/Apache_Arrow)
+
+## References
+
+[^tut]: [Python User-defined Table Functions (UDTFs) (PySpark 4.3.0)](https://spark.apache.org/docs/4.3.0/api/python/tutorial/sql/python_udtf.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^r350]: [Spark Release 3.5.0](https://spark.apache.org/releases/spark-release-3-5-0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^guide]: [Chapter 5: Unleashing UDFs & UDTFs (PySpark 4.3.0 user guide)](https://spark.apache.org/docs/4.3.0/api/python/user_guide/udfandudtf.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^ex]: [examples/src/main/python/sql/udtf.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/examples/src/main/python/sql/udtf.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^upgrade]: [Upgrading PySpark (PySpark 4.3.0 migration guide)](https://spark.apache.org/docs/4.3.0/api/python/migration_guide/pyspark_upgrade.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^sqlconf]: [SQLConf.scala (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/sql/catalyst/src/main/scala/org/apache/spark/sql/internal/SQLConf.scala). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^builtin]: [python/pyspark/sql/functions/builtin.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/functions/builtin.py). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n1]: [Spark Release 4.1.0](https://spark.apache.org/releases/spark-release-4.1.0.html). *Apache Software Foundation*. Retrieved 2026-11-23.
+[^n2]: [python/pyspark/sql/connect/udtf.py (v4.3.0)](https://github.com/apache/spark/blob/v4.3.0/python/pyspark/sql/connect/udtf.py). *Apache Software Foundation*. Retrieved 2026-11-23.
