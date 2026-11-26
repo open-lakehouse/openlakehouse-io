@@ -3,13 +3,10 @@ import { Link } from "react-router-dom";
 import { Seo } from "@/components/Seo";
 import { canonicalUrl, SITE_NAME, SITE_URL } from "@/lib/seo";
 import { WikiAnchor } from "@/components/wiki/WikiMdx";
-import { WIKI_HOME, WIKI_LICENSE, WIKI_NAME, WIKI_REPO, articles, categoryMembers, wikiPages } from "@/content/wiki";
+import { WIKI_DESCRIPTION, WIKI_HOME, WIKI_LICENSE, WIKI_NAME, WIKI_REPO, WIKI_TAGLINE, articles, categoryMembers, wikiPages } from "@/content/wiki";
 
 const REPO_WIKI_DIR = `${WIKI_REPO}/tree/main/src/content/wiki`;
 import { WikiShell } from "@/components/wiki/WikiShell";
-
-export const WIKI_TAGLINE =
-  "The open reference for the open lakehouse and the agentic lakehouse: open table formats, catalogs, engines, pipelines, and the AI agents that work on them. Every fact is cited and dated.";
 
 const W = ({ to, children }: { to: string; children?: ReactNode }) => (
   <WikiAnchor href={`/wiki/${to.replace(/ /g, "_")}`}>{children ?? to}</WikiAnchor>
@@ -40,14 +37,15 @@ export const WikiHome = () => (
     <Seo
       title={WIKI_NAME}
       suffix={false}
-      description={WIKI_TAGLINE}
+      description={`${WIKI_TAGLINE}. ${WIKI_DESCRIPTION}`}
       path={WIKI_HOME}
       jsonLd={{
         "@context": "https://schema.org",
         "@type": "WebSite",
         name: WIKI_NAME,
         url: canonicalUrl(WIKI_HOME),
-        description: WIKI_TAGLINE,
+        alternateName: "Open Lakehouse Wiki",
+        description: WIKI_DESCRIPTION,
         license: WIKI_LICENSE.url,
         publisher: { "@type": "Organization", name: SITE_NAME, url: SITE_URL },
       }}
@@ -55,11 +53,12 @@ export const WikiHome = () => (
     <div className="olw-home">
       <header className="olw-hero">
         <div className="olw-hero-title">{WIKI_NAME}</div>
+        <p className="olw-hero-tagline">{WIKI_TAGLINE}.</p>
         <p>
-          The open reference for the <W to="Open lakehouse">open lakehouse</W> and the{" "}
-          <W to="Agentic lakehouse">agentic lakehouse</W>: open table formats, catalogs, engines, pipelines, and the AI
-          agents that work on them. Every fact is cited and dated. Anyone can{" "}
-          <W to="Open Lakehouse Wiki:Style guide">suggest a change</W> with a pull request.
+          A free wiki on <Link to="/open-source-data-engineering">open source data engineering</Link>: open table
+          formats, catalogs, engines, pipelines, and the AI agents that work on them, centered on the{" "}
+          <W to="Open lakehouse">open lakehouse</W>. Every fact is cited, dated, and tied to a version. Anyone can{" "}
+          <W to="Project:Style guide">suggest a change</W> with a pull request.
         </p>
       </header>
 
@@ -120,7 +119,7 @@ export const WikiHome = () => (
               <W to="Copy-on-write and merge-on-read" />, <W to="Small files problem" />, <W to="Iceberg File Format API" />
             </li>
             <li>Streaming: <W to="Stream processing" />, <W to="Streaming lakehouse" />, <W to="Watermark" />, <W to="Exactly-once semantics" /></li>
-            <li>The <W to="Open Lakehouse Wiki:Glossary">glossary</W>: every term in one line</li>
+            <li>The <W to="Project:Glossary">glossary</W>: every term in one line</li>
           </ul>
         </Card>
         <Card title="Is it deprecated?" tone="navy">
@@ -146,7 +145,7 @@ export const WikiHome = () => (
             <li>Each article shows the date its facts were last verified.</li>
             <li>
               Every page is a Markdown file in <a href={WIKI_REPO}>the site's repository</a>. To change one, use its "Edit
-              on GitHub" link and open a pull request. Read the <W to="Open Lakehouse Wiki:Style guide">style guide</W>{" "}
+              on GitHub" link and open a pull request. Read the <W to="Project:Style guide">style guide</W>{" "}
               first.
             </li>
             <li>Content is licensed <a href={WIKI_LICENSE.url}>{WIKI_LICENSE.name}</a>.</li>
@@ -156,7 +155,7 @@ export const WikiHome = () => (
           <ul>
             <li><Link to="/agentic-lakehouse">The agentic lakehouse guide</Link> on openlakehouse.io</li>
             <li><Link to="/agentic-data-engineering">Agentic data engineering</Link> on openlakehouse.io</li>
-            <li><W to="Open Lakehouse Wiki:About">About the wiki</W></li>
+            <li><W to="Project:About">About the wiki</W></li>
           </ul>
         </Card>
       </div>

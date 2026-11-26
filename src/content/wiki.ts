@@ -1,4 +1,4 @@
-// The Open Lakehouse Wiki: pages are MDX files under ./wiki/{articles,categories,project}.
+// The Open Data Engineering Reference (the wiki): pages are MDX files under ./wiki/{articles,categories,project}.
 // The index (titles, categories, summaries) is built from them at build time by
 // scripts/wiki-index.ts; page bodies load per page in the browser and eagerly in
 // the prerender, the same way podcast write-ups do.
@@ -10,7 +10,8 @@ export type { WikiPageMeta };
 
 export const WIKI_HOME = "/wiki/Main_Page";
 export const WIKI_REPO = "https://github.com/open-lakehouse/openlakehouse-io";
-export const WIKI_NAME = "Open Lakehouse Wiki";
+export { WIKI_NAME, WIKI_TAGLINE, WIKI_DESCRIPTION } from "./wiki-meta";
+import { WIKI_LEGACY_PROJECT_NS, WIKI_PROJECT_NS } from "./wiki-meta";
 export const WIKI_LICENSE = { name: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" };
 
 export const wikiPages: WikiPageMeta[] = index.pages;
@@ -19,6 +20,7 @@ const byKey = new Map(wikiPages.map((p) => [p.key, p]));
 /** Normalize a /wiki/ URL segment the way MediaWiki does: spaces to underscores, first letter upper case. */
 export const normalizeKey = (raw: string) => {
   let key = decodeURIComponent(raw).replace(/ /g, "_");
+  if (key.startsWith(`${WIKI_LEGACY_PROJECT_NS}:`)) key = `${WIKI_PROJECT_NS}:${key.slice(WIKI_LEGACY_PROJECT_NS.length + 1)}`;
   const colon = key.indexOf(":");
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   if (colon > 0) key = key.slice(0, colon + 1) + cap(key.slice(colon + 1));

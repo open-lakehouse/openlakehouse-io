@@ -48,9 +48,9 @@ const articleLd = (p: WikiPageMeta) => ({
   about: p.categories.map((c) => ({ "@type": "Thing", name: c })),
 });
 
-/** The page title as shown: "Category:Table formats", "Open Lakehouse Wiki:Glossary", "transformWithState". */
+/** The page title as shown: "Category:Table formats", "Project:Glossary", "transformWithState". */
 const heading = (p: WikiPageMeta) =>
-  p.kind === "category" ? `Category:${p.title}` : p.kind === "project" ? `${WIKI_NAME}:${p.title}` : (p.displayTitle ?? p.title);
+  p.kind === "category" ? `Category:${p.title}` : p.kind === "project" ? `Project:${p.title}` : (p.displayTitle ?? p.title);
 
 const tabLabel = (p: WikiPageMeta) => (p.kind === "category" ? "Category" : p.kind === "project" ? "Project page" : "Page");
 
@@ -176,7 +176,7 @@ const WikiArticle = ({ p }: { p: WikiPageMeta }) => {
   const title = heading(p);
   const description = p.summary || (p.kind === "category" ? `Pages in the ${p.title} category of the ${WIKI_NAME}.` : title);
   const { left, right } = pageTabs(p);
-  const glossary = p.key === "Open_Lakehouse_Wiki:Glossary";
+  const glossary = p.key === "Project:Glossary";
   const contents: { depth: number; text: string; id: string }[] = glossary
     ? glossaryEntries()
         .map((g) => (g.displayTitle ?? g.title).charAt(0).toUpperCase())

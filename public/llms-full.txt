@@ -11564,11 +11564,11 @@ A weekly refresh workflow reruns the harvester and opens a pull request when Apa
 
 ---
 
-# Open Lakehouse Wiki
+# Open Data Engineering Reference
 
 URL: https://openlakehouse.io/wiki/Main_Page
 
-The open reference for the open lakehouse and the agentic lakehouse: open table formats, catalogs, engines, pipelines, and the AI agents that work on them. Every fact is cited and dated.
+Cited, versioned answers for building data platforms you control. A free, open reference for open source data engineering: table formats, catalogs, engines, pipelines, and the AI agents that work on them. Every fact is cited, dated, and tied to a version.
 
 ---
 

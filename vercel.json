@@ -5,6 +5,11 @@
       "source": "/wiki/",
       "destination": "/wiki/Main_Page",
       "permanent": true
+    },
+    {
+      "source": "/wiki/Open_Lakehouse_Wiki\\::page",
+      "destination": "/wiki/Project\\::page",
+      "permanent": true
     }
   ],
   "rewrites": [

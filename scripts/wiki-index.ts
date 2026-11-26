@@ -1,4 +1,4 @@
-// The Open Lakehouse Wiki's page index, built from src/content/wiki/**.mdx.
+// The wiki's page index, built from src/content/wiki/**.mdx.
 //
 // Used three ways:
 //   - wikiPlugin() serves it to the app as `virtual:wiki-index`, so the
@@ -44,7 +44,7 @@ export type WikiIndex = { pages: WikiPageMeta[] };
 const NS: Record<string, { kind: WikiKind; prefix: string }> = {
   articles: { kind: "article", prefix: "" },
   categories: { kind: "category", prefix: "Category:" },
-  project: { kind: "project", prefix: "Open_Lakehouse_Wiki:" },
+  project: { kind: "project", prefix: "Project:" },
 };
 
 /** Categories the <Status> component puts a page in, as {{Status}} did. */

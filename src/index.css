@@ -487,7 +487,7 @@ button.smx-c { @apply cursor-pointer outline-none focus-visible:ring-2 focus-vis
 .smx-undocumented { @apply bg-transparent text-muted-foreground ring-1 ring-inset ring-border; }
 .smx-unknown { @apply bg-navy-200 text-navy-600 dark:bg-navy-700 dark:text-navy-300; }
 
-/* ---------- Open Lakehouse Wiki (/wiki/*) ----------
+/* ---------- Open Data Engineering Reference wiki (/wiki/*) ----------
    Laid out like MediaWiki's Vector 2022 skin, with the brand colors the wiki
    used on MediaWiki (its Common.css): navy infobox and navbox headers, green
    "verified" box. Scoped to .olw so nothing leaks into the rest of the site. */
@@ -664,6 +664,7 @@ button.smx-c { @apply cursor-pointer outline-none focus-visible:ring-2 focus-vis
 .olw .olw-hero a { color: #8ACAFF; }
 .olw-hero-title { font-size: 180%; font-weight: 700; line-height: 1.2; }
 .olw-hero p { margin-top: 0.4em; font-size: 110%; opacity: 0.9; }
+.olw-hero p.olw-hero-tagline { margin-top: 0.2em; font-size: 125%; font-family: var(--olw-serif, Georgia, serif); opacity: 1; }
 .olw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18em, 1fr)); gap: 1em; margin-bottom: 1em; }
 .olw-card { padding: 0.4em 1em 0.8em; background: var(--olw-bg); border: 1px solid var(--olw-navy-300); border-top: 4px solid var(--olw-green-600); border-radius: 4px; }
 .olw-card.blue { border-top-color: var(--olw-blue-600); }

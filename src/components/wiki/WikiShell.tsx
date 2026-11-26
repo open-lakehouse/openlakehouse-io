@@ -34,7 +34,7 @@ export const WikiSearch = ({ autoFocus = false }: { autoFocus?: boolean }) => {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           list="olw-titles"
-          placeholder={`Search ${WIKI_NAME}`}
+          placeholder="Search the wiki"
           aria-label={`Search ${WIKI_NAME}`}
           autoFocus={autoFocus}
         />
@@ -53,9 +53,9 @@ const MAIN_MENU: [string, string][] = [
   ["Main page", WIKI_HOME],
   ["All articles", "/wiki/Main_Page#all-articles"],
   ["Categories", "/wiki/Main_Page#categories"],
-  ["Glossary", "/wiki/Open_Lakehouse_Wiki:Glossary"],
-  ["About the wiki", "/wiki/Open_Lakehouse_Wiki:About"],
-  ["Style guide", "/wiki/Open_Lakehouse_Wiki:Style_guide"],
+  ["Glossary", "/wiki/Project:Glossary"],
+  ["About the wiki", "/wiki/Project:About"],
+  ["Style guide", "/wiki/Project:Style_guide"],
 ];
 
 const MainMenu = () => {
@@ -171,8 +171,8 @@ export const WikiShell = ({
             otherwise noted.
           </p>
           <p className="olw-footer-links">
-            <Link to="/wiki/Open_Lakehouse_Wiki:About">About {WIKI_NAME}</Link>
-            <Link to="/wiki/Open_Lakehouse_Wiki:Style_guide">Style guide</Link>
+            <Link to="/wiki/Project:About">About the {WIKI_NAME}</Link>
+            <Link to="/wiki/Project:Style_guide">Style guide</Link>
             <Link to="/">openlakehouse.io</Link>
           </p>
         </footer>

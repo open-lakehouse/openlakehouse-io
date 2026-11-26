@@ -137,7 +137,8 @@ const OpenSourceDataEngineering = () => (
 
         <p>
           To see these layers assembled into working systems, with versions and caveats, open the{" "}
-          <Link to="/reference-architectures">data engineering reference architectures</Link>.
+          <Link to="/reference-architectures">data engineering reference architectures</Link>. For any one project, format,
+          or term, the <Link to="/wiki/Main_Page">Open Data Engineering Reference</Link> has a cited, versioned article.
         </p>
 
         <h2 id="projects">Projects in the stack</h2>
@@ -187,6 +188,11 @@ const OpenSourceDataEngineering = () => (
 
         <h2 id="learn-more">Keep going</h2>
         <ul className="not-prose space-y-2">
+          <li>
+            <Link to="/wiki/Main_Page" className="inline-flex items-center gap-1.5 text-primary hover:underline">
+              Open Data Engineering Reference: the wiki, one cited article per project and concept <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </li>
           <li>
             <Link to="/agentic-data-engineering" className="inline-flex items-center gap-1.5 text-primary hover:underline">
               Agentic data engineering: AI agents that write and run pipelines <ArrowRight className="h-3.5 w-3.5" />

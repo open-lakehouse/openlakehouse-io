@@ -8,7 +8,7 @@ const { pages } = buildWikiIndex();
 const byPath = new Set(pages.map((p) => p.path));
 const source = (file: string) => fs.readFileSync(path.join(WIKI_DIR, file), "utf8");
 
-describe("Open Lakehouse Wiki", () => {
+describe("wiki", () => {
   it("has articles, categories and project pages", () => {
     for (const kind of ["article", "category", "project"]) expect(pages.some((p) => p.kind === kind)).toBe(true);
   });
@@ -48,7 +48,7 @@ describe("Open Lakehouse Wiki", () => {
 
 describe("wiki index", () => {
   it("ignores example markup in code", () => {
-    const guide = pages.find((p) => p.key === "Open_Lakehouse_Wiki:Style_guide");
+    const guide = pages.find((p) => p.key === "Project:Style_guide");
     expect(guide?.status).toBeUndefined();
     expect(guide?.categories).not.toContain("Deprecated");
   });
