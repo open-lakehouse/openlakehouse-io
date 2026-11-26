@@ -67,7 +67,7 @@
   </url>
   <url>
     <loc>https://openlakehouse.io/podcast</loc>
-    <lastmod>2026-11-25</lastmod>
+    <lastmod>2026-11-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -419,12 +419,6 @@
   <url>
     <loc>https://openlakehouse.io/reference-architectures/industries/cybersecurity</loc>
     <lastmod>2026-11-21</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://openlakehouse.io/podcast/spark-row-filters-column-masks-iceberg-materialized-views-delta-rs-1-7</loc>
-    <lastmod>2026-11-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
