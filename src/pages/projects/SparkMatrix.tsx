@@ -173,8 +173,8 @@ const SparkMatrix = () => (
             </a>
           </p>
         </div>
-        <GapSummary />
         <MatrixTable />
+        <GapSummary />
       </section>
 
       <article className="container py-12 md:py-16 max-w-3xl prose prose-neutral dark:prose-invert prose-headings:tracking-tight">

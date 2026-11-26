@@ -119,38 +119,43 @@ export function GapSummary() {
   const minors = APACHE_MINORS.slice(1).map((m) => ({ m, n: apacheMissing(m) }));
   const bar = (n: number) => `${Math.round((n / Math.max(total, 1)) * 100)}%`;
   return (
-    <section aria-labelledby="smx-gap-heading" className="mb-8 rounded-xl border border-border bg-card p-4 md:p-6">
+    <section aria-labelledby="smx-gap-heading" className="mt-10 rounded-xl border border-border bg-card p-4 md:p-6">
       <h3 id="smx-gap-heading" className="text-lg font-bold tracking-tight md:text-xl">
         How far behind Apache Spark {LATEST_MINOR} is your platform?
       </h3>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
         Spark {APACHE_MINORS.slice(1, 4).join(", ")} are not interchangeable: each minor release adds features the
         older lines do not have. Of the {total} Spark features tracked in Apache Spark {LATEST_MINOR}, this is what each
-        line and each service at its newest generally available runtime is missing.
+        line and each service at its newest generally available runtime is missing, longest bar first.
       </p>
-      <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+
+      {/* Two separate comparisons, stacked: Apache release lines, then managed services. */}
+      <div className="mt-5 space-y-6">
         <div>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Apache Spark lines</h4>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Apache Spark release lines
+          </h4>
           <ul className="space-y-1.5 text-sm">
             {minors.map(({ m, n }) => (
-              <li key={m} className="grid grid-cols-[3.5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-                <span className="font-mono">{m}</span>
+              <li key={m} className="grid grid-cols-[6rem_minmax(0,1fr)_5.5rem] items-center gap-3">
+                <span className="font-mono">Spark {m}</span>
                 <span className="h-2 rounded bg-muted"><span className="smx-gapbar" style={{ width: bar(n) }} /></span>
                 <span className="text-right text-xs font-semibold text-red-700 dark:text-red-300">missing {n}</span>
               </li>
             ))}
           </ul>
         </div>
-        <div>
+        <div className="border-t border-border pt-5">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Managed services</h4>
-          <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+          <ul className="space-y-1.5 text-sm">
             {services.map(({ p, r, n }) => (
-              <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_4rem_4.5rem] items-center gap-2">
+              <li key={p.id} className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_5.5rem] items-center gap-3">
                 <span className="truncate" title={`${p.name}, ${runtimeLabel(r)}`}>
                   <span className="text-muted-foreground">{p.vendor} </span>
                   {shortName(p)}
+                  <span className="ml-1 font-mono text-xs text-muted-foreground">Spark {r?.spark_base}</span>
                 </span>
-                <span className="font-mono text-xs text-muted-foreground">{r?.spark_base}</span>
+                <span className="h-2 rounded bg-muted"><span className="smx-gapbar" style={{ width: bar(n) }} /></span>
                 <span className={`text-right text-xs font-semibold ${n ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"}`}>
                   {n ? `missing ${n}` : "all of " + LATEST_MINOR}
                 </span>
