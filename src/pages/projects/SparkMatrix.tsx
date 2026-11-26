@@ -111,16 +111,16 @@ const SparkMatrix = () => (
           <p className="mt-3 text-lg md:text-xl text-white/85 max-w-3xl">{TAGLINE}</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <a
-              href="#matrix"
+              href={EXPLORER_PATH}
               className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-navy-800 hover:bg-white/90"
             >
-              <ArrowDown className="h-4 w-4" /> The matrix
+              <Table2 className="h-4 w-4" /> Open the full explorer
             </a>
             <a
-              href={EXPLORER_PATH}
+              href="#matrix"
               className="inline-flex items-center gap-2 rounded-md border border-white/40 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
             >
-              <Table2 className="h-4 w-4" /> Open the full explorer
+              <ArrowDown className="h-4 w-4" /> Jump to the matrix
             </a>
             {MATRIX_REPO && (
               <a
@@ -140,19 +140,15 @@ const SparkMatrix = () => (
             <h2 id="matrix-heading" className="text-2xl md:text-3xl font-bold tracking-tight">
               Apache Spark features by managed Spark service
             </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-3 text-base leading-relaxed text-foreground">
               {SPARK_FEATURES.length} Apache Spark features and the vendor capabilities around them, across{" "}
               {SHOWN_PLATFORMS.length} managed Spark services at their newest generally available runtime, next to Apache
-              Spark {APACHE_LATEST} and earlier releases. Select a cell for the vendor quotation or the Apache source
-              behind it.
+              Spark {APACHE_LATEST} and earlier releases. Add the platforms you care about, then select a cell for the
+              vendor quotation or the Apache source behind it.
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
             Data build <time dateTime={DATA_GENERATED}>{DATA_GENERATED}</time>
-            <br />
-            <a href={EXPLORER_PATH} className="inline-flex items-center gap-1 text-primary hover:underline">
-              Every runtime, the Apache inventory and release notes: open the full explorer <ArrowRight className="h-3 w-3" />
-            </a>
           </p>
         </div>
         <MatrixTable />
