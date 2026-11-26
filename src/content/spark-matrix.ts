@@ -30,6 +30,18 @@ export const TAGLINE = "Apache Spark features across managed Spark platforms, ev
 /** The repository's own interactive viewer, built into public/spark-matrix/explorer/. */
 export const EXPLORER_PATH = "/spark-matrix/explorer/";
 
+// Long-form methodology and FAQ live on their own prerendered subpages so the
+// matrix stays front and center on /spark-matrix. Both reuse the constants
+// below; the page components must not duplicate the prose.
+export const METHOD_PATH = "/spark-matrix/method";
+export const METHOD_TITLE = "Spark Matrix method";
+export const METHOD_META_DESCRIPTION =
+  "How Spark Matrix is built: the evidence model, what is read from the Apache Spark source tree, the support levels, the features compared, and the managed Spark platforms covered.";
+export const FAQ_PATH = "/spark-matrix/faq";
+export const FAQ_TITLE = "Spark Matrix FAQ";
+export const FAQ_META_DESCRIPTION =
+  "Frequently asked questions about Spark Matrix: what it is, where to see the matrix, which managed Spark platforms it covers, how feature support is decided, and how the data is kept current.";
+
 export const DATA_GENERATED = meta.generated;
 export const APACHE_LATEST = meta.latest;
 export const APACHE_FEATURE_RELEASES = meta.versions;

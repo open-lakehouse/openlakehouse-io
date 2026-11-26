@@ -1,31 +1,23 @@
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowLeft, ArrowRight, ExternalLink, Github, Table2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, Github, Table2 } from "lucide-react";
 import { GapSummary, MatrixTable } from "@/components/spark-matrix/MatrixTable";
-import { SHOWN_PLATFORMS, RETIRED_PLATFORMS, SPARK_FEATURES, defaultRuntime } from "@/lib/spark-matrix";
+import { SHOWN_PLATFORMS, SPARK_FEATURES } from "@/lib/spark-matrix";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
 import { canonicalUrl, SITE_NAME, SITE_URL } from "@/lib/seo";
 import {
-  APACHE_FIRST,
   APACHE_LATEST,
   DATA_GENERATED,
-  DEFINITION,
   DESCRIPTION,
   EXPLORER_PATH,
-  FAQS,
-  FEATURE_CATEGORIES,
-  HEADLINE_FEATURE_COUNT,
-  INVENTORY_SOURCES,
+  FAQ_PATH,
   META_DESCRIPTION,
+  METHOD_PATH,
   PLATFORMS_BY_VENDOR,
-  PLATFORM_COUNT,
-  QUESTIONS_ANSWERED,
   SLUG,
-  SUPPORT_LEVELS,
   TAGLINE,
   TITLE,
-  VENDOR_COUNT,
 } from "@/content/spark-matrix";
 
 // PENDING: the open-lakehouse/spark-matrix repository is private. When it
@@ -84,16 +76,6 @@ const datasetLd = {
   ],
 };
 
-const faqLd = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: FAQS.map((f) => ({
-    "@type": "Question",
-    name: f.q,
-    acceptedAnswer: { "@type": "Answer", text: f.a },
-  })),
-};
-
 const breadcrumbLd = {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
@@ -112,7 +94,7 @@ const SparkMatrix = () => (
       title={`${TITLE}: Apache Spark features across managed Spark platforms`}
       description={META_DESCRIPTION}
       path={SLUG}
-      jsonLd={[datasetLd, faqLd, breadcrumbLd]}
+      jsonLd={[datasetLd, breadcrumbLd]}
     />
     <SiteHeader />
     <main className="flex-1">
@@ -177,204 +159,69 @@ const SparkMatrix = () => (
         <GapSummary />
       </section>
 
-      <article className="container py-12 md:py-16 max-w-3xl prose prose-neutral dark:prose-invert prose-headings:tracking-tight">
-        <p className="lead text-lg">{DEFINITION}</p>
-
-        <h2 id="why">Why a version number is not enough</h2>
-        <p>
-          A platform that says "Spark 3.5" does not tell you whether it has Spark Connect, which SQL grammar it accepts,
-          whether <code>transformWithState</code> exists, or what the vendor changed. Spark Matrix turns the version label
-          into evidence. Its inventory goes below headline features to individual SQL functions, configuration keys,
-          parser rules, APIs, data sources, Spark Connect protocol messages, error conditions and language and runtime
-          requirements.
-        </p>
-
-        <h2 id="questions">What Spark Matrix answers</h2>
-        <ul>
-          {QUESTIONS_ANSWERED.map((q) => (
-            <li key={q}>{q}</li>
-          ))}
-        </ul>
-
-        <h2 id="evidence-model">The evidence model</h2>
-        <p>Every cell in the matrix comes from one of two kinds of evidence, joined at the runtime's Apache Spark base:</p>
-        <ol>
-          <li>
-            <strong>The Apache Spark source tree.</strong> A harvester reads each Apache Spark feature-release tag from{" "}
-            {APACHE_FIRST} to {APACHE_LATEST} and detects what that release contains. Each inventory record has its first
-            release, its removal release when there is one, and a link to the source location.
-          </li>
-          <li>
-            <strong>Primary vendor documentation.</strong> Each managed runtime links to the vendor page that states its
-            Spark version. Each explicit support claim carries a quotation from the vendor's documentation and its URL.
-          </li>
-        </ol>
-        <p>
-          An explicit vendor statement wins. Otherwise the matrix reports only what the runtime's stated Apache base
-          contains. A vendor-documented backport is shown as ahead of Apache; an undocumented capability is not guessed.
-          When vendor documentation is silent or contradictory, the matrix records an open question instead of turning
-          absence into an answer.
-        </p>
-
-        <h3 id="apache-inventory">What is read from the Apache source</h3>
-        <div className="overflow-x-auto not-prose my-6">
-          <table className="w-full text-sm border border-border rounded-lg overflow-hidden">
-            <thead className="bg-secondary">
-              <tr>
-                <th className="text-left p-3 font-semibold">Inventory item</th>
-                <th className="text-left p-3 font-semibold">Source artifact</th>
-              </tr>
-            </thead>
-            <tbody>
-              {INVENTORY_SOURCES.map((row) => (
-                <tr key={row.item} className="border-t border-border">
-                  <td className="p-3 align-top font-medium">{row.item}</td>
-                  <td className="p-3 align-top text-muted-foreground font-mono text-xs">{row.source}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p>
-          Headline features are defined by detection rules: the catalog describes how to recognize a feature in the
-          source, not which release introduced it. The build evaluates each rule against the release tags and, in strict
-          mode, fails when a rule no longer matches the newest release. Release dates and notes come from the Apache
-          Spark website release announcements.
-        </p>
-
-        <h3 id="support-levels">Support levels</h3>
-        <p>Each cell shows one level, listed here from strongest evidence to weakest:</p>
-        <dl className="not-prose space-y-3 my-6">
-          {SUPPORT_LEVELS.map((l) => (
-            <div key={l.label}>
-              <dt className="font-semibold">{l.label}</dt>
-              <dd className="mt-0.5 text-sm text-muted-foreground">{l.meaning}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <h2 id="features">Features compared</h2>
-        <p>
-          The matrix tracks {HEADLINE_FEATURE_COUNT} headline features in these categories, alongside the full
-          inventory of functions, configurations, syntax and APIs:
-        </p>
-        <ul>
-          {FEATURE_CATEGORIES.map((c) => (
-            <li key={c.title}>
-              <strong>{c.title}.</strong> {c.blurb}
-            </li>
-          ))}
-        </ul>
-
-        <h2 id="platforms">Platforms covered</h2>
-        <p>
-          As of the {DATA_GENERATED} data build, the matrix records {PLATFORM_COUNT} managed Spark services from{" "}
-          {VENDOR_COUNT} vendors. The table lists the runtime each service is shown at in the matrix, the Spark version
-          string the vendor publishes, and its Apache Spark base.
-        </p>
-        <div className="overflow-x-auto not-prose my-6">
-          <table className="w-full text-sm border border-border">
-            <caption className="sr-only">Managed Spark services and the runtime shown in the matrix</caption>
-            <thead className="bg-secondary">
-              <tr>
-                <th scope="col" className="text-left p-2 font-semibold">Service</th>
-                <th scope="col" className="text-left p-2 font-semibold">Runtime shown</th>
-                <th scope="col" className="text-left p-2 font-semibold">Vendor Spark version</th>
-                <th scope="col" className="text-left p-2 font-semibold">Apache base</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SHOWN_PLATFORMS.map((p) => {
-                const r = defaultRuntime(p);
-                return (
-                  <tr key={p.id} className="border-t border-border align-top">
-                    <th scope="row" className="p-2 text-left font-normal">
-                      <span className="block text-xs text-muted-foreground">{p.vendor}</span>
-                      <span className="font-medium">{p.name}</span>
-                    </th>
-                    <td className="p-2">
-                      {r?.source ? (
-                        <a href={r.source} className="text-primary hover:underline" rel="noreferrer">
-                          {r.label}
-                        </a>
-                      ) : (
-                        (r?.label ?? "not stated")
-                      )}
-                    </td>
-                    <td className="p-2 font-mono text-xs">{r?.spark ?? "not stated"}</td>
-                    <td className="p-2 font-mono text-xs">{r?.spark_base ?? "not stated"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {RETIRED_PLATFORMS.length > 0 && (
-          <p>
-            Retired services, where every runtime is end of life or deprecated, are left out of the matrix and kept in the
-            explorer: {RETIRED_PLATFORMS.map((p) => p.name).join(", ")}.
-          </p>
-        )}
-
-        <h2 id="how-to-use">How to use it</h2>
-        <p>
-          Use the matrix to check a managed runtime before you depend on a feature: find the runtime, read its Apache
-          Spark base, then open the cell for the feature to see the vendor quotation or the Apache source location
-          behind it. To move a workload between platforms, compare the same feature row across the runtimes you are
-          considering. A weekly refresh workflow reruns the harvester and opens a pull request when Apache release data
-          changes; vendor records are updated from vendor documentation, and each records the date its cited pages were
-          checked.
-        </p>
-        <ul className="not-prose space-y-2">
-          <li>
-            <a href="#matrix" className="inline-flex items-center gap-1.5 text-primary hover:underline">
-              The matrix, on this page <ArrowRight className="h-3.5 w-3.5" />
+      <section id="why" aria-labelledby="why-heading" className="border-t border-border bg-muted/30">
+        <div className="container py-12 md:py-16">
+          <div className="max-w-3xl">
+            <h2 id="why-heading" className="text-2xl font-bold tracking-tight md:text-3xl">
+              Why a version number is not enough
+            </h2>
+            <p className="mt-3 text-base leading-relaxed text-foreground">
+              A runtime labelled "Spark 3.5" does not tell you whether it has Spark Connect, which SQL grammar it
+              accepts, or what the vendor changed. Spark Matrix turns the version label into evidence. The full explorer
+              compares every runtime in depth; the method and FAQ pages explain how each cell is sourced.
+            </p>
+          </div>
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <a
+              href={EXPLORER_PATH}
+              className="group rounded-xl border border-primary/50 bg-card p-5 shadow-sm transition-colors hover:border-primary hover:bg-primary/5"
+            >
+              <span className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <Table2 className="h-4 w-4 text-primary" /> Open the full explorer
+              </span>
+              <span className="mt-1.5 block text-sm text-muted-foreground">
+                The deeper experience: every runtime of each service, the Apache Spark inventory, release notes and
+                runtime freshness.
+              </span>
+              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                Explore <ArrowRight className="h-3.5 w-3.5" />
+              </span>
             </a>
-          </li>
-          <li>
-            <a href={EXPLORER_PATH} className="inline-flex items-center gap-1.5 text-primary hover:underline">
-              The full explorer: every runtime, the Apache Spark inventory, release notes and freshness{" "}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </a>
-          </li>
+            <Link
+              to={METHOD_PATH}
+              className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary"
+            >
+              <span className="text-base font-semibold text-foreground">How the data is built</span>
+              <span className="mt-1.5 block text-sm text-muted-foreground">
+                The evidence model, what is read from the Apache Spark source, support levels, and the platforms
+                covered.
+              </span>
+              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                Read the method <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </Link>
+            <Link
+              to={FAQ_PATH}
+              className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary"
+            >
+              <span className="text-base font-semibold text-foreground">Frequently asked questions</span>
+              <span className="mt-1.5 block text-sm text-muted-foreground">
+                What Spark Matrix covers, how feature support is decided, and how the data is kept current.
+              </span>
+              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                Read the FAQ <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </Link>
+          </div>
           {MATRIX_REPO && (
-            <li>
+            <p className="mt-6 text-sm">
               <a href={MATRIX_REPO} className="inline-flex items-center gap-1.5 text-primary hover:underline">
-                Source, data and platform records on GitHub <ExternalLink className="h-3.5 w-3.5" />
+                <Github className="h-4 w-4" /> Source, data and platform records on GitHub
               </a>
-            </li>
+            </p>
           )}
-        </ul>
-
-        <h2 id="faq">Frequently asked questions</h2>
-        <dl className="not-prose space-y-6">
-          {FAQS.map((f) => (
-            <div key={f.q}>
-              <dt className="font-semibold">{f.q}</dt>
-              <dd className="mt-1 text-muted-foreground">{f.a}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <h2 id="keep-going">Keep going</h2>
-        <ul className="not-prose space-y-2">
-          <li>
-            <Link to="/spark-masterclass" className="inline-flex items-center gap-1.5 text-primary hover:underline">
-              Spark Masterclass: an open, runnable online book on Apache Spark 4.3 <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </li>
-          <li>
-            <Link to="/technologies/compute-engines" className="inline-flex items-center gap-1.5 text-primary hover:underline">
-              Compute engines for the open lakehouse <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </li>
-          <li>
-            <Link to="/open-source-data-engineering" className="inline-flex items-center gap-1.5 text-primary hover:underline">
-              Open source data engineering: the reference stack <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </li>
-        </ul>
-      </article>
+        </div>
+      </section>
     </main>
     <SiteFooter />
   </div>
