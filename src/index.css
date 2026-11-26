@@ -462,6 +462,7 @@
 @media (min-width: 768px) { .smx-feat { min-width: 16rem; max-width: 16rem; } }
 .smx-feat b { @apply block text-[0.8rem] font-medium leading-snug text-foreground; }
 .smx-feat small { @apply block text-[0.7rem] text-muted-foreground; }
+.smx-feat-desc { @apply mt-1 block text-[0.68rem] font-normal leading-snug text-muted-foreground; }
 .smx-pcol { @apply border-l border-border; min-width: 5.75rem; max-width: 7rem; }
 .smx-acol { min-width: 3.25rem; }
 .smx td { @apply p-1 text-center; }

@@ -440,7 +440,7 @@ export function MatrixTable() {
                       <th scope="row" className="smx-feat" data-feat={f.id}>
                         <b>{f.title}</b>
                         <small>{f.vendor_only ? "Vendor capability" : `Apache ${f.since ?? "n/a"}`}</small>
-                        <span className="sr-only">{f.summary}</span>
+                        {f.summary ? <span className="smx-feat-desc">{f.summary}</span> : null}
                       </th>
                       {APACHE_MINORS.map((m) => (
                         <td key={m}>{f.vendor_only ? null : cellButton(apacheLevel(f, m), { "data-f": f.id, "data-a": m }, f.since)}</td>
