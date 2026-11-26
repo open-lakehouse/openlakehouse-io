@@ -30,8 +30,9 @@ full text of every article is mirrored in /llms-full.txt.
 - [Agentic Data Engineering](https://openlakehouse.io/agentic-data-engineering): Agentic data engineering: AI agents write, test and run data pipelines while the platform enforces scope, dry runs and policies. The declare, scope, context harness, four checks, evidence and open source stack. Markdown: https://openlakehouse.io/agentic-data-engineering.md
 
 ## Spark Matrix
-- [Spark Matrix: the matrix](https://openlakehouse.io/spark-matrix): Spark Matrix compares Apache Spark features across managed Spark platforms such as Amazon EMR, AWS Glue, Databricks, Google Cloud, Microsoft Fabric and Snowflake. Every cell is traced to the Apache Spark source or a primary vendor statement. Data build 2026-11-23. Cite this page.
+- [Spark Matrix](https://openlakehouse.io/spark-matrix): Spark Matrix compares Apache Spark features across managed Spark platforms such as Amazon EMR, AWS Glue, Databricks, Google Cloud, Microsoft Fabric and Snowflake. Every cell is traced to the Apache Spark source or a primary vendor statement. Opens the full explorer.
 - [Spark Matrix explorer](https://openlakehouse.io/spark-matrix/explorer/): Interactive explorer for the same data: every runtime of each service, the per-release Apache Spark inventory, release notes and runtime freshness.
+- [Spark Matrix comparison table](https://openlakehouse.io/spark-matrix/table): The Spark Matrix comparison table: Apache Spark features across managed Spark platforms, each at its newest generally available runtime, with every cell traced to the Apache Spark source or a primary vendor statement. Data build 2026-11-23. Cite this page.
 - [Spark Matrix method](https://openlakehouse.io/spark-matrix/method): How Spark Matrix is built: the evidence model, what is read from the Apache Spark source tree, the support levels, the features compared, and the managed Spark platforms covered.
 - [Spark Matrix FAQ](https://openlakehouse.io/spark-matrix/faq): Frequently asked questions about Spark Matrix: what it is, where to see the matrix, which managed Spark platforms it covers, how feature support is decided, and how the data is kept current.
 

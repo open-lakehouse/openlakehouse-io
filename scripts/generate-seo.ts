@@ -312,7 +312,8 @@ const learnCategories = Array.from(new Set(learnPosts.map((p) => p.category))).s
 function buildSitemapEntries(): SitemapEntry[] {
   const entries: SitemapEntry[] = [...staticEntries];
 
-  // Spark Matrix methodology and FAQ subpages.
+  // Spark Matrix comparison table, methodology and FAQ subpages.
+  entries.push({ path: matrix.TABLE_PATH, changefreq: "monthly", priority: "0.8" });
   entries.push({ path: matrix.METHOD_PATH, changefreq: "monthly", priority: "0.6" });
   entries.push({ path: matrix.FAQ_PATH, changefreq: "monthly", priority: "0.6" });
 
@@ -433,8 +434,9 @@ function renderLlms(): string {
   lines.push("");
 
   lines.push(`## ${matrix.TITLE}`);
-  lines.push(withDesc(`${matrix.TITLE}: the matrix`, matrix.SLUG, `${matrix.META_DESCRIPTION} Data build ${matrix.DATA_GENERATED}. Cite this page.`));
+  lines.push(withDesc(matrix.TITLE, matrix.SLUG, `${matrix.META_DESCRIPTION} Opens the full explorer.`));
   lines.push(withDesc(`${matrix.TITLE} explorer`, matrix.EXPLORER_PATH, "Interactive explorer for the same data: every runtime of each service, the per-release Apache Spark inventory, release notes and runtime freshness."));
+  lines.push(withDesc(matrix.TABLE_TITLE, matrix.TABLE_PATH, `${matrix.TABLE_META_DESCRIPTION} Data build ${matrix.DATA_GENERATED}. Cite this page.`));
   lines.push(withDesc(matrix.METHOD_TITLE, matrix.METHOD_PATH, matrix.METHOD_META_DESCRIPTION));
   lines.push(withDesc(matrix.FAQ_TITLE, matrix.FAQ_PATH, matrix.FAQ_META_DESCRIPTION));
   lines.push("");
@@ -612,7 +614,7 @@ function renderLlmsFull(): string {
   }
   for (const f of masterclass.FAQS) out.push(`### ${f.q}`, "", f.a, "");
 
-  out.push("---", "", `# ${matrix.TITLE}`, "", `URL: ${url(matrix.SLUG)}`, "", matrix.DEFINITION, "", "## Support levels", "");
+  out.push("---", "", `# ${matrix.TITLE}`, "", `URL: ${url(matrix.TABLE_PATH)}`, "", matrix.DEFINITION, "", "## Support levels", "");
   for (const l of matrix.SUPPORT_LEVELS) out.push(`- **${l.label}.** ${l.meaning}`);
   out.push("", `## Platforms covered (data build ${matrix.DATA_GENERATED})`, "");
   for (const v of matrix.PLATFORMS_BY_VENDOR) out.push(`- **${v.vendor}:** ${v.platforms.join("; ")}`);

@@ -6,8 +6,8 @@
 // copies from open-lakehouse/spark-matrix. Refresh it with that script, never
 // by hand.
 //
-// The repository link lives in src/pages/projects/SparkMatrix.tsx
-// (MATRIX_REPO) because it is pending the repository going public.
+// The repository link is MATRIX_REPO below, pending the repository going
+// public.
 import {
   APACHE_MINORS,
   CATEGORIES,
@@ -30,9 +30,19 @@ export const TAGLINE = "Apache Spark features across managed Spark platforms, ev
 /** The repository's own interactive viewer, built into public/spark-matrix/explorer/. */
 export const EXPLORER_PATH = "/spark-matrix/explorer/";
 
-// Long-form methodology and FAQ live on their own prerendered subpages so the
-// matrix stays front and center on /spark-matrix. Both reuse the constants
-// below; the page components must not duplicate the prose.
+// PENDING: the open-lakehouse/spark-matrix repository is private. When it goes
+// public, set MATRIX_REPO to "https://github.com/open-lakehouse/spark-matrix";
+// the repository links and the Dataset JSON-LD read this constant.
+export const MATRIX_REPO: string | null = null;
+
+// /spark-matrix forwards visitors to the full explorer. The crawlable content
+// lives on prerendered subpages: the comparison table (with its Dataset
+// JSON-LD), the methodology, and the FAQ (with its FAQPage JSON-LD). Each
+// reuses the constants below; the page components must not duplicate the prose.
+export const TABLE_PATH = "/spark-matrix/table";
+export const TABLE_TITLE = "Spark Matrix comparison table";
+export const TABLE_META_DESCRIPTION =
+  "The Spark Matrix comparison table: Apache Spark features across managed Spark platforms, each at its newest generally available runtime, with every cell traced to the Apache Spark source or a primary vendor statement.";
 export const METHOD_PATH = "/spark-matrix/method";
 export const METHOD_TITLE = "Spark Matrix method";
 export const METHOD_META_DESCRIPTION =

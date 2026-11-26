@@ -1,80 +1,20 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowLeft, ArrowRight, Github, Table2 } from "lucide-react";
-import { GapSummary, MatrixTable } from "@/components/spark-matrix/MatrixTable";
-import { SHOWN_PLATFORMS, SPARK_FEATURES } from "@/lib/spark-matrix";
+import { ArrowLeft, ArrowRight, Table2 } from "lucide-react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Seo } from "@/components/Seo";
-import { canonicalUrl, SITE_NAME, SITE_URL } from "@/lib/seo";
+import { canonicalUrl } from "@/lib/seo";
 import {
-  APACHE_LATEST,
-  DATA_GENERATED,
-  DESCRIPTION,
   EXPLORER_PATH,
   FAQ_PATH,
   META_DESCRIPTION,
   METHOD_PATH,
-  PLATFORMS_BY_VENDOR,
   SLUG,
+  TABLE_PATH,
   TAGLINE,
   TITLE,
 } from "@/content/spark-matrix";
-
-// PENDING: the open-lakehouse/spark-matrix repository is private. When it
-// goes public, set MATRIX_REPO to "https://github.com/open-lakehouse/spark-matrix";
-// the repository links on this page and the JSON-LD read this constant.
-const MATRIX_REPO: string | null = null;
-
-// ---------- JSON-LD ----------
-
-const openLakehouseOrg = { "@type": "Organization", name: SITE_NAME, url: SITE_URL };
-
-const datasetLd = {
-  "@context": "https://schema.org",
-  "@type": "Dataset",
-  name: `${TITLE}: Apache Spark features across managed Spark platforms`,
-  description: DESCRIPTION,
-  url: canonicalUrl(SLUG),
-  ...(MATRIX_REPO ? { sameAs: [MATRIX_REPO] } : {}),
-  creator: openLakehouseOrg,
-  publisher: openLakehouseOrg,
-  license: "https://www.apache.org/licenses/LICENSE-2.0",
-  isAccessibleForFree: true,
-  dateModified: DATA_GENERATED,
-  keywords: [
-    "Apache Spark",
-    "managed Spark platforms",
-    "Spark feature comparison",
-    "Spark Connect",
-    "Spark runtime versions",
-    "Amazon EMR",
-    "AWS Glue",
-    "Databricks Runtime",
-    "Dataproc",
-    "Microsoft Fabric",
-  ],
-  isBasedOn: [
-    { "@type": "SoftwareSourceCode", name: "Apache Spark", codeRepository: "https://github.com/apache/spark" },
-    { "@type": "WebSite", name: "Apache Spark website release announcements", url: "https://spark.apache.org/news/" },
-  ],
-  variableMeasured: [
-    "Apache Spark base version of each managed runtime",
-    "Feature support level per runtime",
-    "First and removal Apache Spark release of each API, SQL construct, configuration and protocol message",
-  ],
-  about: PLATFORMS_BY_VENDOR.flatMap((v) =>
-    v.platforms.map((name) => ({ "@type": "SoftwareApplication", name, provider: { "@type": "Organization", name: v.vendor } })),
-  ),
-  distribution: [
-    { "@type": "DataDownload", name: "Spark Matrix explorer", contentUrl: canonicalUrl(EXPLORER_PATH), encodingFormat: "text/html" },
-    ...["matrix", "features", "platforms", "releases", "inventory"].map((name) => ({
-      "@type": "DataDownload",
-      name: `${name}.json`,
-      contentUrl: canonicalUrl(`${EXPLORER_PATH}data/${name}.json`),
-      encodingFormat: "application/json",
-    })),
-  ],
-};
 
 const breadcrumbLd = {
   "@context": "https://schema.org",
@@ -86,144 +26,121 @@ const breadcrumbLd = {
   ],
 };
 
-// ---------- Page ----------
+// Links to every prerendered home of the Spark Matrix content, reused by the
+// crawlable fallback below.
+const DESTINATIONS: { href: string; internal: boolean; title: string; blurb: string }[] = [
+  {
+    href: EXPLORER_PATH,
+    internal: false,
+    title: "The full explorer",
+    blurb: "Every runtime of each service, the Apache Spark inventory, release notes and runtime freshness.",
+  },
+  {
+    href: TABLE_PATH,
+    internal: true,
+    title: "The comparison table",
+    blurb: "Apache Spark features across managed Spark services, every cell traced to a source.",
+  },
+  {
+    href: METHOD_PATH,
+    internal: true,
+    title: "How the data is built",
+    blurb: "The evidence model, what is read from the Apache Spark source, support levels, and the platforms covered.",
+  },
+  {
+    href: FAQ_PATH,
+    internal: true,
+    title: "Frequently asked questions",
+    blurb: "What Spark Matrix covers, how feature support is decided, and how the data is kept current.",
+  },
+];
 
-const SparkMatrix = () => (
-  <div className="min-h-screen flex flex-col">
-    <Seo
-      title={`${TITLE}: Apache Spark features across managed Spark platforms`}
-      description={META_DESCRIPTION}
-      path={SLUG}
-      jsonLd={[datasetLd, breadcrumbLd]}
-    />
-    <SiteHeader />
-    <main className="flex-1">
-      <section className="bg-brand-gradient text-primary-foreground">
-        <div className="container py-10 md:py-14">
-          <Link
-            to="/technologies/compute-engines"
-            className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-4"
-          >
-            <ArrowLeft className="h-4 w-4" /> Compute Engines
-          </Link>
-          <p className="text-sm font-medium uppercase tracking-widest text-white/80">Open Lakehouse project</p>
-          <h1 className="mt-2 text-4xl md:text-5xl font-bold tracking-tight">{TITLE}</h1>
-          <p className="mt-3 text-lg md:text-xl text-white/85 max-w-3xl">{TAGLINE}</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href={EXPLORER_PATH}
-              className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-navy-800 hover:bg-white/90"
+// /spark-matrix presents the full explorer as the default experience. The
+// browser is forwarded to the explorer on mount; the prerendered markup below
+// stays readable for crawlers and visitors without JavaScript, and links to
+// every prerendered page that holds the matrix data, methodology and FAQ.
+const SparkMatrix = () => {
+  useEffect(() => {
+    window.location.replace(EXPLORER_PATH);
+  }, []);
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Seo
+        title={`${TITLE}: Apache Spark features across managed Spark platforms`}
+        description={META_DESCRIPTION}
+        path={SLUG}
+        jsonLd={[breadcrumbLd]}
+      />
+      <SiteHeader />
+      <main className="flex-1">
+        <section className="bg-brand-gradient text-primary-foreground">
+          <div className="container py-10 md:py-14">
+            <Link
+              to="/technologies/compute-engines"
+              className="inline-flex items-center gap-1.5 text-sm text-white/80 hover:text-white mb-4"
             >
-              <Table2 className="h-4 w-4" /> Open the full explorer
-            </a>
-            <a
-              href="#matrix"
-              className="inline-flex items-center gap-2 rounded-md border border-white/40 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
-            >
-              <ArrowDown className="h-4 w-4" /> Jump to the matrix
-            </a>
-            {MATRIX_REPO && (
+              <ArrowLeft className="h-4 w-4" /> Compute Engines
+            </Link>
+            <p className="text-sm font-medium uppercase tracking-widest text-white/80">Open Lakehouse project</p>
+            <h1 className="mt-2 text-4xl md:text-5xl font-bold tracking-tight">{TITLE}</h1>
+            <p className="mt-3 text-lg md:text-xl text-white/85 max-w-3xl">{TAGLINE}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
               <a
-                href={MATRIX_REPO}
+                href={EXPLORER_PATH}
+                className="inline-flex items-center gap-2 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-navy-800 hover:bg-white/90"
+              >
+                <Table2 className="h-4 w-4" /> Open the full explorer
+              </a>
+              <Link
+                to={TABLE_PATH}
                 className="inline-flex items-center gap-2 rounded-md border border-white/40 px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
               >
-                <Github className="h-4 w-4" /> Source on GitHub
-              </a>
-            )}
+                The comparison table
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="matrix" aria-labelledby="matrix-heading" className="container scroll-mt-20 py-8 md:py-12">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-          <div className="max-w-3xl">
-            <h2 id="matrix-heading" className="text-2xl md:text-3xl font-bold tracking-tight">
-              Apache Spark features by managed Spark service
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-foreground">
-              {SPARK_FEATURES.length} Apache Spark features and the vendor capabilities around them, across{" "}
-              {SHOWN_PLATFORMS.length} managed Spark services at their newest generally available runtime, next to Apache
-              Spark {APACHE_LATEST} and earlier releases. Add the platforms you care about, then select a cell for the
-              vendor quotation or the Apache source behind it.
-            </p>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Data build{" "}
-            <time dateTime={DATA_GENERATED} className="font-semibold text-foreground">
-              {DATA_GENERATED}
-            </time>
-          </p>
-        </div>
-        <MatrixTable />
-        <GapSummary />
-      </section>
-
-      <section id="why" aria-labelledby="why-heading" className="border-t border-border bg-muted/30">
-        <div className="container py-12 md:py-16">
-          <div className="max-w-3xl">
-            <h2 id="why-heading" className="text-2xl font-bold tracking-tight md:text-3xl">
-              Why a version number is not enough
-            </h2>
-            <p className="mt-3 text-base leading-relaxed text-foreground">
-              A runtime labelled "Spark 3.5" does not tell you whether it has Spark Connect, which SQL grammar it
-              accepts, or what the vendor changed. Spark Matrix turns the version label into evidence. The full explorer
-              compares every runtime in depth; the method and FAQ pages explain how each cell is sourced.
-            </p>
-          </div>
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <a
-              href={EXPLORER_PATH}
-              className="group rounded-xl border border-primary/50 bg-card p-5 shadow-sm transition-colors hover:border-primary hover:bg-primary/5"
-            >
-              <span className="flex items-center gap-2 text-base font-semibold text-foreground">
-                <Table2 className="h-4 w-4 text-primary" /> Open the full explorer
-              </span>
-              <span className="mt-1.5 block text-sm text-muted-foreground">
-                The deeper experience: every runtime of each service, the Apache Spark inventory, release notes and
-                runtime freshness.
-              </span>
-              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
-                Explore <ArrowRight className="h-3.5 w-3.5" />
-              </span>
+        <section className="container py-12 md:py-16">
+          <p className="text-base text-muted-foreground">
+            Opening the full explorer. If it does not load,{" "}
+            <a href={EXPLORER_PATH} className="font-medium text-primary hover:underline">
+              open it here
             </a>
-            <Link
-              to={METHOD_PATH}
-              className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary"
-            >
-              <span className="text-base font-semibold text-foreground">How the data is built</span>
-              <span className="mt-1.5 block text-sm text-muted-foreground">
-                The evidence model, what is read from the Apache Spark source, support levels, and the platforms
-                covered.
-              </span>
-              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
-                Read the method <ArrowRight className="h-3.5 w-3.5" />
-              </span>
-            </Link>
-            <Link
-              to={FAQ_PATH}
-              className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary"
-            >
-              <span className="text-base font-semibold text-foreground">Frequently asked questions</span>
-              <span className="mt-1.5 block text-sm text-muted-foreground">
-                What Spark Matrix covers, how feature support is decided, and how the data is kept current.
-              </span>
-              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
-                Read the FAQ <ArrowRight className="h-3.5 w-3.5" />
-              </span>
-            </Link>
+            , or follow one of these:
+          </p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            {DESTINATIONS.map((d) => {
+              const inner = (
+                <>
+                  <span className="flex items-center gap-2 text-base font-semibold text-foreground">
+                    <Table2 className="h-4 w-4 text-primary" /> {d.title}
+                  </span>
+                  <span className="mt-1.5 block text-sm text-muted-foreground">{d.blurb}</span>
+                  <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                    Open <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </>
+              );
+              const className =
+                "rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary";
+              return d.internal ? (
+                <Link key={d.href} to={d.href} className={className}>
+                  {inner}
+                </Link>
+              ) : (
+                <a key={d.href} href={d.href} className={className}>
+                  {inner}
+                </a>
+              );
+            })}
           </div>
-          {MATRIX_REPO && (
-            <p className="mt-6 text-sm">
-              <a href={MATRIX_REPO} className="inline-flex items-center gap-1.5 text-primary hover:underline">
-                <Github className="h-4 w-4" /> Source, data and platform records on GitHub
-              </a>
-            </p>
-          )}
-        </div>
-      </section>
-    </main>
-    <SiteFooter />
-  </div>
-);
+        </section>
+      </main>
+      <SiteFooter />
+    </div>
+  );
+};
 
 export default SparkMatrix;

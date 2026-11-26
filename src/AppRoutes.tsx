@@ -24,7 +24,7 @@ import IndustryPage from "./pages/refarch/IndustryPage";
 import AgenticLakehouse from "./pages/guides/AgenticLakehouse";
 import AgenticDataEngineering from "./pages/guides/AgenticDataEngineering";
 import SparkMasterclass from "./pages/projects/SparkMasterclass";
-import { SparkMatrix, SparkMatrixFaq, SparkMatrixMethod } from "./lazyPages";
+import { SparkMatrix, SparkMatrixFaq, SparkMatrixMethod, SparkMatrixTable } from "./lazyPages";
 import NotFound from "./pages/NotFound";
 
 import PodcastIndex from "./pages/podcast/PodcastIndex";
@@ -44,6 +44,7 @@ export const AppRoutes = () => (
       <Route path="/agentic-data-engineering" element={<AgenticDataEngineering />} />
       <Route path="/spark-masterclass" element={<SparkMasterclass />} />
       <Route path="/spark-matrix" element={<SparkMatrix />} />
+      <Route path="/spark-matrix/table" element={<SparkMatrixTable />} />
       <Route path="/spark-matrix/method" element={<SparkMatrixMethod />} />
       <Route path="/spark-matrix/faq" element={<SparkMatrixFaq />} />
       <Route path="/reference-architectures" element={<ReferenceArchitectures />} />
@@ -78,6 +79,7 @@ export const prerenderRoutes = (): string[] => {
     "/agentic-data-engineering",
     "/spark-masterclass",
     "/spark-matrix",
+    "/spark-matrix/table",
     "/spark-matrix/method",
     "/spark-matrix/faq",
     "/learn",

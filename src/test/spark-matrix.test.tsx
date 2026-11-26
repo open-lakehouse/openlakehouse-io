@@ -6,6 +6,7 @@ import { HelmetProvider } from "react-helmet-async";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { MatrixTable } from "@/components/spark-matrix/MatrixTable";
 import SparkMatrix from "@/pages/projects/SparkMatrix";
+import SparkMatrixTable from "@/pages/projects/SparkMatrixTable";
 import { APACHE_MINORS, LEVEL_BY_CODE, SHOWN_PLATFORMS, defaultRuntime, features, matrix, platforms } from "@/lib/spark-matrix";
 import { matrixMarkdown } from "@/content/spark-matrix";
 
@@ -60,8 +61,8 @@ describe("MatrixTable", () => {
   });
 });
 
-describe("Spark Matrix page", () => {
-  it("puts the matrix before the explainer and links the explorer", () => {
+describe("Spark Matrix landing", () => {
+  it("forwards to the explorer and links the crawlable pages", () => {
     const html = renderToString(
       <HelmetProvider>
         <ThemeProvider>
@@ -71,8 +72,28 @@ describe("Spark Matrix page", () => {
         </ThemeProvider>
       </HelmetProvider>,
     );
+    // The default experience is the explorer, with crawlable links to every
+    // prerendered home of the Spark Matrix content.
+    expect(html).toContain('href="/spark-matrix/explorer/"');
+    expect(html).toContain('href="/spark-matrix/table"');
+    expect(html).toContain('href="/spark-matrix/method"');
+    expect(html).toContain('href="/spark-matrix/faq"');
+    expect(html).not.toMatch(/not public yet/);
+  });
+});
+
+describe("Spark Matrix comparison table", () => {
+  it("prerenders the matrix and links the explorer", () => {
+    const html = renderToString(
+      <HelmetProvider>
+        <ThemeProvider>
+          <MemoryRouter>
+            <SparkMatrixTable />
+          </MemoryRouter>
+        </ThemeProvider>
+      </HelmetProvider>,
+    );
     expect(html.indexOf('id="matrix"')).toBeGreaterThan(-1);
-    expect(html.indexOf('id="matrix"')).toBeLessThan(html.indexOf('id="why"'));
     expect(html).toContain('href="/spark-matrix/explorer/"');
     expect(html).not.toMatch(/not public yet/);
   });
