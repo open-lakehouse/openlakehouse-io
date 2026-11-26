@@ -147,8 +147,11 @@ const SparkMatrix = () => (
               vendor quotation or the Apache source behind it.
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Data build <time dateTime={DATA_GENERATED}>{DATA_GENERATED}</time>
+          <p className="text-sm text-muted-foreground">
+            Data build{" "}
+            <time dateTime={DATA_GENERATED} className="font-semibold text-foreground">
+              {DATA_GENERATED}
+            </time>
           </p>
         </div>
         <MatrixTable />
