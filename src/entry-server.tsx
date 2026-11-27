@@ -8,11 +8,16 @@ import { HelmetProvider, type HelmetServerState } from "react-helmet-async";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppRoutes, prerenderRoutes } from "./AppRoutes";
-import { SparkMatrix } from "./lazyPages";
+import { SparkMatrix, SparkMatrixFaq, SparkMatrixMethod, SparkMatrixTable } from "./lazyPages";
 
 // Lazy pages render their Suspense fallback unless loaded first.
 // scripts/prerender.mjs awaits this before rendering anything.
-export const ready = SparkMatrix.preload();
+export const ready = Promise.all([
+  SparkMatrix.preload(),
+  SparkMatrixTable.preload(),
+  SparkMatrixMethod.preload(),
+  SparkMatrixFaq.preload(),
+]);
 
 export const routes = prerenderRoutes();
 

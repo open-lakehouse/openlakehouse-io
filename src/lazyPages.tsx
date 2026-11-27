@@ -25,9 +25,15 @@ function lazyWithPreload(factory: () => Promise<{ default: ComponentType }>) {
 }
 
 export const SparkMatrix = lazyWithPreload(() => import("./pages/projects/SparkMatrix.tsx"));
+export const SparkMatrixTable = lazyWithPreload(() => import("./pages/projects/SparkMatrixTable.tsx"));
+export const SparkMatrixMethod = lazyWithPreload(() => import("./pages/projects/SparkMatrixMethod.tsx"));
+export const SparkMatrixFaq = lazyWithPreload(() => import("./pages/projects/SparkMatrixFaq.tsx"));
 
 /** Load the chunk for a path before the first render. */
 export function preloadFor(pathname: string): Promise<unknown> {
+  if (/^\/spark-matrix\/table\/?$/.test(pathname)) return SparkMatrixTable.preload();
+  if (/^\/spark-matrix\/method\/?$/.test(pathname)) return SparkMatrixMethod.preload();
+  if (/^\/spark-matrix\/faq\/?$/.test(pathname)) return SparkMatrixFaq.preload();
   if (/^\/spark-matrix\/?$/.test(pathname)) return SparkMatrix.preload();
   // Episode write-ups are per-episode chunks; load before mount so the
   // prerendered article isn't replaced by an empty one on a direct visit.

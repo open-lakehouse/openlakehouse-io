@@ -11264,7 +11264,7 @@ Yes. The book is free to read online and its text and code are licensed under th
 
 # Spark Matrix
 
-URL: https://openlakehouse.io/spark-matrix
+URL: https://openlakehouse.io/spark-matrix/table
 
 Spark Matrix is an open-source comparison of Apache Spark features across managed Spark platforms. For each managed runtime it records the Apache Spark release the vendor states the runtime is based on, then reports which Spark features that runtime has and what support level the vendor documents. Every cell is traced either to the Apache Spark source tree at a release tag or to a primary vendor statement with a quotation and URL. Where vendor documentation is silent or contradictory, the matrix records an open question instead of guessing.
 

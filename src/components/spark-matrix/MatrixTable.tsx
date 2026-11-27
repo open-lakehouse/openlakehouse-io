@@ -7,7 +7,8 @@
 // (feature row) and are handled by one click listener on the table, which
 // keeps the prerendered markup small.
 import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { Search } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   APACHE_MINORS,
@@ -33,15 +34,18 @@ import {
   type Runtime,
 } from "@/lib/spark-matrix";
 
-const PROVIDERS: { id: string; label: string }[] = [
-  { id: "aws", label: "AWS" },
-  { id: "gcp", label: "Google Cloud" },
-  { id: "azure", label: "Microsoft" },
-  { id: "databricks", label: "Databricks" },
-  { id: "other", label: "Others" },
-];
-
 const VENDOR_ROWS = vendorRows(SHOWN_PLATFORMS);
+
+/** Platforms offered in the picker, grouped by vendor, each in SHOWN order. */
+const PLATFORMS_BY_VENDOR: { vendor: string; items: Platform[] }[] = (() => {
+  const groups: { vendor: string; items: Platform[] }[] = [];
+  for (const p of SHOWN_PLATFORMS) {
+    const g = groups.find((x) => x.vendor === p.vendor);
+    if (g) g.items.push(p);
+    else groups.push({ vendor: p.vendor, items: [p] });
+  }
+  return groups;
+})();
 
 interface Selection {
   title: string;
@@ -112,41 +116,48 @@ export function GapSummary() {
   })
     .filter((x) => x.r?.spark_base)
     .sort((a, b) => b.n - a.n || shortName(a.p).localeCompare(shortName(b.p)));
-  const minors = APACHE_MINORS.slice(1).map((m) => ({ m, n: apacheMissing(m) }));
+  const minors = APACHE_MINORS.slice(1)
+    .map((m) => ({ m, n: apacheMissing(m) }))
+    .sort((a, b) => b.n - a.n);
   const bar = (n: number) => `${Math.round((n / Math.max(total, 1)) * 100)}%`;
   return (
-    <section aria-labelledby="smx-gap-heading" className="mb-8 rounded-xl border border-border bg-card p-4 md:p-6">
+    <section aria-labelledby="smx-gap-heading" className="mt-10 rounded-xl border border-border bg-card p-4 md:p-6">
       <h3 id="smx-gap-heading" className="text-lg font-bold tracking-tight md:text-xl">
         How far behind Apache Spark {LATEST_MINOR} is your platform?
       </h3>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
         Spark {APACHE_MINORS.slice(1, 4).join(", ")} are not interchangeable: each minor release adds features the
         older lines do not have. Of the {total} Spark features tracked in Apache Spark {LATEST_MINOR}, this is what each
-        line and each service at its newest generally available runtime is missing.
+        line and each service at its newest generally available runtime is missing, longest bar first.
       </p>
-      <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+
+      {/* Two separate comparisons, stacked: Apache release lines, then managed services. */}
+      <div className="mt-5 space-y-6">
         <div>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Apache Spark lines</h4>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Apache Spark release lines
+          </h4>
           <ul className="space-y-1.5 text-sm">
             {minors.map(({ m, n }) => (
-              <li key={m} className="grid grid-cols-[3.5rem_minmax(0,1fr)_5.5rem] items-center gap-2">
-                <span className="font-mono">{m}</span>
+              <li key={m} className="grid grid-cols-[6rem_minmax(0,1fr)_5.5rem] items-center gap-3">
+                <span className="font-mono">Spark {m}</span>
                 <span className="h-2 rounded bg-muted"><span className="smx-gapbar" style={{ width: bar(n) }} /></span>
                 <span className="text-right text-xs font-semibold text-red-700 dark:text-red-300">missing {n}</span>
               </li>
             ))}
           </ul>
         </div>
-        <div>
+        <div className="border-t border-border pt-5">
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Managed services</h4>
-          <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+          <ul className="space-y-1.5 text-sm">
             {services.map(({ p, r, n }) => (
-              <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_4rem_4.5rem] items-center gap-2">
+              <li key={p.id} className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_5.5rem] items-center gap-3">
                 <span className="truncate" title={`${p.name}, ${runtimeLabel(r)}`}>
                   <span className="text-muted-foreground">{p.vendor} </span>
                   {shortName(p)}
+                  <span className="ml-1 font-mono text-xs text-muted-foreground">Spark {r?.spark_base}</span>
                 </span>
-                <span className="font-mono text-xs text-muted-foreground">{r?.spark_base}</span>
+                <span className="h-2 rounded bg-muted"><span className="smx-gapbar" style={{ width: bar(n) }} /></span>
                 <span className={`text-right text-xs font-semibold ${n ? "text-red-700 dark:text-red-300" : "text-green-700 dark:text-green-300"}`}>
                   {n ? `missing ${n}` : "all of " + LATEST_MINOR}
                 </span>
@@ -160,7 +171,18 @@ export function GapSummary() {
 }
 
 export function MatrixTable() {
-  const [providers, setProviders] = useState<Set<string>>(() => new Set(PROVIDERS.map((p) => p.id)));
+  // The matrix opens with the Apache Spark columns only; readers add the
+  // managed platforms they want to compare. `selected` holds platform ids in
+  // the order they were added, so no vendor is shown ahead of another.
+  const [selected, setSelected] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // When the picker is opened from a column's Change runtime link, focus that
+  // platform's runtime control instead of the dialog's first element.
+  const [focusPlatform, setFocusPlatform] = useState<string | null>(null);
+  const openPicker = (platformId: string | null = null) => {
+    setFocusPlatform(platformId);
+    setPickerOpen(true);
+  };
   const [category, setCategory] = useState("all");
   const [q, setQ] = useState("");
   const [onlyDiff, setOnlyDiff] = useState(false);
@@ -173,9 +195,6 @@ export function MatrixTable() {
     keepTip();
     tipTimer.current = window.setTimeout(() => setTip(null), 180);
   };
-  // The runtime pickers render only in the browser; the prerendered HTML names the default runtime instead.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
   // The hover card is positioned in viewport coordinates, so any scroll closes it.
   useEffect(() => {
     const close = () => setTip(null);
@@ -184,7 +203,9 @@ export function MatrixTable() {
   }, []);
 
   const runtimeOf = (p: Platform) => p.runtimes.find((r) => r.id === picked[p.id]) ?? defaultRuntime(p);
-  const cols = SHOWN_PLATFORMS.filter((p) => providers.has(p.provider));
+  const cols = selected
+    .map((id) => SHOWN_PLATFORMS.find((p) => p.id === id))
+    .filter((p): p is Platform => Boolean(p));
   const colRuntimes = cols.map(runtimeOf);
   const nCols = 1 + APACHE_MINORS.length + cols.length;
 
@@ -195,23 +216,23 @@ export function MatrixTable() {
     return [...list].sort(bySinceDesc).map((f) => ({ f, cells: cols.map((p, i) => cellFor(p, colRuntimes[i]?.id, f)) }));
     // colRuntimes is derived from cols and picked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, q, providers, picked]);
+  }, [category, q, selected, picked]);
 
-  const visible = onlyDiff
-    ? rows.filter(({ cells }) => {
-        const got = cells.map((c) => hasIt(c.level));
-        return got.some(Boolean) && got.some((x) => !x);
-      })
-    : rows;
+  // "Only rows where services differ" needs at least two service columns.
+  const canDiff = cols.length >= 2;
+  const visible =
+    onlyDiff && canDiff
+      ? rows.filter(({ cells }) => {
+          const got = cells.map((c) => hasIt(c.level));
+          return got.some(Boolean) && got.some((x) => !x);
+        })
+      : rows;
   const vendor = category === "all" || category === "platform" ? VENDOR_ROWS.filter((v) => matches(v.title, q)) : [];
   const sparkVisible = visible.filter((r) => !r.f.vendor_only);
 
-  const toggleProvider = (id: string) => {
-    const next = new Set(providers);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setProviders(next);
-  };
+  const addPlatform = (id: string) => setSelected((s) => (s.includes(id) ? s : [...s, id]));
+  const removePlatform = (id: string) => setSelected((s) => s.filter((x) => x !== id));
+  const setRuntime = (pid: string, rid: string) => setPicked((prev) => ({ ...prev, [pid]: rid }));
 
   const onTableClick = (e: MouseEvent<HTMLTableElement>) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-f]");
@@ -310,22 +331,14 @@ export function MatrixTable() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the matrix">
-        {PROVIDERS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => toggleProvider(p.id)}
-            aria-pressed={providers.has(p.id)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-              providers.has(p.id)
-                ? "border-primary bg-primary/10 text-foreground"
-                : "border-border text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => openPicker()}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add a platform
+        </button>
         <select
           className="h-8 rounded-md border border-input bg-background px-2 text-xs"
           value={category}
@@ -350,11 +363,48 @@ export function MatrixTable() {
             className="h-8 w-44 rounded-md border border-input bg-background pl-7 pr-2 text-xs sm:w-56"
           />
         </label>
-        <label className="flex items-center gap-1.5 text-xs">
-          <input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} className="accent-[hsl(var(--primary))]" />
+        <label className={`flex items-center gap-1.5 text-xs ${canDiff ? "" : "opacity-50"}`}>
+          <input
+            type="checkbox"
+            checked={onlyDiff && canDiff}
+            disabled={!canDiff}
+            onChange={(e) => setOnlyDiff(e.target.checked)}
+            className="accent-[hsl(var(--primary))]"
+          />
           Only rows where services differ
         </label>
       </div>
+
+      {/* Selected platforms as removable chips; each names its runtime legibly. */}
+      {cols.length > 0 ? (
+        <ul className="flex flex-wrap items-center gap-2" aria-label="Platforms being compared">
+          {cols.map((p, i) => {
+            const r = colRuntimes[i];
+            return (
+              <li
+                key={p.id}
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 py-1 pl-3 pr-1 text-xs"
+              >
+                <span className="font-medium text-foreground">{shortName(p)}</span>
+                <span className="text-muted-foreground">{runtimeLabel(r)}</span>
+                <button
+                  type="button"
+                  onClick={() => removePlatform(p.id)}
+                  aria-label={`Remove ${p.name}`}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Showing Apache Spark releases only. Use <span className="font-medium text-foreground">Add a platform</span> to
+          compare a managed Spark service and choose its runtime.
+        </p>
+      )}
       <Legend />
 
       <div className="smx-scroll">
@@ -381,32 +431,34 @@ export function MatrixTable() {
                 const r = colRuntimes[i];
                 return (
                   <th key={p.id} scope="col" className="smx-pcol text-left">
-                    <span className="block text-[0.6rem] uppercase tracking-wide text-muted-foreground">{p.vendor}</span>
+                    <div className="flex items-start justify-between gap-1">
+                      <span className="block text-[0.6rem] uppercase tracking-wide text-muted-foreground">{p.vendor}</span>
+                      <button
+                        type="button"
+                        onClick={() => removePlatform(p.id)}
+                        aria-label={`Remove ${p.name}`}
+                        className="-mr-0.5 -mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
                     <span className="block text-xs font-semibold leading-tight text-foreground" title={p.name}>
                       {shortName(p)}
                     </span>
-                    {mounted && p.runtimes.length > 1 ? (
-                      <select
-                        className="mt-1 w-full rounded border border-input bg-background px-0.5 text-[0.65rem]"
-                        value={r?.id}
-                        onChange={(e) => setPicked({ ...picked, [p.id]: e.target.value })}
-                        aria-label={`${p.name} runtime`}
-                      >
-                        {p.runtimes.map((rt) => (
-                          <option key={rt.id} value={rt.id}>
-                            {runtimeLabel(rt)}
-                            {rt.spark_base ? `, Spark ${rt.spark_base}` : ""}
-                            {rt.status === "eol" ? " (EOL)" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="mt-1 block text-[0.65rem] leading-tight text-muted-foreground">{runtimeLabel(r)}</span>
-                    )}
+                    <span className="mt-1 block text-[0.65rem] leading-tight text-muted-foreground">{runtimeLabel(r)}</span>
                     <span className="mt-0.5 block font-mono text-[0.65rem] text-muted-foreground">
                       Spark {r?.spark_base ?? "?"}
                       {r?.spark_via ? "*" : ""}
                     </span>
+                    {p.runtimes.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => openPicker(p.id)}
+                        className="mt-0.5 block text-[0.65rem] font-medium text-primary hover:underline"
+                      >
+                        Change runtime
+                      </button>
+                    ) : null}
                     {(() => {
                       const n = missingFromLatest(p, r?.id);
                       return n > 0 ? (
@@ -440,7 +492,7 @@ export function MatrixTable() {
                       <th scope="row" className="smx-feat" data-feat={f.id}>
                         <b>{f.title}</b>
                         <small>{f.vendor_only ? "Vendor capability" : `Apache ${f.since ?? "n/a"}`}</small>
-                        <span className="sr-only">{f.summary}</span>
+                        {f.summary ? <span className="smx-feat-desc">{f.summary}</span> : null}
                       </th>
                       {APACHE_MINORS.map((m) => (
                         <td key={m}>{f.vendor_only ? null : cellButton(apacheLevel(f, m), { "data-f": f.id, "data-a": m }, f.since)}</td>
@@ -494,9 +546,10 @@ export function MatrixTable() {
         </table>
       </div>
       <p className="text-xs text-muted-foreground">
-        Columns are sorted by Apache Spark base, newest first. Each service is shown at its newest generally available
-        runtime; pick another in the column header. A <span className="font-mono">*</span> marks a Spark version the vendor
-        states through a paired product. Select a cell for its source.
+        The Apache Spark release columns are sorted newest first. Added services follow in the order you pick them, each
+        shown at its newest generally available runtime; change the runtime from the picker or the column's Change runtime
+        link. A <span className="font-mono">*</span> marks a Spark version the vendor states through a paired product.
+        Select a cell for its source.
       </p>
 
       {tip && (
@@ -538,6 +591,93 @@ export function MatrixTable() {
           {sel && <CellDetails sel={sel} />}
         </SheetContent>
       </Sheet>
+
+      <Dialog
+        open={pickerOpen}
+        onOpenChange={(o) => {
+          setPickerOpen(o);
+          if (!o) setFocusPlatform(null);
+        }}
+      >
+        <DialogContent
+          className="max-h-[85vh] overflow-y-auto"
+          onOpenAutoFocus={(e) => {
+            if (!focusPlatform) return;
+            const el = document.getElementById(`smx-rt-${focusPlatform}`);
+            if (el) {
+              e.preventDefault();
+              el.focus();
+            }
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Add a platform to compare</DialogTitle>
+            <DialogDescription>
+              Choose the managed Spark services you want next to Apache Spark, and the runtime of each. Add as many as
+              you like; remove them from the chips above the matrix.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            {PLATFORMS_BY_VENDOR.map((group) => (
+              <div key={group.vendor}>
+                <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {group.vendor}
+                </h4>
+                <ul className="space-y-2">
+                  {group.items.map((p) => {
+                    const on = selected.includes(p.id);
+                    const r = runtimeOf(p);
+                    return (
+                      <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => (on ? removePlatform(p.id) : addPlatform(p.id))}
+                            className="accent-[hsl(var(--primary))]"
+                          />
+                          <span className="font-medium text-foreground">{p.name}</span>
+                        </label>
+                        {p.runtimes.length > 1 ? (
+                          <select
+                            id={`smx-rt-${p.id}`}
+                            className="h-8 max-w-full rounded-md border border-input bg-background px-2 text-xs"
+                            value={r?.id}
+                            onChange={(e) => setRuntime(p.id, e.target.value)}
+                            aria-label={`${p.name} runtime`}
+                          >
+                            {p.runtimes.map((rt) => (
+                              <option key={rt.id} value={rt.id}>
+                                {runtimeLabel(rt)}
+                                {rt.spark_base ? `, Spark ${rt.spark_base}` : ""}
+                                {rt.status === "eol" ? " (EOL)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {runtimeLabel(r)}
+                            {r?.spark_base ? `, Spark ${r.spark_base}` : ""}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(false)}
+              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Done
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
