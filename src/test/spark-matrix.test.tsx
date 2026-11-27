@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
@@ -8,7 +8,7 @@ import { MatrixTable } from "@/components/spark-matrix/MatrixTable";
 import SparkMatrix from "@/pages/projects/SparkMatrix";
 import SparkMatrixTable from "@/pages/projects/SparkMatrixTable";
 import { APACHE_MINORS, LEVEL_BY_CODE, SHOWN_PLATFORMS, defaultRuntime, features, matrix, platforms } from "@/lib/spark-matrix";
-import { matrixMarkdown } from "@/content/spark-matrix";
+import { EXPLORER_PATH, matrixMarkdown } from "@/content/spark-matrix";
 
 describe("vendored Spark Matrix data", () => {
   it("has a level for every feature in every runtime row, and every claim index resolves", () => {
@@ -62,7 +62,7 @@ describe("MatrixTable", () => {
 });
 
 describe("Spark Matrix landing", () => {
-  it("forwards to the explorer and links the crawlable pages", () => {
+  it("links the crawlable pages without JavaScript", () => {
     const html = renderToString(
       <HelmetProvider>
         <ThemeProvider>
@@ -72,13 +72,47 @@ describe("Spark Matrix landing", () => {
         </ThemeProvider>
       </HelmetProvider>,
     );
-    // The default experience is the explorer, with crawlable links to every
-    // prerendered home of the Spark Matrix content.
+    // With no JavaScript the prerendered markup still links every prerendered
+    // home of the Spark Matrix content.
     expect(html).toContain('href="/spark-matrix/explorer/"');
     expect(html).toContain('href="/spark-matrix/table"');
     expect(html).toContain('href="/spark-matrix/method"');
     expect(html).toContain('href="/spark-matrix/faq"');
     expect(html).not.toMatch(/not public yet/);
+  });
+
+  it("forwards to the explorer on mount", () => {
+    const replace = vi.fn();
+    const realLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        replace,
+        assign: () => {},
+        reload: () => {},
+        href: realLocation.href,
+        origin: realLocation.origin,
+        pathname: realLocation.pathname,
+        search: realLocation.search,
+        hash: realLocation.hash,
+      },
+    });
+    try {
+      // render() runs effects, so the automatic forward fires. If the redirect
+      // were removed, replace would not be called and this assertion fails.
+      render(
+        <HelmetProvider>
+          <ThemeProvider>
+            <MemoryRouter>
+              <SparkMatrix />
+            </MemoryRouter>
+          </ThemeProvider>
+        </HelmetProvider>,
+      );
+      expect(replace).toHaveBeenCalledWith(EXPLORER_PATH);
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: realLocation });
+    }
   });
 });
 
