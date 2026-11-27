@@ -19,6 +19,7 @@ import {
   TABLE_META_DESCRIPTION,
   TABLE_PATH,
   TABLE_TITLE,
+  TAGLINE,
   TITLE,
 } from "@/content/spark-matrix";
 
@@ -97,7 +98,8 @@ const SparkMatrixTable = () => (
           </Link>
           <p className="text-sm font-medium uppercase tracking-widest text-white/80">Open Lakehouse project</p>
           <h1 className="mt-2 text-4xl md:text-5xl font-bold tracking-tight">{TITLE}: the comparison table</h1>
-          <p className="mt-3 text-lg md:text-xl text-white/85 max-w-3xl">{DESCRIPTION}</p>
+          <p className="mt-3 text-lg md:text-xl text-white/85 max-w-3xl">{TAGLINE}</p>
+          <p className="mt-3 text-base text-white/75 max-w-3xl">{DESCRIPTION}</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <a
               href={EXPLORER_PATH}
